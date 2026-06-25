@@ -9,50 +9,54 @@ export function Footer() {
 
   return (
     <footer className="mt-20 bg-brand-primary text-white">
-      {/* Newsletter */}
+      {/* Newsletter — matches screenshot layout: text left, input right */}
       <div className="border-b border-white/10">
         <Container className="flex flex-col items-center justify-between gap-5 py-10 md:flex-row">
           <div className="text-center md:text-left">
-            <h4 className="font-display text-lg tracking-wider">Stay Updated</h4>
+            <h4 className="font-display text-xl tracking-wider">Stay Updated</h4>
             <p className="mt-0.5 text-xs text-gray-400">Subscribe for exclusive offers and new arrivals</p>
           </div>
           {done ? (
             <p className="text-xs font-semibold text-brand-secondary">✓ Thank you for subscribing!</p>
           ) : (
-            <form
-              onSubmit={(e) => { e.preventDefault(); if (email) setDone(true); }}
-              className="flex w-full max-w-md"
-            >
+            <div className="flex w-full max-w-md gap-0">
               <input
                 type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="Your email address"
-                className="w-full rounded-l-sm bg-white/10 px-4 py-3 text-xs text-white placeholder-gray-400 outline-none transition-colors focus:bg-white/15"
+                className="w-full bg-white/10 px-4 py-3 text-sm text-white placeholder-gray-400 outline-none transition-colors focus:bg-white/15"
               />
-              <button className="rounded-r-sm bg-brand-secondary px-6 text-[11px] font-bold uppercase tracking-[0.12em] text-white transition-colors hover:bg-brand-accent">
+              <button
+                onClick={() => { if (email) setDone(true); }}
+                className="whitespace-nowrap bg-brand-secondary px-6 text-[11px] font-bold uppercase tracking-[0.12em] text-white transition-colors hover:bg-brand-accent"
+              >
                 Subscribe
               </button>
-            </form>
+            </div>
           )}
         </Container>
       </div>
 
+      {/* Main footer grid */}
       <Container className="py-12">
         <div className="grid grid-cols-2 gap-8 md:grid-cols-4">
+          {/* Quick Links */}
           <div>
-            <h4 className="mb-4 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-orange">Quick Links</h4>
-            <ul className="space-y-2.5 text-xs text-gray-400">
+            <h4 className="mb-5 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-secondary">Quick Links</h4>
+            <ul className="space-y-3 text-sm text-gray-400">
               <li><Link to="/shop" className="transition-colors hover:text-white">Shop All</Link></li>
               <li><Link to="/about" className="transition-colors hover:text-white">About Us</Link></li>
               <li><Link to="/contact" className="transition-colors hover:text-white">Contact</Link></li>
               <li><Link to="/wishlist" className="transition-colors hover:text-white">Wishlist</Link></li>
             </ul>
           </div>
+
+          {/* Categories */}
           <div>
-            <h4 className="mb-4 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-orange">Categories</h4>
-            <ul className="space-y-2.5 text-xs text-gray-400">
+            <h4 className="mb-5 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-secondary">Categories</h4>
+            <ul className="space-y-3 text-sm text-gray-400">
               {CATEGORIES.slice(0, 6).map((c) => (
                 <li key={c.slug}>
                   <Link to={`/shop?cat=${c.slug}`} className="transition-colors hover:text-white">{c.name}</Link>
@@ -60,18 +64,22 @@ export function Footer() {
               ))}
             </ul>
           </div>
+
+          {/* Customer Service */}
           <div>
-            <h4 className="mb-4 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-orange">Customer Service</h4>
-            <ul className="space-y-2.5 text-xs text-gray-400">
+            <h4 className="mb-5 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-secondary">Customer Service</h4>
+            <ul className="space-y-3 text-sm text-gray-400">
               <li><a href="#/contact" className="transition-colors hover:text-white">Delivery Info</a></li>
               <li><a href="#/contact" className="transition-colors hover:text-white">Returns</a></li>
               <li><a href="#/contact" className="transition-colors hover:text-white">FAQ</a></li>
               <li><Link to="/track" className="transition-colors hover:text-white">Track Order</Link></li>
             </ul>
           </div>
+
+          {/* Contact */}
           <div>
-            <h4 className="mb-4 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-orange">Contact</h4>
-            <ul className="space-y-2.5 text-xs text-gray-400">
+            <h4 className="mb-5 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-secondary">Contact</h4>
+            <ul className="space-y-3 text-sm text-gray-400">
               <li>+254 720 784379</li>
               <li>info@nomanenobazaar.com</li>
               <li>Digo Road, Mombasa CBD</li>
@@ -81,9 +89,10 @@ export function Footer() {
           </div>
         </div>
 
+        {/* Bottom bar */}
         <div className="mt-10 flex flex-col items-center justify-between gap-4 border-t border-white/10 pt-6 md:flex-row">
           <Link to="/" className="flex items-center gap-2">
-            <img src="/images/logo.png" alt="No Maneno Bazaar" className="h-10 w-auto brightness-0 invert" />
+            <img src="/images/logo.png" alt="No Maneno Bazaar" className="h-12 w-auto" />
           </Link>
           <div className="text-center">
             <p className="text-[10px] tracking-wider text-gray-500">

@@ -68,48 +68,51 @@ export function Admin() {
 
   return (
     <div className="min-h-screen bg-off-white text-brand-primary">
-      {/* Top bar */}
-      <div className="sticky top-0 z-40 bg-brand-primary py-4">
-        <Container className="flex flex-wrap items-center justify-between gap-3">
+      {/* Top bar — dark header matching screenshot */}
+      <div className="sticky top-0 z-40 border-b border-white/10" style={{ backgroundColor: "#1a1a1a" }}>
+        <Container className="flex flex-wrap items-center justify-between gap-3 py-3.5">
           <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-sm bg-brand-secondary text-xs font-bold text-brand-primary">NM</div>
-            <h1 className="font-display text-lg tracking-wider text-white">Admin Dashboard</h1>
+            {/* Gold NM badge */}
+            <div className="flex h-8 w-8 items-center justify-center rounded-sm text-xs font-bold" style={{ backgroundColor: "#e8a838", color: "#1a1a1a" }}>NM</div>
+            <h1 className="font-body text-base font-semibold tracking-wide text-white">Admin Dashboard</h1>
             {draftApi.dirty && (
-              <span className="rounded-full bg-warning/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-warning">
+              <span className="rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider" style={{ backgroundColor: "rgba(248,196,113,0.2)", color: "#e8a838" }}>
                 Unsaved changes
               </span>
             )}
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Undo / Redo */}
+            {/* Undo */}
             <button
               onClick={draftApi.undo}
               disabled={!draftApi.canUndo}
               title="Undo"
-              className="flex h-8 w-8 items-center justify-center rounded-sm bg-white/10 text-white transition-colors hover:bg-white/20 disabled:opacity-30"
+              className="flex h-8 w-8 items-center justify-center rounded-sm text-white/60 transition-colors hover:text-white disabled:opacity-25"
             >
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-4 w-4"><path strokeLinecap="round" strokeLinejoin="round" d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3" /></svg>
             </button>
+            {/* Redo */}
             <button
               onClick={draftApi.redo}
               disabled={!draftApi.canRedo}
               title="Redo"
-              className="flex h-8 w-8 items-center justify-center rounded-sm bg-white/10 text-white transition-colors hover:bg-white/20 disabled:opacity-30"
+              className="flex h-8 w-8 items-center justify-center rounded-sm text-white/60 transition-colors hover:text-white disabled:opacity-25"
             >
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-4 w-4"><path strokeLinecap="round" strokeLinejoin="round" d="m15 15 6-6m0 0-6-6m6 6H9a6 6 0 0 0 0 12h3" /></svg>
             </button>
 
-            {/* Save */}
+            {/* Save — solid white button like screenshot */}
             <button
               onClick={() => setConfirmSave(true)}
               disabled={!draftApi.dirty}
-              className="rounded-sm bg-brand-secondary px-4 py-1.5 text-[11px] font-bold uppercase tracking-wider text-brand-primary transition-all hover:bg-white disabled:cursor-not-allowed disabled:bg-white/20 disabled:text-white/40"
+              className="rounded-sm px-5 py-1.5 text-[11px] font-bold uppercase tracking-wider transition-all disabled:cursor-not-allowed"
+              style={{ backgroundColor: draftApi.dirty ? "#ffffff" : "rgba(255,255,255,0.15)", color: draftApi.dirty ? "#1a1a1a" : "rgba(255,255,255,0.3)" }}
             >
               Save Changes
             </button>
 
-            <button onClick={tryExit} className="ml-1 text-[10px] font-bold uppercase tracking-widest text-white/60 hover:text-white">
+            <button onClick={tryExit} className="ml-1 text-[11px] font-semibold tracking-widest text-white/50 hover:text-white">
               ← Exit
             </button>
           </div>
@@ -117,12 +120,12 @@ export function Admin() {
       </div>
 
       <Container className="py-6">
-        <div className="no-scrollbar mb-6 flex gap-0.5 border-b border-light-gray">
+        <div className="no-scrollbar mb-6 flex gap-0 border-b border-light-gray">
           {TABS.map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`whitespace-nowrap px-4 py-3 text-[11px] font-bold uppercase tracking-[0.12em] transition-colors ${
+              className={`whitespace-nowrap px-5 py-3.5 text-[11px] font-bold uppercase tracking-[0.12em] transition-colors ${
                 tab === t ? "border-b-2 border-brand-primary text-brand-primary" : "text-gray-400 hover:text-charcoal"
               }`}
             >
@@ -144,7 +147,7 @@ export function Admin() {
                 ["Low Stock", lowStock.length.toString(), "bg-warning"],
                 ["Out of Stock", outStock.length.toString(), "bg-error"],
               ].map(([label, val, bg]) => (
-                <div key={label} className="rounded-lg bg-white p-5 shadow-sm">
+                <div key={label} className="rounded-lg bg-warm-beige p-5 shadow-sm border border-light-gray">
                   <div className={`mb-2 h-1 w-8 rounded-full ${bg}`} />
                   <p className="font-display text-2xl text-brand-primary">{val}</p>
                   <p className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.15em] text-gray-400">{label}</p>
@@ -153,7 +156,7 @@ export function Admin() {
             </div>
 
             <div className="mt-6 grid gap-6 lg:grid-cols-2">
-              <div className="rounded-lg bg-white p-6 shadow-sm">
+              <div className="rounded-lg bg-warm-beige p-6 shadow-sm border border-light-gray">
                 <h3 className="mb-5 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Inventory Value by Category</h3>
                 <div className="space-y-3">
                   {catTotals.map((c) => (
@@ -173,7 +176,7 @@ export function Admin() {
                 </p>
               </div>
 
-              <div className="rounded-lg bg-white p-6 shadow-sm">
+              <div className="rounded-lg bg-warm-beige p-6 shadow-sm border border-light-gray">
                 <h3 className="mb-4 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Low Stock Alerts ({lowStock.length})</h3>
                 <ul className="space-y-2 text-xs">
                   {lowStock.slice(0, 8).map((p) => (
@@ -193,7 +196,7 @@ export function Admin() {
         {tab === "Stock" && <StockManager draftApi={draftApi} />}
 
         {tab === "Orders" && (
-          <div className="rounded-lg bg-white p-6 shadow-sm">
+          <div className="rounded-lg bg-warm-beige p-6 shadow-sm border border-light-gray">
             <h3 className="mb-4 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Recent Orders</h3>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
@@ -426,7 +429,7 @@ function DiscountManager({ draftApi }: { draftApi: DraftApi }) {
       </div>
 
       {/* ---- Active / scheduled discounts list ---- */}
-      <div className="rounded-lg bg-white p-6 shadow-sm">
+      <div className="rounded-lg bg-warm-beige p-6 shadow-sm border border-light-gray">
         <h3 className="mb-4 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">
           Current Discounts ({draft.discounts.length})
         </h3>
@@ -547,7 +550,7 @@ function StockManager({ draftApi }: { draftApi: DraftApi }) {
   };
 
   return (
-    <div className="rounded-lg bg-white p-6 shadow-sm">
+    <div className="rounded-lg bg-warm-beige p-6 shadow-sm border border-light-gray">
       <h3 className="mb-4 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Stock Management</h3>
 
       <div className="mb-5 grid gap-4 lg:grid-cols-2">
