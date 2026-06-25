@@ -1,17 +1,24 @@
 import { useEffect, useState } from "react";
-import { Link, navigate, useRoute, parseRoute } from "../router";
+import { Link, navigate, useRoute } from "../router";
 import { useStore } from "../store/StoreContext";
 import { CATEGORIES } from "../data/products";
 import { Container } from "./ui";
 
 export function Header() {
   const { cartCount, state } = useStore();
-  const route = useRoute();
-  const { parts } = parseRoute(route);
-  const currentPath = parts[0] ?? "";
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const route = useRoute();
+
+  // Current path + active query (e.g. "/shop", "/shop?cat=mens-fashion")
+  const [path, query] = route.split("?");
+  const params = new URLSearchParams(query || "");
+  const activeCat = params.get("cat");
+  const isActive = (to: string) => {
+    const toPath = to.split("?")[0];
+    return path === toPath || (toPath !== "/" && path.startsWith(toPath));
+  };
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -32,20 +39,16 @@ export function Header() {
     { to: "/track", label: "Track Order" },
   ];
 
-  const isActive = (to: string) => {
-    if (to === "/track" && currentPath === "track") return true;
-    const linkPath = to.replace("/", "");
-    return linkPath === currentPath;
-  };
-
   return (
     <header
       className={`sticky top-0 z-50 transition-all duration-300 ${
         scrolled
-          ? "bg-white/[.97] shadow-[0_2px_16px_rgba(0,0,0,0.07)] backdrop-blur-md"
-          : "bg-white"
+          ? "bg-light-pink/97 shadow-[0_1px_20px_rgba(0,0,0,0.06)] backdrop-blur-md"
+          : "bg-light-pink border-b border-light-gray"
       }`}
     >
+
+
       {/* Main bar */}
       <Container className="flex items-center justify-between gap-4 py-3">
         {/* Logo */}
@@ -57,18 +60,15 @@ export function Header() {
           />
         </Link>
 
-        {/* Search (desktop) — black button like screenshot */}
+        {/* Search (desktop) */}
         <form onSubmit={submitSearch} className="hidden flex-1 max-w-lg md:flex">
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search products..."
-            className="w-full rounded-l-none border border-r-0 border-light-gray bg-white px-4 py-2.5 text-sm outline-none transition-colors focus:border-charcoal"
+            className="w-full rounded-l-sm border border-light-gray bg-off-white px-4 py-2.5 text-sm outline-none transition-colors focus:border-brand-secondary"
           />
-          <button
-            type="submit"
-            className="rounded-r-none bg-brand-primary px-5 text-white transition-colors hover:bg-charcoal"
-          >
+          <button type="submit" className="rounded-r-sm bg-brand-primary px-5 text-white transition-colors hover:bg-brand-secondary hover:text-brand-primary">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-4 w-4">
               <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607z" />
             </svg>
@@ -77,28 +77,31 @@ export function Header() {
 
         {/* Desktop nav */}
         <nav className="hidden items-center gap-7 lg:flex">
-          {navLinks.map((l) => (
-            <Link
-              key={l.to}
-              to={l.to}
-              className={`group relative font-body text-[13px] font-semibold uppercase tracking-[0.12em] transition-colors ${
-                isActive(l.to)
-                  ? "text-brand-secondary"
-                  : "text-brand-primary hover:text-brand-secondary"
-              }`}
-            >
-              {l.label}
-              <span className={`absolute -bottom-0.5 left-0 h-px bg-brand-secondary transition-all duration-300 ${
-                isActive(l.to) ? "w-full" : "w-0 group-hover:w-full"
-              }`} />
-            </Link>
-          ))}
+          {navLinks.map((l) => {
+            const active = isActive(l.to);
+            return (
+              <Link
+                key={l.to}
+                to={l.to}
+                className={`group relative font-body text-[13px] font-semibold uppercase tracking-[0.12em] transition-colors ${
+                  active ? "text-brand-secondary" : "text-brand-primary hover:text-brand-secondary"
+                }`}
+              >
+                {l.label}
+                <span
+                  className={`absolute -bottom-0.5 left-0 h-px bg-brand-secondary transition-all duration-300 ${
+                    active ? "w-full" : "w-0 group-hover:w-full"
+                  }`}
+                />
+              </Link>
+            );
+          })}
         </nav>
 
         <div className="flex items-center gap-1">
           <Link
             to="/wishlist"
-            className="relative flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-gray-100"
+            className="relative flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-warm-beige"
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
@@ -111,20 +114,20 @@ export function Header() {
           </Link>
           <Link
             to="/cart"
-            className="relative flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-gray-100"
+            className="relative flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-warm-beige"
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 1 0-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 0 1-1.12-1.243l1.264-12A1.125 1.125 0 0 1 5.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0zm7.5 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0z" />
             </svg>
             {cartCount > 0 && (
-              <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-secondary px-1 text-[9px] font-bold text-white">
+              <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-secondary px-1 text-[9px] font-bold text-brand-primary">
                 {cartCount}
               </span>
             )}
           </Link>
           <button
             onClick={() => setOpen((o) => !o)}
-            className="ml-1 flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-gray-100 lg:hidden"
+            className="ml-1 flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-warm-beige lg:hidden"
             aria-label="Menu"
           >
             {open ? (
@@ -136,52 +139,62 @@ export function Header() {
         </div>
       </Container>
 
-      {/* Category strip — no border lines, just subtle hover */}
-      <div className="hidden lg:block">
+      {/* Category strip */}
+      <div className="hidden border-t border-light-gray/60 lg:block">
         <Container className="no-scrollbar flex items-center gap-0.5 overflow-x-auto py-0">
-          {CATEGORIES.map((c) => (
-            <Link
-              key={c.slug}
-              to={`/shop?cat=${c.slug}`}
-              className="whitespace-nowrap px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-charcoal/80 transition-colors hover:bg-gray-100 hover:text-brand-primary"
-            >
-              {c.name}
-            </Link>
-          ))}
+          {CATEGORIES.map((c) => {
+            const active = path === "/shop" && activeCat === c.slug;
+            return (
+              <Link
+                key={c.slug}
+                to={`/shop?cat=${c.slug}`}
+                className={`whitespace-nowrap px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.1em] transition-colors ${
+                  active
+                    ? "bg-brand-primary text-white"
+                    : "text-charcoal/80 hover:bg-warm-beige hover:text-brand-primary"
+                }`}
+              >
+                {c.name}
+              </Link>
+            );
+          })}
         </Container>
       </div>
 
       {/* Mobile menu */}
       {open && (
-        <div className="absolute left-0 right-0 top-full z-50 bg-white shadow-lg lg:hidden">
+        <div className="absolute left-0 right-0 top-full z-50 border-t border-light-gray bg-light-pink shadow-lg lg:hidden">
           <Container className="flex flex-col gap-0.5 py-4">
             <form onSubmit={submitSearch} className="mb-3 flex">
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search products…"
-                className="w-full border border-r-0 border-light-gray bg-white px-4 py-2.5 text-sm outline-none"
+                className="w-full rounded-l-sm border border-light-gray bg-off-white px-4 py-2.5 text-sm outline-none"
               />
-              <button type="submit" className="bg-brand-primary px-4 text-white">
+              <button type="submit" className="rounded-r-sm bg-brand-primary px-4 text-white">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-4 w-4">
                   <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607z" />
                 </svg>
               </button>
             </form>
-            {navLinks.map((l) => (
-              <Link
-                key={l.to}
-                to={l.to}
-                onClick={() => setOpen(false)}
-                className={`rounded-sm px-3 py-2.5 text-sm font-semibold uppercase tracking-wider transition-colors ${
-                  isActive(l.to)
-                    ? "bg-brand-secondary text-white"
-                    : "text-brand-primary hover:bg-gray-100"
-                }`}
-              >
-                {l.label}
-              </Link>
-            ))}
+            {navLinks.map((l) => {
+              const active = isActive(l.to);
+              return (
+                <Link
+                  key={l.to}
+                  to={l.to}
+                  onClick={() => setOpen(false)}
+                  className={`rounded-sm px-3 py-2.5 text-sm font-semibold uppercase tracking-wider transition-colors ${
+                    active
+                      ? "bg-brand-primary text-white"
+                      : "text-brand-primary hover:bg-warm-beige"
+                  }`}
+                >
+                  {l.label}
+                </Link>
+              );
+            })}
             <div className="mt-3 border-t border-light-gray pt-3">
               <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.15em] text-brand-accent">Categories</p>
               <div className="grid grid-cols-2 gap-0.5">
@@ -190,7 +203,11 @@ export function Header() {
                     key={c.slug}
                     to={`/shop?cat=${c.slug}`}
                     onClick={() => setOpen(false)}
-                    className="rounded-sm px-3 py-2 text-xs text-charcoal hover:bg-gray-100 hover:text-brand-primary"
+                    className={`rounded-sm px-3 py-2 text-xs transition-colors ${
+                      path === "/shop" && activeCat === c.slug
+                        ? "bg-brand-primary text-white"
+                        : "text-charcoal hover:bg-warm-beige hover:text-brand-primary"
+                    }`}
                   >
                     {c.name}
                   </Link>

@@ -53,7 +53,7 @@ export function Checkout() {
   if (orderNo) {
     return (
       <Container className="py-12">
-        <div className="mx-auto max-w-2xl rounded-lg bg-white p-8 text-center shadow-sm">
+        <div className="mx-auto max-w-2xl rounded-lg bg-light-pink p-8 text-center shadow-sm">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-success/10">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-8 w-8 text-success"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /></svg>
           </div>
@@ -100,7 +100,7 @@ export function Checkout() {
               className="absolute inset-0 bg-black/50 animate-fade-in"
               onClick={() => { const dest = copyPrompt.dest; setCopyPrompt(null); navigate(dest); }}
             />
-            <div className="relative w-full max-w-sm animate-fade-in rounded-lg bg-white p-6 text-center shadow-2xl">
+            <div className="relative w-full max-w-sm animate-fade-in rounded-lg bg-light-pink p-6 text-center shadow-2xl">
               <h3 className="font-display text-lg uppercase tracking-wider text-brand-primary">Copy Tracking Code?</h3>
               <p className="mt-2 text-sm text-gray-500">Save your tracking code before you continue.</p>
               <div className="mt-4 rounded-sm bg-off-white px-4 py-3 font-mono text-base font-bold text-brand-primary">
@@ -163,7 +163,7 @@ export function Checkout() {
       </div>
 
       <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_360px]">
-        <div className="rounded-lg bg-white p-6 shadow-sm">
+        <div className="rounded-lg bg-light-pink p-6 shadow-sm">
           {step === 0 && (
             <form onSubmit={(e) => { e.preventDefault(); setStep(1); }}>
               <h2 className="text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Shipping Details</h2>
@@ -228,7 +228,7 @@ export function Checkout() {
           )}
         </div>
 
-        <div className="h-fit rounded-lg bg-white p-6 shadow-sm">
+        <div className="h-fit rounded-lg bg-light-pink p-6 shadow-sm">
           <h2 className="text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Order Summary</h2>
           <div className="mt-4 space-y-3">
             {lines.map((l, i) => (

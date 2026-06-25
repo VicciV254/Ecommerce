@@ -42,7 +42,7 @@ export function TrackOrder({ route }: { route: string }) {
         </button>
       </div>
 
-      <div className="mx-auto mt-10 max-w-xl rounded-lg bg-white p-8 shadow-sm">
+      <div className="mx-auto mt-10 max-w-xl rounded-lg bg-light-pink p-8 shadow-sm">
         <h1 className="font-display text-2xl uppercase tracking-wider text-brand-primary">Track Your Order</h1>
         <p className="mt-2 text-sm text-gray-400">Enter your order number to see current status and location.</p>
 

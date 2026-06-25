@@ -64,7 +64,7 @@ export function ProductCard({ product }: { product: Product }) {
   const out = p.stock <= 0;
 
   return (
-    <div className="group relative flex flex-col overflow-hidden rounded-lg bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
+    <div className="group relative flex flex-col overflow-hidden rounded-lg bg-light-pink shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
       <Link to={`/product/${p.id}`} className="relative block">
         <div className="relative aspect-square overflow-hidden bg-warm-beige">
           <ProductImage
@@ -87,7 +87,7 @@ export function ProductCard({ product }: { product: Product }) {
           ) : null}
           {/* Hover overlay */}
           <div className="absolute inset-0 flex items-end justify-center bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-            <span className="mb-4 rounded-sm bg-white/95 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-brand-primary shadow">
+            <span className="mb-4 rounded-sm bg-light-pink/95 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-brand-primary shadow">
               Quick View
             </span>
           </div>
@@ -97,7 +97,7 @@ export function ProductCard({ product }: { product: Product }) {
       <button
         onClick={() => toggleWish(p.id)}
         aria-label="Toggle wishlist"
-        className={`absolute right-3 top-14 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white shadow-md transition-all duration-200 hover:scale-110 ${
+        className={`absolute right-3 top-14 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-light-pink shadow-md transition-all duration-200 hover:scale-110 ${
           wished ? "text-error" : "text-gray-400 hover:text-error"
         }`}
       >

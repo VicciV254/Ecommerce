@@ -63,7 +63,7 @@ function HeroCarousel() {
           <p className="mt-4 max-w-md text-sm leading-relaxed text-white/80">{s.sub}</p>
           <Link
             to={s.cta}
-            className="mt-8 inline-block rounded-sm bg-brand-secondary px-8 py-3.5 font-body text-xs font-bold uppercase tracking-[0.15em] text-brand-primary transition-all duration-200 hover:bg-white"
+            className="mt-8 inline-block rounded-sm bg-brand-secondary px-8 py-3.5 font-body text-xs font-bold uppercase tracking-[0.15em] text-brand-primary transition-all duration-200 hover:bg-light-pink"
           >
             Shop Now
           </Link>
@@ -75,7 +75,7 @@ function HeroCarousel() {
             key={i}
             onClick={() => setIdx(i)}
             className={`h-1 rounded-full transition-all duration-300 ${
-              i === idx ? "w-10 bg-brand-secondary" : "w-4 bg-white/50 hover:bg-white/80"
+              i === idx ? "w-10 bg-brand-secondary" : "w-4 bg-light-pink/50 hover:bg-light-pink/80"
             }`}
           />
         ))}
@@ -96,13 +96,13 @@ function HScroll({ children }: { children: React.ReactNode }) {
       </div>
       <button
         onClick={() => scroll(-1)}
-        className="absolute -left-4 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white shadow-lg transition-all hover:bg-brand-secondary md:flex opacity-0 group-hover/scroll:opacity-100"
+        className="absolute -left-4 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-light-pink shadow-lg transition-all hover:bg-brand-secondary md:flex opacity-0 group-hover/scroll:opacity-100"
       >
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-4 w-4"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" /></svg>
       </button>
       <button
         onClick={() => scroll(1)}
-        className="absolute -right-4 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white shadow-lg transition-all hover:bg-brand-secondary md:flex opacity-0 group-hover/scroll:opacity-100"
+        className="absolute -right-4 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-light-pink shadow-lg transition-all hover:bg-brand-secondary md:flex opacity-0 group-hover/scroll:opacity-100"
       >
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-4 w-4"><path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
       </button>
@@ -127,7 +127,7 @@ export function Home() {
       <HeroCarousel />
 
       {/* Trust strip */}
-      <div className="border-b border-light-gray bg-white">
+      <div className="border-b border-light-gray bg-light-pink">
         <Container className="grid grid-cols-2 gap-4 py-5 text-center md:grid-cols-4">
           {[
             ["Nationwide Delivery", "Fast, reliable shipping across Kenya"],
@@ -216,10 +216,10 @@ export function Home() {
             },
             {
               title: "Lifestyle Showcase",
-              image: "https://images.pexels.com/photos/1670769/pexels-photo-1670769.jpeg?auto=compress&cs=tinysrgb&w=1200",
+              image: "https://images.pexels.com/photos/3965545/pexels-photo-3965545.jpeg?auto=compress&cs=tinysrgb&w=1200",
             },
           ].map((item) => (
-            <div key={item.title} className="group overflow-hidden rounded-3xl bg-white shadow-sm transition-transform duration-300 hover:-translate-y-1">
+            <div key={item.title} className="group overflow-hidden rounded-3xl bg-light-pink shadow-sm transition-transform duration-300 hover:-translate-y-1">
               <img src={item.image} alt={item.title} className="h-48 w-full object-cover transition-transform duration-700 group-hover:scale-105" />
               <div className="p-4 text-sm font-semibold uppercase tracking-[0.15em] text-brand-primary">
                 {item.title}
@@ -243,7 +243,7 @@ export function Home() {
           <p className="mt-2 max-w-md text-sm text-white/80">Digo Road, Mombasa CBD — 4 floors of quality products for the whole family.</p>
           <Link
             to="/about"
-            className="mt-6 rounded-sm border border-white/40 px-6 py-2.5 text-xs font-bold uppercase tracking-[0.15em] transition-all hover:bg-white hover:text-brand-primary"
+            className="mt-6 rounded-sm border border-light-pink/40 px-6 py-2.5 text-xs font-bold uppercase tracking-[0.15em] transition-all hover:bg-light-pink hover:text-brand-primary"
           >
             Learn More
           </Link>
@@ -278,7 +278,7 @@ export function Home() {
           <div className="grid gap-6 md:grid-cols-3">
             {reviews.map((r, i) => (
               <Reveal key={i} delay={i * 100}>
-                <div className="flex h-full flex-col rounded-lg bg-white p-6 shadow-sm">
+                <div className="flex h-full flex-col rounded-lg bg-light-pink p-6 shadow-sm">
                   <div className="flex items-center gap-1 text-brand-secondary">
                     {[0,1,2,3,4].map(s => <span key={s} className="text-sm">★</span>)}
                   </div>

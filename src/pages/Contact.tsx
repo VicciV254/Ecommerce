@@ -12,7 +12,7 @@ export function Contact() {
       <p className="mt-1 text-xs text-gray-400">We'd love to hear from you.</p>
 
       <div className="mt-8 grid gap-4 md:grid-cols-2">
-        <div className="rounded-lg bg-white p-6 shadow-sm">
+        <div className="rounded-lg bg-light-pink p-6 shadow-sm">
           <div className="grid gap-5 sm:grid-cols-2">
             {[
               ["Phone", "+254 720 784379"],
@@ -27,7 +27,7 @@ export function Contact() {
             ))}
           </div>
         </div>
-        <div className="rounded-lg bg-white p-6 shadow-sm">
+        <div className="rounded-lg bg-light-pink p-6 shadow-sm">
           <h2 className="text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Contact Form</h2>
           {sent ? (
             <div className="mt-6 rounded-md bg-success/10 p-6 text-center">
@@ -87,7 +87,7 @@ export function Contact() {
               href="https://maps.google.com/?q=Digo+Road+Mombasa"
               target="_blank"
               rel="noreferrer"
-              className="mt-5 inline-block rounded-sm bg-brand-secondary px-5 py-2.5 text-[11px] font-bold uppercase tracking-[0.12em] text-brand-primary transition-all hover:bg-white"
+              className="mt-5 inline-block rounded-sm bg-brand-secondary px-5 py-2.5 text-[11px] font-bold uppercase tracking-[0.12em] text-brand-primary transition-all hover:bg-light-pink"
             >
               Open in Google Maps
             </a>

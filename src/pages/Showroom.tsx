@@ -91,13 +91,13 @@ export function Showroom() {
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
                 to="/shop"
-                className="rounded-sm bg-brand-secondary px-8 py-3.5 text-xs font-bold uppercase tracking-[0.15em] text-brand-primary transition-all duration-200 hover:bg-white"
+                className="rounded-sm bg-brand-secondary px-8 py-3.5 text-xs font-bold uppercase tracking-[0.15em] text-brand-primary transition-all duration-200 hover:bg-light-pink"
               >
                 Shop the Look
               </Link>
               <Link
                 to="/contact"
-                className="rounded-sm border border-white/40 px-8 py-3.5 text-xs font-bold uppercase tracking-[0.15em] text-white transition-all duration-200 hover:bg-white hover:text-brand-primary"
+                className="rounded-sm border border-light-pink/40 px-8 py-3.5 text-xs font-bold uppercase tracking-[0.15em] text-white transition-all duration-200 hover:bg-light-pink hover:text-brand-primary"
               >
                 Book a Visit
               </Link>
@@ -110,7 +110,7 @@ export function Showroom() {
             <button
               key={idx}
               onClick={() => setActive(idx)}
-              className={`h-2.5 rounded-full transition-all duration-300 ${idx === active ? "w-12 bg-brand-secondary" : "w-4 bg-white/50 hover:bg-white/80"}`}
+              className={`h-2.5 rounded-full transition-all duration-300 ${idx === active ? "w-12 bg-brand-secondary" : "w-4 bg-light-pink/50 hover:bg-light-pink/80"}`}
               aria-label={`Slide ${idx + 1}`}
             />
           ))}
@@ -139,7 +139,7 @@ export function Showroom() {
         <div className="grid gap-6 lg:grid-cols-3">
           {STORIES.map((story, idx) => (
             <Reveal key={story.title} delay={idx * 80}>
-              <div className="overflow-hidden rounded-3xl bg-white shadow-lg">
+              <div className="overflow-hidden rounded-3xl bg-light-pink shadow-lg">
                 <div className="h-64 overflow-hidden">
                   <img
                     src={story.image}

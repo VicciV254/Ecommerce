@@ -58,7 +58,7 @@ export function About() {
             <h2 className="font-display text-2xl uppercase tracking-wider text-brand-primary">Our 4 Floors</h2>
             <div className="mt-5 space-y-3">
               {FLOORS.map(([title, desc], i) => (
-                <div key={i} className="flex items-center gap-4 rounded-lg bg-white p-4 shadow-sm">
+                <div key={i} className="flex items-center gap-4 rounded-lg bg-light-pink p-4 shadow-sm">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-sm bg-brand-primary font-display text-sm font-bold text-brand-secondary">
                     {i}F
                   </div>
@@ -87,7 +87,7 @@ export function About() {
             ["Everything Under One Roof", "Over 100 products across 10 departments — your one-stop shop."],
           ].map(([t, d], i) => (
             <Reveal key={i} delay={i * 80}>
-              <div className="h-full rounded-lg bg-white p-6 shadow-sm">
+              <div className="h-full rounded-lg bg-light-pink p-6 shadow-sm">
                 <div className="mb-3 h-1 w-8 rounded-full bg-brand-secondary" />
                 <h3 className="font-display text-base text-brand-primary">{t}</h3>
                 <p className="mt-2 text-xs leading-relaxed text-gray-500">{d}</p>

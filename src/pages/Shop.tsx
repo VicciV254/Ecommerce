@@ -147,7 +147,7 @@ export function Shop({ route }: { route: string }) {
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value)}
-            className="rounded-sm border border-light-gray bg-white px-3 py-2 text-xs outline-none"
+            className="rounded-sm border border-light-gray bg-light-pink px-3 py-2 text-xs outline-none"
           >
             <option value="featured">Featured</option>
             <option value="price-asc">Price: Low → High</option>
@@ -172,7 +172,7 @@ export function Shop({ route }: { route: string }) {
         {showFilters && (
           <div className="fixed inset-0 z-50 flex lg:hidden">
             <div className="flex-1 bg-black/30" onClick={() => setShowFilters(false)} />
-            <div className="w-80 max-w-[85%] overflow-y-auto bg-white p-6">
+            <div className="w-80 max-w-[85%] overflow-y-auto bg-light-pink p-6">
               <div className="mb-5 flex items-center justify-between">
                 <h3 className="font-display text-lg">Filters</h3>
                 <button onClick={() => setShowFilters(false)} className="text-gray-400 hover:text-brand-primary">
@@ -186,7 +186,7 @@ export function Shop({ route }: { route: string }) {
 
         <div className="flex-1">
           {pageItems.length === 0 ? (
-            <div className="rounded-lg bg-white p-16 text-center shadow-sm">
+            <div className="rounded-lg bg-light-pink p-16 text-center shadow-sm">
               <p className="text-4xl text-gray-200">No results</p>
               <p className="mt-3 text-sm text-gray-400">Try adjusting your filters or search terms.</p>
             </div>

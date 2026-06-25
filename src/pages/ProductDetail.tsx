@@ -244,7 +244,7 @@ export function ProductDetail({ id }: { id: string }) {
             { t: "Excellent quality! Highly recommend to anyone looking for value.", n: "John K.", r: 5 },
             { t: "Great value for money. Will definitely buy again from No Maneno.", n: "Mary W.", r: 4 },
           ].map((rev, i) => (
-            <div key={i} className="rounded-lg bg-white p-5 shadow-sm">
+            <div key={i} className="rounded-lg bg-light-pink p-5 shadow-sm">
               <Stars rating={rev.r} size={13} />
               <p className="mt-2 text-sm italic text-charcoal">"{rev.t}"</p>
               <p className="mt-2 text-xs font-semibold text-brand-primary">— {rev.n}</p>
