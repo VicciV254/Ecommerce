@@ -197,28 +197,39 @@ export function Home() {
         </Container>
       </div>
 
-      {/* Baby spotlight */}
+      {/* Showroom */}
       <Container className="py-16">
-        <SectionTitle
-          subtitle="Everything your little one needs"
-          action={
-            <Link to="/shop?cat=baby-nursery" className="text-xs font-bold uppercase tracking-[0.12em] text-brand-primary underline-offset-4 hover:text-brand-secondary hover:underline">
-              View All →
-            </Link>
-          }
-        >
-          Baby & Nursery
-        </SectionTitle>
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          {babySpot.map((p, i) => (
-            <Reveal key={p.id} delay={i * 80}>
-              <ProductCard product={productWithStock(p)} />
-            </Reveal>
+        <SectionTitle subtitle="A quick glimpse of our fashion highlights">SHOWROOM</SectionTitle>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            {
+              title: "Fashion Week Highlights",
+              image: "https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg?auto=compress&cs=tinysrgb&w=1200",
+            },
+            {
+              title: "Runway Street Style",
+              image: "https://images.pexels.com/photos/298863/pexels-photo-298863.jpeg?auto=compress&cs=tinysrgb&w=1200",
+            },
+            {
+              title: "Designer Pop-Up",
+              image: "https://images.pexels.com/photos/1496674/pexels-photo-1496674.jpeg?auto=compress&cs=tinysrgb&w=1200",
+            },
+            {
+              title: "Lifestyle Showcase",
+              image: "https://images.pexels.com/photos/1670769/pexels-photo-1670769.jpeg?auto=compress&cs=tinysrgb&w=1200",
+            },
+          ].map((item) => (
+            <div key={item.title} className="group overflow-hidden rounded-3xl bg-white shadow-sm transition-transform duration-300 hover:-translate-y-1">
+              <img src={item.image} alt={item.title} className="h-48 w-full object-cover transition-transform duration-700 group-hover:scale-105" />
+              <div className="p-4 text-sm font-semibold uppercase tracking-[0.15em] text-brand-primary">
+                {item.title}
+              </div>
+            </div>
           ))}
         </div>
       </Container>
 
-      {/* Full-width banner */}
+      {/* Baby spotlight */}
       <div className="relative h-72 overflow-hidden sm:h-80">
         <img
           src="https://images.pexels.com/photos/20177680/pexels-photo-20177680.jpeg?auto=compress&cs=tinysrgb&w=1200"
