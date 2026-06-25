@@ -83,7 +83,7 @@ export function Footer() {
 
         <div className="mt-10 flex flex-col items-center justify-between gap-4 border-t border-white/10 pt-6 md:flex-row">
           <Link to="/" className="flex items-center gap-2">
-            <img src="/images/logo.png" alt="No Maneno Bazaar" className="h-8" />
+            <img src="/images/logo.png" alt="No Maneno Bazaar" className="h-10 w-auto brightness-0 invert" />
           </Link>
           <div className="text-center">
             <p className="text-[10px] tracking-wider text-gray-500">

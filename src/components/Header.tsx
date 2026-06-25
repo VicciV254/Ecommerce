@@ -24,6 +24,7 @@ export function Header() {
 
   const navLinks = [
     { to: "/shop", label: "Shop" },
+    { to: "/showroom", label: "Showroom" },
     { to: "/about", label: "About" },
     { to: "/contact", label: "Contact" },
     { to: "/track", label: "Track Order" },
