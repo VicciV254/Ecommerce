@@ -24,8 +24,8 @@ export type Category = {
 };
 
 export const CATEGORIES: Category[] = [
-  { name: "Men's Fashion", slug: "mens-fashion", image: "https://images.pexels.com/photos/3214788/pexels-photo-3214788.jpeg?auto=compress&cs=tinysrgb&w=600" },
-  { name: "Women's Fashion", slug: "womens-fashion", image: "https://images.pexels.com/photos/8675179/pexels-photo-8675179.jpeg?auto=compress&cs=tinysrgb&w=600" },
+  { name: "Men's Fashion", slug: "mens-fashion", image: "https://plus.unsplash.com/premium_photo-1683140431958-31505d0fd1ff?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTN8fGJsYWNrJTIwbWFuJTIwaW4lMjBmYXNoaW9ufGVufDB8fDB8fHww" },
+  { name: "Women's Fashion", slug: "womens-fashion", image: "https://images.unsplash.com/photo-1709810529099-0ce6102692df?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTB8fGJsYWNrJTIwd29tYW4lMjBpbiUyMGZhc2hpb258ZW58MHx8MHx8fDA%3D" },
   { name: "Children's Wear", slug: "childrens-wear", image: "https://images.pexels.com/photos/5693891/pexels-photo-5693891.jpeg?auto=compress&cs=tinysrgb&w=600" },
   { name: "Baby & Nursery", slug: "baby-nursery", image: "https://images.pexels.com/photos/20387764/pexels-photo-20387764.jpeg?auto=compress&cs=tinysrgb&w=600" },
   { name: "Home & Kitchen", slug: "home-kitchen", image: "https://images.pexels.com/photos/5556176/pexels-photo-5556176.jpeg?auto=compress&cs=tinysrgb&w=600" },
@@ -46,15 +46,15 @@ export const HERO_IMAGES = [
 const IMG = {
   mens: [
     "https://images.pexels.com/photos/3214788/pexels-photo-3214788.jpeg?auto=compress&cs=tinysrgb&w=600",
-    "https://images.pexels.com/photos/9731828/pexels-photo-9731828.jpeg?auto=compress&cs=tinysrgb&w=600",
-    "https://images.pexels.com/photos/4295983/pexels-photo-4295983.jpeg?auto=compress&cs=tinysrgb&w=600",
-    "https://images.pexels.com/photos/28967487/pexels-photo-28967487.jpeg?auto=compress&cs=tinysrgb&w=600",
-    "https://images.pexels.com/photos/14564841/pexels-photo-14564841.jpeg?auto=compress&cs=tinysrgb&w=600",
-    "https://images.pexels.com/photos/19461512/pexels-photo-19461512.jpeg?auto=compress&cs=tinysrgb&w=600",
-    "https://images.pexels.com/photos/14564843/pexels-photo-14564843.jpeg?auto=compress&cs=tinysrgb&w=600",
-    "https://images.pexels.com/photos/5088371/pexels-photo-5088371.jpeg?auto=compress&cs=tinysrgb&w=600",
+    "https://images.unsplash.com/photo-1656453260440-ae7817f559fd?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTJ8fGNsYXNzaWMlMjBuYXZ5JTIwbWVucyUyMGJsYXplcnxlbnwwfHwwfHx8MA%3D%3D",
+    "https://images.unsplash.com/photo-1614804478838-bc9c9ad99e64?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTJ8fGNhc3VhbCUyMHNsaW0lMjBmaXQlMjBqZWFucyUyMGZvciUyMGJsYWNrJTIwbWFufGVufDB8fDB8fHww",
+    "https://plus.unsplash.com/premium_photo-1770306558686-d263b078357d?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MXx8dHJhZGl0aW9uYWwlMjB3aGl0ZSUyMGthbnp1fGVufDB8fDB8fHww",
+    "https://plus.unsplash.com/premium_photo-1760574614955-967cfc425166?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8NXx8bGVhdGhlciUyMGJyb3duJTIwYmVsdHxlbnwwfHwwfHx8MA%3D%3D",
+    "https://images.unsplash.com/photo-1720514496161-914011a9ee02?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8OHx8Y290dG9uJTIwcG9sbyUyMHNoaXJ0fGVufDB8fDB8fHww",
+    "https://images.unsplash.com/photo-1493357335960-4583bfa6f8d9?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTB8fGZvcm1hbCUyMGdyZXksJTIwbWVucyUyMHRyb3VzZXJzfGVufDB8fDB8fHww",
+    "https://images.unsplash.com/photo-1614693348454-1e0710d21c60?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8OHx8ZGVuaW0lMjBqYWNrZXQlMjBtZW58ZW58MHx8MHx8fDA%3D",
     "https://images.pexels.com/photos/19915581/pexels-photo-19915581.jpeg?auto=compress&cs=tinysrgb&w=600",
-    "https://images.pexels.com/photos/27897903/pexels-photo-27897903.jpeg?auto=compress&cs=tinysrgb&w=600",
+    "https://images.unsplash.com/photo-1639428288690-90d2afbcddee?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8NHx8d292ZW4lMjBtZW5zJTIwdGllJTIwc2V0fGVufDB8fDB8fHww",
   ],
   womens: [
     "https://images.pexels.com/photos/8675179/pexels-photo-8675179.jpeg?auto=compress&cs=tinysrgb&w=600",
