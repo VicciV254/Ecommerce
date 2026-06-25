@@ -30,7 +30,7 @@ export function Footer() {
               />
               <button
                 onClick={() => { if (email) setDone(true); }}
-                className="whitespace-nowrap bg-brand-secondary px-6 text-[11px] font-bold uppercase tracking-[0.12em] text-white transition-colors hover:bg-brand-accent"
+                className="whitespace-nowrap bg-brand-secondary px-6 text-[11px] font-bold uppercase tracking-[0.12em] text-brand-primary transition-colors hover:bg-brand-accent hover:text-white"
               >
                 Subscribe
               </button>

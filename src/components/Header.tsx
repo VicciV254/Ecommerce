@@ -63,7 +63,7 @@ export function Header() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search products..."
-            className="w-full rounded-l-none border border-r-0 border-light-gray bg-off-white px-4 py-2.5 text-sm outline-none transition-colors focus:border-charcoal"
+            className="w-full rounded-l-none border border-r-0 border-light-gray bg-white px-4 py-2.5 text-sm outline-none transition-colors focus:border-charcoal"
           />
           <button
             type="submit"
@@ -98,7 +98,7 @@ export function Header() {
         <div className="flex items-center gap-1">
           <Link
             to="/wishlist"
-            className="relative flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-warm-beige"
+            className="relative flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-gray-100"
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
@@ -111,7 +111,7 @@ export function Header() {
           </Link>
           <Link
             to="/cart"
-            className="relative flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-warm-beige"
+            className="relative flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-gray-100"
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 1 0-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 0 1-1.12-1.243l1.264-12A1.125 1.125 0 0 1 5.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0zm7.5 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0z" />
@@ -124,7 +124,7 @@ export function Header() {
           </Link>
           <button
             onClick={() => setOpen((o) => !o)}
-            className="ml-1 flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-warm-beige lg:hidden"
+            className="ml-1 flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-gray-100 lg:hidden"
             aria-label="Menu"
           >
             {open ? (
@@ -143,7 +143,7 @@ export function Header() {
             <Link
               key={c.slug}
               to={`/shop?cat=${c.slug}`}
-              className="whitespace-nowrap px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-charcoal/80 transition-colors hover:bg-warm-beige hover:text-brand-primary"
+              className="whitespace-nowrap px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-charcoal/80 transition-colors hover:bg-gray-100 hover:text-brand-primary"
             >
               {c.name}
             </Link>
@@ -160,7 +160,7 @@ export function Header() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search products…"
-                className="w-full border border-r-0 border-light-gray bg-off-white px-4 py-2.5 text-sm outline-none"
+                className="w-full border border-r-0 border-light-gray bg-white px-4 py-2.5 text-sm outline-none"
               />
               <button type="submit" className="bg-brand-primary px-4 text-white">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-4 w-4">
@@ -176,7 +176,7 @@ export function Header() {
                 className={`rounded-sm px-3 py-2.5 text-sm font-semibold uppercase tracking-wider transition-colors ${
                   isActive(l.to)
                     ? "bg-brand-secondary text-white"
-                    : "text-brand-primary hover:bg-warm-beige"
+                    : "text-brand-primary hover:bg-gray-100"
                 }`}
               >
                 {l.label}
@@ -190,7 +190,7 @@ export function Header() {
                     key={c.slug}
                     to={`/shop?cat=${c.slug}`}
                     onClick={() => setOpen(false)}
-                    className="rounded-sm px-3 py-2 text-xs text-charcoal hover:bg-warm-beige hover:text-brand-primary"
+                    className="rounded-sm px-3 py-2 text-xs text-charcoal hover:bg-gray-100 hover:text-brand-primary"
                   >
                     {c.name}
                   </Link>

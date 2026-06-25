@@ -67,7 +67,7 @@ export function Admin() {
   const maxCatValue = Math.max(...catTotals.map((c) => c.value), 1);
 
   return (
-    <div className="min-h-screen bg-off-white text-brand-primary">
+    <div className="min-h-screen bg-white text-brand-primary">
       {/* Top bar — dark header matching screenshot */}
       <div className="sticky top-0 z-40 border-b border-white/10" style={{ backgroundColor: "#1a1a1a" }}>
         <Container className="flex flex-wrap items-center justify-between gap-3 py-3.5">
@@ -147,7 +147,7 @@ export function Admin() {
                 ["Low Stock", lowStock.length.toString(), "bg-warning"],
                 ["Out of Stock", outStock.length.toString(), "bg-error"],
               ].map(([label, val, bg]) => (
-                <div key={label} className="rounded-lg bg-warm-beige p-5 shadow-sm border border-light-gray">
+                <div key={label} className="rounded-lg bg-white p-5 shadow-sm border border-light-gray">
                   <div className={`mb-2 h-1 w-8 rounded-full ${bg}`} />
                   <p className="font-display text-2xl text-brand-primary">{val}</p>
                   <p className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.15em] text-gray-400">{label}</p>
@@ -156,7 +156,7 @@ export function Admin() {
             </div>
 
             <div className="mt-6 grid gap-6 lg:grid-cols-2">
-              <div className="rounded-lg bg-warm-beige p-6 shadow-sm border border-light-gray">
+              <div className="rounded-lg bg-white p-6 shadow-sm border border-light-gray">
                 <h3 className="mb-5 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Inventory Value by Category</h3>
                 <div className="space-y-3">
                   {catTotals.map((c) => (
@@ -176,7 +176,7 @@ export function Admin() {
                 </p>
               </div>
 
-              <div className="rounded-lg bg-warm-beige p-6 shadow-sm border border-light-gray">
+              <div className="rounded-lg bg-white p-6 shadow-sm border border-light-gray">
                 <h3 className="mb-4 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Low Stock Alerts ({lowStock.length})</h3>
                 <ul className="space-y-2 text-xs">
                   {lowStock.slice(0, 8).map((p) => (
@@ -196,7 +196,7 @@ export function Admin() {
         {tab === "Stock" && <StockManager draftApi={draftApi} />}
 
         {tab === "Orders" && (
-          <div className="rounded-lg bg-warm-beige p-6 shadow-sm border border-light-gray">
+          <div className="rounded-lg bg-white p-6 shadow-sm border border-light-gray">
             <h3 className="mb-4 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Recent Orders</h3>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
@@ -429,7 +429,7 @@ function DiscountManager({ draftApi }: { draftApi: DraftApi }) {
       </div>
 
       {/* ---- Active / scheduled discounts list ---- */}
-      <div className="rounded-lg bg-warm-beige p-6 shadow-sm border border-light-gray">
+      <div className="rounded-lg bg-white p-6 shadow-sm border border-light-gray">
         <h3 className="mb-4 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">
           Current Discounts ({draft.discounts.length})
         </h3>
@@ -550,7 +550,7 @@ function StockManager({ draftApi }: { draftApi: DraftApi }) {
   };
 
   return (
-    <div className="rounded-lg bg-warm-beige p-6 shadow-sm border border-light-gray">
+    <div className="rounded-lg bg-white p-6 shadow-sm border border-light-gray">
       <h3 className="mb-4 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Stock Management</h3>
 
       <div className="mb-5 grid gap-4 lg:grid-cols-2">
