@@ -1,0 +1,72 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-primary: #1a1a1a;
+  --color-brand-secondary: #e8a838;
+  --color-brand-accent: #b8915c;
+  --color-warm-beige: #f5ede3;
+  --color-ocean-blue: #1a5276;
+  --color-ocean-blue-dark: #154360;
+  --color-coral: #e67e5a;
+  --color-success: #27ae60;
+  --color-warning: #f39c12;
+  --color-error: #e74c3c;
+  --color-charcoal: #2c3e50;
+  --color-off-white: #faf8f5;
+  --color-light-gray: #e8e8e8;
+
+  --font-display: "Marcellus", serif;
+  --font-body: "Jost", sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--color-off-white);
+  color: var(--color-charcoal);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+}
+
+/* Selection */
+::selection {
+  background: var(--color-brand-secondary);
+  color: var(--color-brand-primary);
+}
+
+/* Scrollbar for carousels */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out both;
+}
+
+/* Image loading */
+img {
+  image-rendering: auto;
+}
+
+/* Input autofill styling */
+input:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 30px var(--color-off-white) inset !important;
+}
