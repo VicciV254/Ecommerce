@@ -9,6 +9,7 @@ import { Cart } from "./pages/Cart";
 import { Checkout } from "./pages/Checkout";
 import { About } from "./pages/About";
 import { Contact } from "./pages/Contact";
+import { Showroom } from "./pages/Showroom";
 import { Wishlist } from "./pages/Wishlist";
 import { Admin } from "./pages/Admin";
 import { TrackOrder } from "./pages/TrackOrder";
@@ -42,6 +43,9 @@ function Router() {
       break;
     case "contact":
       page = <Contact />;
+      break;
+    case "showroom":
+      page = <Showroom />;
       break;
     case "wishlist":
       page = <Wishlist />;
