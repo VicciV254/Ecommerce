@@ -73,7 +73,7 @@ No Maneno Bazaar is a full-featured e-commerce web application for a department 
 
 ```bash
 # 1. Clone or download the project
-git clone <https://github.com/VicciV254/Ecommerce.git>
+git clone https://github.com/VicciV254/Ecommerce.git
 cd no-maneno-bazaar
 
 # 2. Install dependencies
