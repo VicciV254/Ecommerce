@@ -31,6 +31,7 @@ No Maneno Bazaar is a full-featured e-commerce web application for a department 
 - **Multi-Step Checkout** — 3-step flow: Shipping → Delivery Method → Payment (M-Pesa, Card, Bank Transfer, Cash on Delivery)
 - **Order Tracking** — Track orders with a visual timeline. After payment, a 3-second popup invites you to copy your tracking code (with Copy / Cancel options) before continuing or tracking your order
 - **Responsive Design** — Fully responsive across mobile, tablet, and desktop
+- **Responsive Showroom Collaborations** — Designer cards align across the row when there are many, and center neatly when the list is shorter
 - **Persistent State** — Cart, wishlist, and stock changes are saved to `localStorage`
 
 ### Admin Dashboard
@@ -38,9 +39,9 @@ No Maneno Bazaar is a full-featured e-commerce web application for a department 
 - **Inventory Analytics** — Category-by-category inventory value breakdown with visual charts
 - **Discount Management** — Apply preset (5–50%) or custom percentage discounts to all products or filtered by category
 - **Stock Management** — Inline stock editing per product, bulk add/subtract/set for filtered or all products simultaneously
+- **Catalog** - Edit, add or delete product,designer and category images or items
 - **Order Management** — View recent orders with status indicators
 - **Customization** — Customize brand colors, fonts, and theme
----
 
 ## Pages Overview
 
@@ -141,6 +142,7 @@ The **Catalog** tab gives full control over products, categories, designers, and
   - Location (optional, defaults to *Mombasa*)
   - Profile image URL (optional)
   - **Spotlight Heading** and **short description** — these populate the Designer Spotlight card on the Showroom page, exactly like the built-in resident designers
+  - **Optional custom spotlight text** — choose a custom heading and two-line paragraph for each new designer when you want a tailored showroom introduction
   - New designers appear in the designer dropdowns, become filterable in the Shop's "Shop by Designer" group, and are added to the Showroom → Designer Collaborations section with their spotlight card.
 
 ### Working with Drafts, Save, Undo & Redo

@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link, navigate, useRoute } from "../router";
 import { useStore, formatKES } from "../store/StoreContext";
-import { CATEGORIES } from "../data/products";
 import { searchSuggestions } from "../utils/search";
 import { Container } from "./ui";
 
 export function Header() {
-  const { cartCount, state, catalog } = useStore();
+  const { cartCount, state, catalog, allCategories } = useStore();
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -192,7 +191,7 @@ export function Header() {
       {/* Category strip — only on the Shop tab */}
       <div className={`border-t border-light-gray/60 ${path === "/shop" ? "hidden lg:block" : "hidden"}`}>
         <Container className="no-scrollbar flex items-center gap-0.5 overflow-x-auto py-0">
-          {CATEGORIES.map((c) => {
+          {allCategories.map((c) => {
             const active = path === "/shop" && activeCat === c.slug;
             return (
               <Link
@@ -270,7 +269,7 @@ export function Header() {
             <div className="mt-3 border-t border-light-gray pt-3">
               <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.15em] text-brand-accent">Categories</p>
               <div className="grid grid-cols-2 gap-0.5">
-                {CATEGORIES.map((c) => (
+                {allCategories.map((c) => (
                   <Link
                     key={c.slug}
                     to={`/shop?cat=${c.slug}`}

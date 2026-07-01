@@ -1,11 +1,10 @@
-import { PRODUCTS } from "../data/products";
 import { Breadcrumb, Container, ProductCard } from "../components/ui";
 import { useStore } from "../store/StoreContext";
 import { Link } from "../router";
 
 export function Wishlist() {
-  const { state, productWithStock } = useStore();
-  const items = PRODUCTS.filter((p) => state.wishlist.includes(p.id));
+  const { state, productWithStock, catalog } = useStore();
+  const items = catalog.filter((p) => state.wishlist.includes(p.id));
 
   return (
     <Container className="py-8">

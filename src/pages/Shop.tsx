@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { CATEGORIES, COLOR_MAP } from "../data/products";
+import { COLOR_MAP } from "../data/products";
 import { Breadcrumb, Container, ProductCard } from "../components/ui";
 import { useStore } from "../store/StoreContext";
 import { parseRoute } from "../router";
@@ -21,15 +21,8 @@ function seededShuffle<T>(arr: T[], seed: number): T[] {
   return a;
 }
 
-const DESIGNERS = [
-  { id: "amina", name: "Amina Designs" },
-  { id: "kamau", name: "Kamau Studio" },
-  { id: "fatma", name: "Fatma Collective" },
-  { id: "omar", name: "Omar Fashion" },
-];
-
 export function Shop({ route }: { route: string }) {
-  const { productWithStock, catalog } = useStore();
+  const { productWithStock, catalog, allCategories, allDesigners } = useStore();
   const { params } = parseRoute(route);
   const initialCat = params.get("cat") ?? "";
   const initialDesigner = params.get("designer") ?? "";
@@ -91,7 +84,7 @@ export function Shop({ route }: { route: string }) {
       <div>
         <h4 className="mb-3 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Category</h4>
         <div className="space-y-2">
-          {CATEGORIES.map((c) => (
+          {allCategories.map((c) => (
             <label key={c.slug} className="flex cursor-pointer items-center gap-2.5 text-sm text-charcoal">
               <input
                 type="checkbox"
@@ -173,9 +166,9 @@ export function Shop({ route }: { route: string }) {
         <div>
           <h1 className="font-display text-2xl uppercase tracking-wider text-brand-primary sm:text-3xl">
             {designerFilter
-              ? DESIGNERS.find((d) => d.id === designerFilter)?.name
+              ? allDesigners.find((d) => d.id === designerFilter)?.name
               : cats.length === 1
-              ? CATEGORIES.find((c) => c.slug === cats[0])?.name
+              ? allCategories.find((c) => c.slug === cats[0])?.name
               : q
               ? `Results for "${q}"`
               : "All Products"}
@@ -193,7 +186,7 @@ export function Shop({ route }: { route: string }) {
             <option value="price-desc">Price: High → Low</option>
             <option value="rating">Top Rated</option>
             <optgroup label="Shop by Designer">
-              {DESIGNERS.map((d) => (
+              {allDesigners.map((d) => (
                 <option key={d.id} value={`designer:${d.id}`}>{d.name}</option>
               ))}
             </optgroup>

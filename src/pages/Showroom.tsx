@@ -281,10 +281,16 @@ export function Showroom() {
       <section id="designers" className="scroll-mt-44 bg-warm-beige/40 py-16">
         <Container>
           <Heading kicker="Where Designers Meet Mombasa" title="Designer Collaborations" sub="Each designer curates 6 pieces across Men's, Women's & Footwear" />
-          {/* Designer selector */}
-          <div className={`grid grid-cols-2 gap-4 ${allDesigners.length > 4 ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
+          {/* Designer selector — always keeps a fixed-size single row (2-up on mobile, 4-up on large).
+              Extra (admin-added) designers don't shrink the cards — they simply overflow and
+              become scrollable. Deleting a custom designer restores the original fitted layout. */}
+          <div className="no-scrollbar -mx-4 flex gap-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
             {allDesigners.map((d, i) => (
-              <Reveal key={d.id} delay={i * 80}>
+              <Reveal
+                key={d.id}
+                delay={i * 80}
+                className="w-[calc(50%-0.5rem)] shrink-0 lg:w-[calc(25%-0.75rem)]"
+              >
                 <button onClick={() => setActiveDesigner(d.id)} className={`group block w-full overflow-hidden rounded-lg bg-white text-left shadow-sm transition-all ${activeDesigner === d.id ? "ring-2 ring-brand-secondary" : ""}`}>
                   <div className="aspect-square overflow-hidden">
                     <img src={d.image} alt={d.name} className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110" />

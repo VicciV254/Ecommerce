@@ -6,13 +6,45 @@ import {
   useReducer,
   type ReactNode,
 } from "react";
-import { PRODUCTS, CATEGORIES, type Product } from "../data/products";
+import { PRODUCTS, CATEGORIES, type Product, type Category } from "../data/products";
 
-const BASE_DESIGNERS = [
-  { id: "amina", name: "Amina Designs" },
-  { id: "kamau", name: "Kamau Studio" },
-  { id: "fatma", name: "Fatma Collective" },
-  { id: "omar", name: "Omar Fashion" },
+export const BASE_DESIGNERS = [
+  {
+    id: "amina",
+    name: "Amina Designs",
+    specialty: "Kitenge Couture & Resort",
+    location: "Mombasa",
+    image: "https://my-image-host.victor-f6f.workers.dev/api/img/1782863797948-pasted-1782863794772.png",
+    spotlightTitle: "Amina Designs: Blending Tradition with Modernity",
+    spotlightText: "Amina Mohamed fuses heritage Ankara and kitenge craft with contemporary silhouettes, leading our Resort 2026 line with vibrant, coast-ready pieces for the whole family.",
+  },
+  {
+    id: "kamau",
+    name: "Kamau Studio",
+    specialty: "Modern Tailoring & Summer",
+    location: "Nairobi",
+    image: "https://my-image-host.victor-f6f.workers.dev/api/img/1782863651902-pasted-1782863648177.png",
+    spotlightTitle: "Kamau Studio: The Art of Effortless Tailoring",
+    spotlightText: "Known for clean lines and breathable fabrics, Kamau Studio defines our Summer 2026 essentials — relaxed tailoring that moves from boardroom to beach.",
+  },
+  {
+    id: "fatma",
+    name: "Fatma Collective",
+    specialty: "Luxe Evening & Outerwear",
+    location: "Mombasa",
+    image: "https://my-image-host.victor-f6f.workers.dev/api/img/1782863924527-pasted-1782863922363.png",
+    spotlightTitle: "Fatma Collective: Drama After Dark",
+    spotlightText: "Fatma Collective brings structured outerwear and statement evening looks to our Fall/Winter 2026 collection — rich textures, bold confidence.",
+  },
+  {
+    id: "omar",
+    name: "Omar Fashion",
+    specialty: "Street Style & Denim",
+    location: "Mombasa",
+    image: "https://my-image-host.victor-f6f.workers.dev/api/img/1782862623421-pasted-1782862527863.png",
+    spotlightTitle: "Omar Fashion: Streetwear with Soul",
+    spotlightText: "Omar's edit champions everyday street style — denim, graphic tees and easy layering that keeps Mombasa's youth looking sharp season-round.",
+  },
 ];
 
 export type CartItem = {
@@ -45,8 +77,18 @@ export type AdminData = {
   productOverrides: Record<string, Partial<Product>>;
   /** Admin-added categories (slug → name). */
   customCategories: { name: string; slug: string; image: string }[];
+  /** Category overrides for base or custom categories. */
+  categoryOverrides: Record<string, Partial<Category>>;
   /** Admin-added designers (id, name + showroom spotlight info). */
   customDesigners: CustomDesigner[];
+  /** Designer overrides for base or custom designers. */
+  designerOverrides: Record<string, Partial<CustomDesigner>>;
+  /** Hidden product ids. */
+  deletedProductIds: string[];
+  /** Hidden category slugs. */
+  deletedCategorySlugs: string[];
+  /** Hidden designer ids. */
+  deletedDesignerIds: string[];
 };
 
 export type CustomDesigner = {
@@ -85,7 +127,12 @@ const initialAdmin: AdminData = {
   customProducts: [],
   productOverrides: {},
   customCategories: [],
+  categoryOverrides: {},
   customDesigners: [],
+  designerOverrides: {},
+  deletedProductIds: [],
+  deletedCategorySlugs: [],
+  deletedDesignerIds: [],
 };
 
 function load(): State {
@@ -103,7 +150,12 @@ function load(): State {
           customProducts: parsed.admin?.customProducts ?? [],
           productOverrides: parsed.admin?.productOverrides ?? {},
           customCategories: parsed.admin?.customCategories ?? [],
+          categoryOverrides: parsed.admin?.categoryOverrides ?? {},
           customDesigners: parsed.admin?.customDesigners ?? [],
+          designerOverrides: parsed.admin?.designerOverrides ?? {},
+          deletedProductIds: parsed.admin?.deletedProductIds ?? [],
+          deletedCategorySlugs: parsed.admin?.deletedCategorySlugs ?? [],
+          deletedDesignerIds: parsed.admin?.deletedDesignerIds ?? [],
         },
       };
     }
@@ -206,7 +258,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [state]);
 
   const catalog = useMemo<Product[]>(() => {
-    const base = [...PRODUCTS, ...state.admin.customProducts];
+    const deletedProductIds = new Set(state.admin.deletedProductIds);
+    const deletedCategorySlugs = new Set(state.admin.deletedCategorySlugs);
+    const base = [...PRODUCTS, ...state.admin.customProducts]
+      .filter((p) => !deletedProductIds.has(p.id) && !deletedCategorySlugs.has(p.categorySlug));
+
     return base.map((p) => {
       const tagOv = state.admin.tagOverrides[p.id];
       const fullOv = state.admin.productOverrides[p.id];
@@ -215,7 +271,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (tagOv) next = { ...next, tags: tagOv };
       return next;
     });
-  }, [state.admin.customProducts, state.admin.tagOverrides, state.admin.productOverrides]);
+  }, [state.admin.customProducts, state.admin.tagOverrides, state.admin.productOverrides, state.admin.deletedProductIds, state.admin.deletedCategorySlugs]);
 
   const value = useMemo<Ctx>(
     () => ({
@@ -243,8 +299,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return { ...p, stock };
       },
       catalog,
-      allCategories: [...CATEGORIES, ...state.admin.customCategories],
-      allDesigners: [...BASE_DESIGNERS, ...state.admin.customDesigners],
+      allCategories: [...CATEGORIES, ...state.admin.customCategories]
+        .filter((c) => !state.admin.deletedCategorySlugs.includes(c.slug))
+        .map((c) => {
+          const override = state.admin.categoryOverrides[c.slug];
+          return override ? { ...c, ...override } : c;
+        }),
+      allDesigners: [...BASE_DESIGNERS, ...state.admin.customDesigners]
+        .filter((d) => !state.admin.deletedDesignerIds.includes(d.id))
+        .map((d) => {
+          const override = state.admin.designerOverrides[d.id];
+          return override ? { ...d, ...override } : d;
+        }),
     }),
     [state, catalog]
   );

@@ -31,7 +31,7 @@ export function ProductDetail({ id }: { id: string }) {
   const wished = state.wishlist.includes(p.id);
   const out = p.stock <= 0;
   const status = stockStatus(p.stock);
-  const related = PRODUCTS.filter((r) => r.categorySlug === p.categorySlug && r.id !== p.id).slice(0, 4);
+  const related = catalog.filter((r) => r.categorySlug === p.categorySlug && r.id !== p.id).slice(0, 4);
 
   const doAdd = () => {
     addToCart({ productId: p.id, qty, size, color });

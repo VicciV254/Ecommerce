@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Link } from "../router";
-import { CATEGORIES } from "../data/products";
 import { Container } from "./ui";
+import { useStore } from "../store/StoreContext";
 
 export function Footer() {
+  const { allCategories } = useStore();
   const [email, setEmail] = useState("");
   const [done, setDone] = useState(false);
 
@@ -53,7 +54,7 @@ export function Footer() {
           <div>
             <h4 className="mb-4 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-secondary">Categories</h4>
             <ul className="space-y-2.5 text-xs text-gray-400">
-              {CATEGORIES.slice(0, 6).map((c) => (
+              {allCategories.slice(0, 6).map((c) => (
                 <li key={c.slug}>
                   <Link to={`/shop?cat=${c.slug}`} className="transition-colors hover:text-white">{c.name}</Link>
                 </li>
