@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { Link } from "../router";
 import { type Product, stockStatus } from "../data/products";
 import { formatKES, useStore } from "../store/StoreContext";
@@ -87,7 +87,7 @@ export function ProductCard({ product }: { product: Product }) {
           ) : null}
           {/* Hover overlay */}
           <div className="absolute inset-0 flex items-end justify-center bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-            <span className="mb-4 rounded-sm bg-light-pink/95 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-brand-primary shadow">
+            <span className="mb-4 rounded-sm bg-white/95 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-brand-primary shadow">
               Quick View
             </span>
           </div>
@@ -97,7 +97,7 @@ export function ProductCard({ product }: { product: Product }) {
       <button
         onClick={() => toggleWish(p.id)}
         aria-label="Toggle wishlist"
-        className={`absolute right-3 top-14 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-light-pink shadow-md transition-all duration-200 hover:scale-110 ${
+        className={`absolute right-3 top-14 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white shadow-md transition-all duration-200 hover:scale-110 ${
           wished ? "text-error" : "text-gray-400 hover:text-error"
         }`}
       >
@@ -207,32 +207,11 @@ export function Reveal({
   delay?: number;
   className?: string;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [shown, setShown] = useState(false);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const obs = new IntersectionObserver(
-      ([e]) => {
-        if (e.isIntersecting) {
-          setShown(true);
-          obs.disconnect();
-        }
-      },
-      { threshold: 0.1, rootMargin: "0px 0px -40px 0px" }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, []);
   return (
     <div
-      ref={ref}
       className={className}
-      style={{
-        opacity: shown ? 1 : 0,
-        transform: shown ? "translateY(0)" : "translateY(20px)",
-        transition: `opacity 0.6s ease ${delay}ms, transform 0.6s ease ${delay}ms`,
-      }}
+      data-aos="fade-up"
+      data-aos-delay={delay}
     >
       {children}
     </div>

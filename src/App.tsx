@@ -1,4 +1,9 @@
+import { useEffect } from "react";
+import AOS from "aos";
+import "aos/dist/aos.css";
 import { StoreProvider } from "./store/StoreContext";
+
+import { CustomizeProvider } from "./store/CustomizeContext";
 import { useRoute, parseRoute } from "./router";
 import { Header } from "./components/Header";
 import { Footer } from "./components/Footer";
@@ -9,10 +14,10 @@ import { Cart } from "./pages/Cart";
 import { Checkout } from "./pages/Checkout";
 import { About } from "./pages/About";
 import { Contact } from "./pages/Contact";
-import { Showroom } from "./pages/Showroom";
 import { Wishlist } from "./pages/Wishlist";
 import { Admin } from "./pages/Admin";
 import { TrackOrder } from "./pages/TrackOrder";
+import { Showroom } from "./pages/Showroom";
 
 function Router() {
   const route = useRoute();
@@ -44,14 +49,14 @@ function Router() {
     case "contact":
       page = <Contact />;
       break;
-    case "showroom":
-      page = <Showroom />;
-      break;
     case "wishlist":
       page = <Wishlist />;
       break;
     case "track":
       page = <TrackOrder route={route} />;
+      break;
+    case "showroom":
+      page = <Showroom />;
       break;
     case "admin":
       return <Admin />;
@@ -71,9 +76,21 @@ function Router() {
 }
 
 export default function App() {
+  useEffect(() => {
+    AOS.init({
+      duration: 800,
+      easing: "ease-out",
+      once: true,
+      offset: 50,
+      disable: "mobile"
+    });
+  }, []);
+
   return (
-    <StoreProvider>
-      <Router />
-    </StoreProvider>
+    <CustomizeProvider>
+      <StoreProvider>
+        <Router />
+      </StoreProvider>
+    </CustomizeProvider>
   );
 }

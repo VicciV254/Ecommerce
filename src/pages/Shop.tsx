@@ -1,24 +1,45 @@
 import { useMemo, useState } from "react";
-import { CATEGORIES, COLOR_MAP, PRODUCTS } from "../data/products";
+import { CATEGORIES, COLOR_MAP } from "../data/products";
 import { Breadcrumb, Container, ProductCard } from "../components/ui";
 import { useStore } from "../store/StoreContext";
 import { parseRoute } from "../router";
+import { searchProducts } from "../utils/search";
 
 const ALL_SIZES = ["S", "M", "L", "XL", "30", "32", "34", "36", "One Size"];
 const ALL_COLORS = ["White", "Black", "Blue", "Red", "Green", "Grey", "Gold", "Pink", "Brown", "Navy"];
 const PER_PAGE = 12;
 
+/** Deterministic shuffle so the order is stable across renders for a given key. */
+function seededShuffle<T>(arr: T[], seed: number): T[] {
+  const a = [...arr];
+  let s = seed;
+  for (let i = a.length - 1; i > 0; i--) {
+    s = (s * 9301 + 49297) % 233280;
+    const j = Math.floor((s / 233280) * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+const DESIGNERS = [
+  { id: "amina", name: "Amina Designs" },
+  { id: "kamau", name: "Kamau Studio" },
+  { id: "fatma", name: "Fatma Collective" },
+  { id: "omar", name: "Omar Fashion" },
+];
+
 export function Shop({ route }: { route: string }) {
-  const { productWithStock } = useStore();
+  const { productWithStock, catalog } = useStore();
   const { params } = parseRoute(route);
   const initialCat = params.get("cat") ?? "";
+  const initialDesigner = params.get("designer") ?? "";
   const q = params.get("q") ?? "";
 
   const [cats, setCats] = useState<string[]>(initialCat ? [initialCat] : []);
   const [maxPrice, setMaxPrice] = useState(30000);
   const [sizes, setSizes] = useState<string[]>([]);
   const [colors, setColors] = useState<string[]>([]);
-  const [sort, setSort] = useState("featured");
+  const [sort, setSort] = useState(initialDesigner ? `designer:${initialDesigner}` : "featured");
   const [page, setPage] = useState(1);
 
   const toggle = (arr: string[], set: (v: string[]) => void, val: string) => {
@@ -26,20 +47,32 @@ export function Shop({ route }: { route: string }) {
     setPage(1);
   };
 
+  const designerFilter = sort.startsWith("designer:") ? sort.split(":")[1] : "";
+
   const filtered = useMemo(() => {
-    let list = PRODUCTS.filter((p) => {
+    // Start from ranked search results when a query is present (name first, then tags),
+    // otherwise the full catalog.
+    let base = q ? searchProducts(q, catalog) : catalog;
+
+    let list = base.filter((p) => {
+      if (designerFilter && p.designerId !== designerFilter) return false;
       if (cats.length && !cats.includes(p.categorySlug)) return false;
       if (p.price > maxPrice) return false;
       if (sizes.length && !(p.sizes ?? []).some((s) => sizes.includes(s))) return false;
       if (colors.length && !(p.colors ?? []).some((c) => colors.includes(c))) return false;
-      if (q && !p.name.toLowerCase().includes(q.toLowerCase())) return false;
       return true;
     });
+
     if (sort === "price-asc") list = [...list].sort((a, b) => a.price - b.price);
     else if (sort === "price-desc") list = [...list].sort((a, b) => b.price - a.price);
     else if (sort === "rating") list = [...list].sort((a, b) => b.rating - a.rating);
+    else if ((sort === "featured" || designerFilter) && !q) {
+      // Shuffle when viewing all products or more than one category, so the grid
+      // isn't grouped category-by-category. Keep single-category order intact.
+      if (cats.length !== 1) list = seededShuffle(list, 1337);
+    }
     return list;
-  }, [cats, maxPrice, sizes, colors, q, sort]);
+  }, [cats, maxPrice, sizes, colors, q, sort, designerFilter, catalog]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
   const cur = Math.min(page, totalPages);
@@ -139,7 +172,13 @@ export function Shop({ route }: { route: string }) {
       <div className="mt-5 flex items-end justify-between gap-4">
         <div>
           <h1 className="font-display text-2xl uppercase tracking-wider text-brand-primary sm:text-3xl">
-            {cats.length === 1 ? CATEGORIES.find((c) => c.slug === cats[0])?.name : q ? `Results for "${q}"` : "All Products"}
+            {designerFilter
+              ? DESIGNERS.find((d) => d.id === designerFilter)?.name
+              : cats.length === 1
+              ? CATEGORIES.find((c) => c.slug === cats[0])?.name
+              : q
+              ? `Results for "${q}"`
+              : "All Products"}
           </h1>
           <p className="mt-1 text-xs text-gray-400">{filtered.length} products found</p>
         </div>
@@ -147,12 +186,17 @@ export function Shop({ route }: { route: string }) {
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value)}
-            className="rounded-sm border border-light-gray bg-light-pink px-3 py-2 text-xs outline-none"
+            className="rounded-sm border border-light-gray bg-white px-3 py-2 text-xs outline-none"
           >
             <option value="featured">Featured</option>
             <option value="price-asc">Price: Low → High</option>
             <option value="price-desc">Price: High → Low</option>
             <option value="rating">Top Rated</option>
+            <optgroup label="Shop by Designer">
+              {DESIGNERS.map((d) => (
+                <option key={d.id} value={`designer:${d.id}`}>{d.name}</option>
+              ))}
+            </optgroup>
           </select>
           <button
             onClick={() => setShowFilters((s) => !s)}
@@ -172,7 +216,7 @@ export function Shop({ route }: { route: string }) {
         {showFilters && (
           <div className="fixed inset-0 z-50 flex lg:hidden">
             <div className="flex-1 bg-black/30" onClick={() => setShowFilters(false)} />
-            <div className="w-80 max-w-[85%] overflow-y-auto bg-light-pink p-6">
+            <div className="w-80 max-w-[85%] overflow-y-auto bg-white p-6">
               <div className="mb-5 flex items-center justify-between">
                 <h3 className="font-display text-lg">Filters</h3>
                 <button onClick={() => setShowFilters(false)} className="text-gray-400 hover:text-brand-primary">

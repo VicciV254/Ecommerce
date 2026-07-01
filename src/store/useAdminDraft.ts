@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from "react";
-import type { AdminData, Discount } from "./StoreContext";
+import type { AdminData, Discount, CustomDesigner } from "./StoreContext";
+import type { Product } from "../data/products";
 
 /**
  * Manages an editable DRAFT copy of admin data (stock + discounts) with
@@ -73,6 +74,90 @@ export function useAdminDraft(committed: AdminData) {
     [draft, push]
   );
 
+  /* ---------- Tag mutations ---------- */
+  const setTags = useCallback(
+    (id: string, tags: string[]) => {
+      push({ ...draft, tagOverrides: { ...draft.tagOverrides, [id]: tags } });
+    },
+    [draft, push]
+  );
+
+  /* ---------- Custom product mutations ---------- */
+  const addProduct = useCallback(
+    (p: Product) => {
+      push({
+        ...draft,
+        customProducts: [...draft.customProducts, p],
+        stock: { ...draft.stock, [p.id]: p.stock },
+      });
+    },
+    [draft, push]
+  );
+
+  const removeProduct = useCallback(
+    (id: string) => {
+      // Custom products: remove from list. Base products: store removed flag via override.
+      const isCustom = draft.customProducts.some((p) => p.id === id);
+      if (isCustom) {
+        push({ ...draft, customProducts: draft.customProducts.filter((p) => p.id !== id) });
+      }
+    },
+    [draft, push]
+  );
+
+  /** Edit an existing product (base OR custom). Stores a partial override. */
+  const editProduct = useCallback(
+    (id: string, patch: Partial<Product>) => {
+      const isCustom = draft.customProducts.some((p) => p.id === id);
+      if (isCustom) {
+        push({
+          ...draft,
+          customProducts: draft.customProducts.map((p) => (p.id === id ? { ...p, ...patch } : p)),
+        });
+      } else {
+        push({
+          ...draft,
+          productOverrides: {
+            ...draft.productOverrides,
+            [id]: { ...(draft.productOverrides[id] ?? {}), ...patch },
+          },
+        });
+      }
+    },
+    [draft, push]
+  );
+
+  /* ---------- Categories & designers ---------- */
+  const addCategory = useCallback(
+    (c: { name: string; slug: string; image: string }) => {
+      if (draft.customCategories.some((x) => x.slug === c.slug)) return;
+      push({ ...draft, customCategories: [...draft.customCategories, c] });
+    },
+    [draft, push]
+  );
+
+  const addDesigner = useCallback(
+    (d: CustomDesigner) => {
+      if (draft.customDesigners.some((x) => x.id === d.id)) return;
+      push({ ...draft, customDesigners: [...draft.customDesigners, d] });
+    },
+    [draft, push]
+  );
+
+  const removeCategory = useCallback(
+    (slug: string) => {
+      push({ ...draft, customCategories: draft.customCategories.filter((c) => c.slug !== slug) });
+    },
+    [draft, push]
+  );
+
+  const removeDesigner = useCallback(
+    (id: string) => {
+      push({ ...draft, customDesigners: draft.customDesigners.filter((d) => d.id !== id) });
+    },
+    [draft, push]
+  );
+
   /* ---------- Undo / Redo ---------- */
   const undo = useCallback(() => setCursor((c) => Math.max(0, c - 1)), []);
   const redo = useCallback(() => setCursor((c) => Math.min(history.length - 1, c + 1)), [history.length]);
@@ -99,6 +184,14 @@ export function useAdminDraft(committed: AdminData) {
     addDiscount,
     updateDiscount,
     removeDiscount,
+    setTags,
+    addProduct,
+    removeProduct,
+    editProduct,
+    addCategory,
+    addDesigner,
+    removeCategory,
+    removeDesigner,
     undo,
     redo,
     canUndo,

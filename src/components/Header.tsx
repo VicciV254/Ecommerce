@@ -1,14 +1,16 @@
 import { useEffect, useState } from "react";
 import { Link, navigate, useRoute } from "../router";
-import { useStore } from "../store/StoreContext";
+import { useStore, formatKES } from "../store/StoreContext";
 import { CATEGORIES } from "../data/products";
+import { searchSuggestions } from "../utils/search";
 import { Container } from "./ui";
 
 export function Header() {
-  const { cartCount, state } = useStore();
+  const { cartCount, state, catalog } = useStore();
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [focused, setFocused] = useState(false);
   const route = useRoute();
 
   // Current path + active query (e.g. "/shop", "/shop?cat=mens-fashion")
@@ -17,7 +19,8 @@ export function Header() {
   const activeCat = params.get("cat");
   const isActive = (to: string) => {
     const toPath = to.split("?")[0];
-    return path === toPath || (toPath !== "/" && path.startsWith(toPath));
+    if (toPath === "/") return path === "/" || path === "";
+    return path === toPath || path.startsWith(toPath);
   };
 
   useEffect(() => {
@@ -26,13 +29,24 @@ export function Header() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  const suggestions = search.trim().length >= 1 ? searchSuggestions(search, catalog, 6) : [];
+
   const submitSearch = (e: React.FormEvent) => {
     e.preventDefault();
     navigate(`/shop?q=${encodeURIComponent(search)}`);
+    setFocused(false);
     setOpen(false);
   };
 
+  const pickSuggestion = (id: string) => {
+    setSearch("");
+    setFocused(false);
+    setOpen(false);
+    navigate(`/product/${id}`);
+  };
+
   const navLinks = [
+    { to: "/", label: "Home" },
     { to: "/shop", label: "Shop" },
     { to: "/showroom", label: "Showroom" },
     { to: "/about", label: "About" },
@@ -44,7 +58,7 @@ export function Header() {
     <header
       className={`sticky top-0 z-50 transition-all duration-300 ${
         scrolled
-          ? "bg-light-pink/97 shadow-[0_1px_20px_rgba(0,0,0,0.06)] backdrop-blur-md"
+          ? "bg-light-pink/[.97] shadow-[0_1px_20px_rgba(0,0,0,0.06)] backdrop-blur-md"
           : "bg-light-pink border-b border-light-gray"
       }`}
     >
@@ -62,19 +76,54 @@ export function Header() {
         </Link>
 
         {/* Search (desktop) */}
-        <form onSubmit={submitSearch} className="hidden flex-1 max-w-lg md:flex">
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search products..."
-            className="w-full rounded-l-sm border border-light-gray bg-off-white px-4 py-2.5 text-sm outline-none transition-colors focus:border-brand-secondary"
-          />
-          <button type="submit" className="rounded-r-sm bg-brand-primary px-5 text-white transition-colors hover:bg-brand-secondary hover:text-brand-primary">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-4 w-4">
-              <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607z" />
-            </svg>
-          </button>
-        </form>
+        <div className="relative hidden flex-1 max-w-lg md:block">
+          <form onSubmit={submitSearch} className="flex">
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setTimeout(() => setFocused(false), 150)}
+              placeholder="Search products, brands & more..."
+              className="w-full rounded-l-sm border border-light-gray bg-off-white px-4 py-2.5 text-sm outline-none transition-colors focus:border-brand-secondary"
+            />
+            <button type="submit" className="rounded-r-sm bg-brand-primary px-5 text-white transition-colors hover:bg-brand-secondary hover:text-brand-primary">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-4 w-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607z" />
+              </svg>
+            </button>
+          </form>
+          {/* Autocomplete dropdown */}
+          {focused && search.trim() && (
+            <div className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-sm border border-light-gray bg-white shadow-xl">
+              {suggestions.length > 0 ? (
+                <>
+                  {suggestions.map((s) => (
+                    <button
+                      key={s.id}
+                      onMouseDown={() => pickSuggestion(s.id)}
+                      className="flex w-full items-center gap-3 border-b border-light-gray/60 px-3 py-2 text-left transition-colors last:border-0 hover:bg-warm-beige"
+                    >
+                      <img src={s.image} alt="" className="h-10 w-10 shrink-0 rounded-sm object-cover" />
+                      <span className="flex-1 min-w-0">
+                        <span className="block truncate text-sm text-brand-primary">{s.name}</span>
+                        <span className="block text-[11px] text-gray-400">{s.category}</span>
+                      </span>
+                      <span className="shrink-0 text-xs font-bold text-brand-primary">{formatKES(s.price)}</span>
+                    </button>
+                  ))}
+                  <button
+                    onMouseDown={() => { navigate(`/shop?q=${encodeURIComponent(search)}`); setFocused(false); }}
+                    className="block w-full bg-brand-primary px-3 py-2.5 text-center text-[11px] font-bold uppercase tracking-wider text-white hover:bg-brand-secondary hover:text-brand-primary"
+                  >
+                    See all results for "{search}"
+                  </button>
+                </>
+              ) : (
+                <p className="px-3 py-4 text-center text-xs text-gray-400">No matches — press Enter to search anyway.</p>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Desktop nav */}
         <nav className="hidden items-center gap-7 lg:flex">
@@ -140,8 +189,8 @@ export function Header() {
         </div>
       </Container>
 
-      {/* Category strip */}
-      <div className="hidden border-t border-light-gray/60 lg:block">
+      {/* Category strip — only on the Shop tab */}
+      <div className={`border-t border-light-gray/60 ${path === "/shop" ? "hidden lg:block" : "hidden"}`}>
         <Container className="no-scrollbar flex items-center gap-0.5 overflow-x-auto py-0">
           {CATEGORIES.map((c) => {
             const active = path === "/shop" && activeCat === c.slug;
@@ -162,11 +211,19 @@ export function Header() {
         </Container>
       </div>
 
-      {/* Mobile menu */}
+      {/* Mobile menu — slide-in drawer (half screen on small, ~40% on medium) */}
       {open && (
-        <div className="absolute left-0 right-0 top-full z-50 border-t border-light-gray bg-light-pink shadow-lg lg:hidden">
-          <Container className="flex flex-col gap-0.5 py-4">
-            <form onSubmit={submitSearch} className="mb-3 flex">
+        <>
+          <div className="fixed inset-0 top-0 z-40 bg-black/40 lg:hidden" onClick={() => setOpen(false)} />
+          <div className="fixed right-0 top-0 z-50 h-full w-1/2 min-w-[260px] max-w-sm overflow-y-auto border-l border-light-gray bg-white shadow-2xl animate-fade-in lg:hidden">
+            <div className="flex items-center justify-between border-b border-light-gray px-4 py-3">
+              <span className="text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Menu</span>
+              <button onClick={() => setOpen(false)} aria-label="Close menu" className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-warm-beige">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="flex flex-col gap-0.5 px-4 py-4">
+            <form onSubmit={submitSearch} className="mb-2 flex">
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -179,6 +236,20 @@ export function Header() {
                 </svg>
               </button>
             </form>
+            {search.trim() && suggestions.length > 0 && (
+              <div className="mb-3 overflow-hidden rounded-sm border border-light-gray">
+                {suggestions.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => pickSuggestion(s.id)}
+                    className="flex w-full items-center gap-2 border-b border-light-gray/60 px-2 py-1.5 text-left last:border-0 hover:bg-warm-beige"
+                  >
+                    <img src={s.image} alt="" className="h-8 w-8 shrink-0 rounded-sm object-cover" />
+                    <span className="flex-1 truncate text-xs text-brand-primary">{s.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
             {navLinks.map((l) => {
               const active = isActive(l.to);
               return (
@@ -215,9 +286,12 @@ export function Header() {
                 ))}
               </div>
             </div>
-          </Container>
-        </div>
+            </div>
+          </div>
+         </>
       )}
     </header>
   );
 }
+
+
