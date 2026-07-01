@@ -87,7 +87,7 @@ export function Contact() {
               href="https://maps.google.com/?q=Digo+Road+Mombasa"
               target="_blank"
               rel="noreferrer"
-              className="mt-5 inline-block rounded-sm bg-brand-secondary px-5 py-2.5 text-[11px] font-bold uppercase tracking-[0.12em] text-brand-primary transition-all hover:bg-light-pink"
+              className="mt-5 inline-block rounded-sm bg-brand-secondary px-5 py-2.5 text-[11px] font-bold uppercase tracking-[0.12em] text-brand-primary transition-all hover:bg-white"
             >
               Open in Google Maps
             </a>

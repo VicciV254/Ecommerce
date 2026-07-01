@@ -10,13 +10,23 @@ const SLIDES = [
     title: "Fresh Styles Just Arrived",
     sub: "Discover something new across every floor — fashion, home, electronics & more.",
     cta: "/shop",
-    image: HERO_IMAGES[0],
+    ctaLabel: "Shop Now",
+    image: "https://my-image-host.victor-f6f.workers.dev/api/img/1782861912145-hero-banner.jpg",
+  },
+  {
+    badge: "Fashion Showroom",
+    title: "Where Fashion Comes Alive",
+    sub: "Runway shows, curated collections, designer collaborations & stylist consultations — IKO KITU!",
+    cta: "/showroom",
+    ctaLabel: "Enter the Showroom",
+    image: "https://images.pexels.com/photos/20164322/pexels-photo-20164322.jpeg?auto=compress&cs=tinysrgb&w=1200",
   },
   {
     badge: "Back to School",
     title: "Uniforms, Bags & Stationery",
     sub: "Get ready for the new term with up to 20% off school essentials.",
     cta: "/shop?cat=school-office",
+    ctaLabel: "Shop Now",
     image: HERO_IMAGES[1],
   },
   {
@@ -24,6 +34,7 @@ const SLIDES = [
     title: "Everything for Your Little One",
     sub: "Cots, strollers, toys and more — quality you can trust.",
     cta: "/shop?cat=baby-nursery",
+    ctaLabel: "Shop Now",
     image: HERO_IMAGES[2],
   },
 ];
@@ -63,9 +74,9 @@ function HeroCarousel() {
           <p className="mt-4 max-w-md text-sm leading-relaxed text-white/80">{s.sub}</p>
           <Link
             to={s.cta}
-            className="mt-8 inline-block rounded-sm bg-brand-secondary px-8 py-3.5 font-body text-xs font-bold uppercase tracking-[0.15em] text-brand-primary transition-all duration-200 hover:bg-light-pink"
+            className="mt-8 inline-block rounded-sm bg-brand-secondary px-8 py-3.5 font-body text-xs font-bold uppercase tracking-[0.15em] text-brand-primary transition-all duration-200 hover:bg-white"
           >
-            Shop Now
+            {s.ctaLabel}
           </Link>
         </div>
       </Container>
@@ -75,7 +86,7 @@ function HeroCarousel() {
             key={i}
             onClick={() => setIdx(i)}
             className={`h-1 rounded-full transition-all duration-300 ${
-              i === idx ? "w-10 bg-brand-secondary" : "w-4 bg-light-pink/50 hover:bg-light-pink/80"
+              i === idx ? "w-10 bg-brand-secondary" : "w-4 bg-white/50 hover:bg-white/80"
             }`}
           />
         ))}
@@ -96,13 +107,13 @@ function HScroll({ children }: { children: React.ReactNode }) {
       </div>
       <button
         onClick={() => scroll(-1)}
-        className="absolute -left-4 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-light-pink shadow-lg transition-all hover:bg-brand-secondary md:flex opacity-0 group-hover/scroll:opacity-100"
+        className="absolute -left-4 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white shadow-lg transition-all hover:bg-brand-secondary md:flex opacity-0 group-hover/scroll:opacity-100"
       >
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-4 w-4"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" /></svg>
       </button>
       <button
         onClick={() => scroll(1)}
-        className="absolute -right-4 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-light-pink shadow-lg transition-all hover:bg-brand-secondary md:flex opacity-0 group-hover/scroll:opacity-100"
+        className="absolute -right-4 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white shadow-lg transition-all hover:bg-brand-secondary md:flex opacity-0 group-hover/scroll:opacity-100"
       >
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-4 w-4"><path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
       </button>
@@ -197,39 +208,28 @@ export function Home() {
         </Container>
       </div>
 
-      {/* Showroom */}
+      {/* Baby spotlight */}
       <Container className="py-16">
-        <SectionTitle subtitle="A quick glimpse of our fashion highlights">SHOWROOM</SectionTitle>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            {
-              title: "Fashion Week Highlights",
-              image: "https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg?auto=compress&cs=tinysrgb&w=1200",
-            },
-            {
-              title: "Runway Street Style",
-              image: "https://images.pexels.com/photos/298863/pexels-photo-298863.jpeg?auto=compress&cs=tinysrgb&w=1200",
-            },
-            {
-              title: "Designer Pop-Up",
-              image: "https://images.pexels.com/photos/1496674/pexels-photo-1496674.jpeg?auto=compress&cs=tinysrgb&w=1200",
-            },
-            {
-              title: "Lifestyle Showcase",
-              image: "https://images.pexels.com/photos/3965545/pexels-photo-3965545.jpeg?auto=compress&cs=tinysrgb&w=1200",
-            },
-          ].map((item) => (
-            <div key={item.title} className="group overflow-hidden rounded-3xl bg-light-pink shadow-sm transition-transform duration-300 hover:-translate-y-1">
-              <img src={item.image} alt={item.title} className="h-48 w-full object-cover transition-transform duration-700 group-hover:scale-105" />
-              <div className="p-4 text-sm font-semibold uppercase tracking-[0.15em] text-brand-primary">
-                {item.title}
-              </div>
-            </div>
+        <SectionTitle
+          subtitle="Everything your little one needs"
+          action={
+            <Link to="/shop?cat=baby-nursery" className="text-xs font-bold uppercase tracking-[0.12em] text-brand-primary underline-offset-4 hover:text-brand-secondary hover:underline">
+              View All →
+            </Link>
+          }
+        >
+          Baby & Nursery
+        </SectionTitle>
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {babySpot.map((p, i) => (
+            <Reveal key={p.id} delay={i * 80}>
+              <ProductCard product={productWithStock(p)} />
+            </Reveal>
           ))}
         </div>
       </Container>
 
-      {/* Baby spotlight */}
+      {/* Full-width banner */}
       <div className="relative h-72 overflow-hidden sm:h-80">
         <img
           src="https://images.pexels.com/photos/20177680/pexels-photo-20177680.jpeg?auto=compress&cs=tinysrgb&w=1200"
@@ -243,7 +243,7 @@ export function Home() {
           <p className="mt-2 max-w-md text-sm text-white/80">Digo Road, Mombasa CBD — 4 floors of quality products for the whole family.</p>
           <Link
             to="/about"
-            className="mt-6 rounded-sm border border-light-pink/40 px-6 py-2.5 text-xs font-bold uppercase tracking-[0.15em] transition-all hover:bg-light-pink hover:text-brand-primary"
+            className="mt-6 rounded-sm border border-white/40 px-6 py-2.5 text-xs font-bold uppercase tracking-[0.15em] transition-all hover:bg-white hover:text-brand-primary"
           >
             Learn More
           </Link>
@@ -270,6 +270,42 @@ export function Home() {
           ))}
         </div>
       </Container>
+
+      {/* Showroom glimpse */}
+      <div className="relative overflow-hidden">
+        <div className="grid lg:grid-cols-2">
+          <div className="relative min-h-[320px] overflow-hidden">
+            <img
+              src="https://images.pexels.com/photos/20164322/pexels-photo-20164322.jpeg?auto=compress&cs=tinysrgb&w=1000"
+              alt="Fashion Showroom"
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+            <div className="absolute inset-0 bg-brand-primary/20" />
+          </div>
+          <div className="flex flex-col justify-center bg-brand-primary px-8 py-14 text-white sm:px-14">
+            <Reveal>
+              <p className="text-[11px] font-bold uppercase tracking-[0.25em] text-brand-secondary">IKO KITU! — Fashion Showroom</p>
+              <h2 className="mt-3 font-display text-3xl uppercase leading-tight tracking-wider sm:text-4xl">Where Fashion Comes Alive</h2>
+              <p className="mt-4 max-w-md text-sm leading-relaxed text-white/75">
+                Step into Mombasa's premier fashion destination — curated seasonal collections, live runway
+                shows, designer collaborations, a shoppable lookbook, and personal stylist consultations.
+              </p>
+              <div className="mt-6 grid max-w-md grid-cols-3 gap-4 text-center">
+                {[["12+", "Brands"], ["8", "Events / yr"], ["500+", "Attendees"]].map(([v, l]) => (
+                  <div key={l}>
+                    <p className="font-display text-2xl text-brand-secondary">{v}</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-white/60">{l}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-7 flex flex-wrap gap-3">
+                <Link to="/showroom" className="rounded-sm bg-brand-secondary px-7 py-3 text-xs font-bold uppercase tracking-[0.15em] text-brand-primary hover:bg-white">Explore the Showroom</Link>
+                <Link to="/showroom?go=events" className="rounded-sm border border-white/40 px-7 py-3 text-xs font-bold uppercase tracking-[0.15em] hover:bg-white hover:text-brand-primary">View Events</Link>
+              </div>
+            </Reveal>
+          </div>
+        </div>
+      </div>
 
       {/* Reviews */}
       <div className="bg-warm-beige/40 py-16">

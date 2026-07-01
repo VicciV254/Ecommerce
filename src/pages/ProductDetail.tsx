@@ -1,20 +1,21 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { COLOR_MAP, getProduct, PRODUCTS, stockStatus } from "../data/products";
-import { Breadcrumb, Container, ProductCard, ProductImage, Stars, StockBadge } from "../components/ui";
+import { Breadcrumb, Container, ProductCard, Stars, StockBadge } from "../components/ui";
 import { formatKES, useStore } from "../store/StoreContext";
 import { Link, navigate } from "../router";
+import { resolveImageSet, imageRecordFor } from "../utils/imageSource";
 
 const TABS = ["Description", "Materials", "Care", "Size Guide"] as const;
 
 export function ProductDetail({ id }: { id: string }) {
-  const base = getProduct(id);
-  const { addToCart, toggleWish, state, productWithStock } = useStore();
+  const { addToCart, toggleWish, state, productWithStock, catalog } = useStore();
+  const base = catalog.find((p) => p.id === id) ?? getProduct(id);
   const [size, setSize] = useState<string | undefined>(base?.sizes?.[0]);
   const [color, setColor] = useState<string | undefined>(base?.colors?.[0]);
   const [qty, setQty] = useState(1);
   const [tab, setTab] = useState<(typeof TABS)[number]>("Description");
   const [added, setAdded] = useState(false);
-
+  
   if (!base) {
     return (
       <Container className="py-20 text-center">
@@ -38,6 +39,31 @@ export function ProductDetail({ id }: { id: string }) {
     setTimeout(() => setAdded(false), 1500);
   };
 
+  // Image set is resolved from the built-in AI-generated images (or placeholders)
+  const imageSet = resolveImageSet(p);
+  const [activeAngle, setActiveAngle] = useState<"front" | "side" | "top" | "closeup">("front");
+  const [imageError, setImageError] = useState(false);
+  const [imgSource, setImgSource] = useState<string>("");
+  const [imgLoading, setImgLoading] = useState(true);
+
+  // 4 fixed angles — always shown (matches spec §8)
+  const angleOrder: Array<"front" | "side" | "top" | "closeup"> = ["front", "side", "top", "closeup"];
+  const angleLabels = {
+    front: "Front View",
+    side: "Side View",
+    top: "Top View",
+    closeup: "Detail Shot",
+  };
+
+  const currentImage = imageSet[activeAngle];
+
+  // Log the generation record to console for debugging (matches spec §11)
+  useEffect(() => {
+    const record = imageRecordFor(p);
+    setImgSource(record.image_source);
+    console.log(`[ImageSource] Product "${p.name}" — source: "${record.image_source}"`);
+  }, [p]);
+
   return (
     <Container className="py-8">
       <div className="flex items-center justify-between">
@@ -54,21 +80,71 @@ export function ProductDetail({ id }: { id: string }) {
       </div>
 
       <div className="mt-6 grid gap-10 lg:grid-cols-2">
-        {/* Images */}
+        {/* Images Section */}
         <div>
-          <div className="aspect-square overflow-hidden rounded-lg bg-warm-beige">
-            <ProductImage product={p} className="transition-transform duration-500 hover:scale-105" />
-          </div>
-          <div className="mt-3 grid grid-cols-4 gap-2">
-            {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="aspect-square overflow-hidden rounded-md bg-warm-beige">
-                <ProductImage product={p} className="opacity-80 hover:opacity-100 transition-opacity" />
+          {/* Hero Image */}
+          <div className="aspect-square overflow-hidden rounded-lg bg-warm-beige relative">
+            {imgLoading && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <div className="h-8 w-8 animate-spin rounded-full border-2 border-brand-secondary border-t-transparent" />
+                <p className="mt-3 text-xs text-gray-400">Loading image...</p>
               </div>
-            ))}
+            )}
+            {imageError ? (
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400">
+                <span className="text-4xl mb-2">📷</span>
+                <p className="text-sm font-medium">Image being generated</p>
+                <p className="text-xs mt-1 text-gray-300">Professional photo coming soon...</p>
+              </div>
+            ) : (
+              <img
+                src={currentImage}
+                alt={`${p.name} — ${angleLabels[activeAngle]}`}
+                className="absolute inset-0 w-full h-full object-cover transition-all duration-500 hover:scale-105"
+                onLoad={() => setImgLoading(false)}
+                onError={() => { setImageError(true); setImgLoading(false); }}
+              />
+            )}
+            {imgSource && !imageError && (
+              <span className="absolute bottom-2 right-2 rounded-sm bg-black/40 px-2 py-0.5 text-[9px] uppercase tracking-wider text-white">
+                {imgSource}
+              </span>
+            )}
+          </div>
+
+          {/* 4-Angle Thumbnails */}
+          <div className="mt-3">
+            <div className="grid grid-cols-4 gap-2">
+              {angleOrder.map((angle) => (
+                <button
+                  key={angle}
+                  onClick={() => { setActiveAngle(angle); setImageError(false); setImgLoading(true); }}
+                  className={`aspect-square overflow-hidden rounded-md bg-warm-beige border-2 transition-all relative ${
+                    angle === activeAngle ? "border-brand-primary" : "border-transparent hover:border-brand-secondary"
+                  }`}
+                  title={angleLabels[angle]}
+                >
+                  <img
+                    src={imageSet[angle]}
+                    alt={`${p.name} — ${angleLabels[angle]}`}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.opacity = "0.4";
+                    }}
+                  />
+                  <span className="absolute bottom-0 inset-x-0 bg-black/50 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">
+                    {angle}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-center text-[10px] text-gray-400">
+              {imageError ? "All 4 angles will be generated" : "Click any angle to view"}
+            </p>
           </div>
         </div>
 
-        {/* Info */}
+        {/* Product Info */}
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-brand-accent">{p.category}</p>
           <h1 className="mt-1.5 font-display text-2xl leading-tight text-brand-primary sm:text-3xl">{p.name}</h1>
@@ -77,6 +153,11 @@ export function ProductDetail({ id }: { id: string }) {
             <span className="font-display text-3xl text-brand-primary">{formatKES(p.price)}</span>
             {p.comparePrice && (
               <span className="text-base text-gray-400 line-through">{formatKES(p.comparePrice)}</span>
+            )}
+            {p.discountPercent && (
+              <span className="bg-coral text-white text-xs font-bold px-2 py-0.5 rounded-sm">
+                -{p.discountPercent}%
+              </span>
             )}
           </div>
 

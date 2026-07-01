@@ -6,7 +6,14 @@ import {
   useReducer,
   type ReactNode,
 } from "react";
-import { PRODUCTS, type Product } from "../data/products";
+import { PRODUCTS, CATEGORIES, type Product } from "../data/products";
+
+const BASE_DESIGNERS = [
+  { id: "amina", name: "Amina Designs" },
+  { id: "kamau", name: "Kamau Studio" },
+  { id: "fatma", name: "Fatma Collective" },
+  { id: "omar", name: "Omar Fashion" },
+];
 
 export type CartItem = {
   productId: string;
@@ -26,10 +33,30 @@ export type Discount = {
   endDate: string; // ISO date
 };
 
-/** Admin-editable data (stock + discounts). This is what gets "saved". */
+/** Admin-editable data (stock + discounts + products/tags). This is what gets "saved". */
 export type AdminData = {
   stock: Record<string, number>;
   discounts: Discount[];
+  /** Per-product tag overrides (replaces the base tags when present). */
+  tagOverrides: Record<string, string[]>;
+  /** Admin-added products. */
+  customProducts: Product[];
+  /** Full-product overrides for base products (name, price, designer, etc.). */
+  productOverrides: Record<string, Partial<Product>>;
+  /** Admin-added categories (slug → name). */
+  customCategories: { name: string; slug: string; image: string }[];
+  /** Admin-added designers (id, name + showroom spotlight info). */
+  customDesigners: CustomDesigner[];
+};
+
+export type CustomDesigner = {
+  id: string;
+  name: string;
+  specialty?: string;
+  location?: string;
+  image?: string;
+  spotlightTitle?: string;
+  spotlightText?: string;
 };
 
 type State = {
@@ -51,7 +78,15 @@ const initialStock: Record<string, number> = Object.fromEntries(
   PRODUCTS.map((p) => [p.id, p.stock])
 );
 
-const initialAdmin: AdminData = { stock: initialStock, discounts: [] };
+const initialAdmin: AdminData = {
+  stock: initialStock,
+  discounts: [],
+  tagOverrides: {},
+  customProducts: [],
+  productOverrides: {},
+  customCategories: [],
+  customDesigners: [],
+};
 
 function load(): State {
   try {
@@ -64,6 +99,11 @@ function load(): State {
         admin: {
           stock: { ...initialStock, ...(parsed.admin?.stock ?? {}) },
           discounts: parsed.admin?.discounts ?? [],
+          tagOverrides: parsed.admin?.tagOverrides ?? {},
+          customProducts: parsed.admin?.customProducts ?? [],
+          productOverrides: parsed.admin?.productOverrides ?? {},
+          customCategories: parsed.admin?.customCategories ?? [],
+          customDesigners: parsed.admin?.customDesigners ?? [],
         },
       };
     }
@@ -148,6 +188,12 @@ type Ctx = {
   cartCount: number;
   /** Returns product with current stock AND active discount applied. */
   productWithStock: (p: Product) => Product;
+  /** Full catalog: base products + custom products, with tag overrides applied. */
+  catalog: Product[];
+  /** Base + custom categories. */
+  allCategories: { name: string; slug: string; image: string }[];
+  /** Base (4) + admin-added designers. */
+  allDesigners: CustomDesigner[];
 };
 
 const StoreCtx = createContext<Ctx | null>(null);
@@ -158,6 +204,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     localStorage.setItem("nmb-store", JSON.stringify(state));
   }, [state]);
+
+  const catalog = useMemo<Product[]>(() => {
+    const base = [...PRODUCTS, ...state.admin.customProducts];
+    return base.map((p) => {
+      const tagOv = state.admin.tagOverrides[p.id];
+      const fullOv = state.admin.productOverrides[p.id];
+      let next = p;
+      if (fullOv) next = { ...next, ...fullOv };
+      if (tagOv) next = { ...next, tags: tagOv };
+      return next;
+    });
+  }, [state.admin.customProducts, state.admin.tagOverrides, state.admin.productOverrides]);
 
   const value = useMemo<Ctx>(
     () => ({
@@ -184,8 +242,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
         return { ...p, stock };
       },
+      catalog,
+      allCategories: [...CATEGORIES, ...state.admin.customCategories],
+      allDesigners: [...BASE_DESIGNERS, ...state.admin.customDesigners],
     }),
-    [state]
+    [state, catalog]
   );
 
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>;
