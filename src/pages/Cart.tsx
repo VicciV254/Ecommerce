@@ -1,17 +1,16 @@
 import { useState } from "react";
-import { getProduct } from "../data/products";
 import { Breadcrumb, Container, ProductImage } from "../components/ui";
 import { formatKES, useStore } from "../store/StoreContext";
 import { Link, navigate } from "../router";
 
 export function Cart() {
-  const { state, removeFromCart, setQty } = useStore();
+  const { state, removeFromCart, setQty, catalog } = useStore();
   const [promo, setPromo] = useState("");
   const [applied, setApplied] = useState(0);
   const [promoMsg, setPromoMsg] = useState("");
 
   const lines = state.cart
-    .map((c, index) => ({ c, index, product: getProduct(c.productId) }))
+    .map((c, index) => ({ c, index, product: catalog.find((p) => p.id === c.productId) }))
     .filter((l) => l.product);
 
   const subtotal = lines.reduce((s, l) => s + (l.product!.price * l.c.qty), 0);

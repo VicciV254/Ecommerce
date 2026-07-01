@@ -23,7 +23,7 @@ function todayISO(offsetDays = 0) {
 
 export function Admin() {
   const { state, commitAdmin } = useStore();
-  const draftApi = useAdminDraft(state.admin);
+  const draftApi = useAdminDraft(state.admin, (data) => commitAdmin(data));
   const [tab, setTab] = useState<(typeof TABS)[number]>("Dashboard");
 
   const [confirmSave, setConfirmSave] = useState(false);
@@ -36,10 +36,9 @@ export function Admin() {
   };
 
   const doSave = () => {
-    commitAdmin(draftApi.draft);
     draftApi.markSaved();
     setConfirmSave(false);
-    showToast("Changes saved successfully");
+    showToast("Changes applied to the live store");
   };
 
   const tryExit = () => {
@@ -201,7 +200,7 @@ export function Admin() {
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="border-b border-light-gray text-left text-[10px] font-bold uppercase tracking-[0.1em] text-gray-400">
+                  <tr className="border-b border-light-gray text-left text-[10px] font-bold uppercase tracking-widest text-gray-400">
                     <th className="py-2.5">Order #</th><th>Customer</th><th>Total</th><th>Status</th>
                   </tr>
                 </thead>
@@ -228,7 +227,7 @@ export function Admin() {
       <ConfirmModal
         open={confirmSave}
         title="Save Changes?"
-        message="This will publish your stock and discount updates to the live store. Customers will see these changes immediately."
+        message="These changes are applied to the live store as you edit them. Saving here just keeps the draft baseline in sync."
         confirmLabel="Yes, Save"
         onConfirm={doSave}
         onCancel={() => setConfirmSave(false)}
@@ -639,13 +638,17 @@ function StockManager({ draftApi }: { draftApi: DraftApi }) {
 /* CATALOG MANAGER — tags + add/remove products                  */
 /* ============================================================= */
 function CatalogManager({ draftApi }: { draftApi: DraftApi }) {
-  const { draft, addProduct, removeProduct, editProduct, addCategory, addDesigner, removeCategory, removeDesigner } = draftApi;
+  const { draft, addProduct, removeProduct, editProduct, addCategory, editCategory, addDesigner, editDesigner, removeCategory, removeDesigner } = draftApi;
   const { allCategories, allDesigners } = useStore();
 
   const [catFilter, setCatFilter] = useState("mens-fashion");
   const [search, setSearch] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [confirmDeleteType, setConfirmDeleteType] = useState<"product" | "category" | "designer" | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingCategory, setEditingCategory] = useState<{ slug: string; name: string; image: string } | null>(null);
+  const [editingDesigner, setEditingDesigner] = useState<{ id: string; name: string; specialty: string; location: string; image: string } | null>(null);
 
   // Merge base + custom + overrides
   const merged: Product[] = [...PRODUCTS, ...draft.customProducts].map((p) => {
@@ -694,7 +697,7 @@ function CatalogManager({ draftApi }: { draftApi: DraftApi }) {
   const [newCat, setNewCat] = useState({ name: "", image: "" });
   const [newDesigner, setNewDesigner] = useState({
     id: "", name: "", specialty: "", location: "Mombasa", image: "",
-    spotlightTitle: "", spotlightText: "",
+    useCustomSpotlight: false, spotlightTitle: "", spotlightText: "",
   });
   const [addCatOpen, setAddCatOpen] = useState(false);
   const [addDesignerOpen, setAddDesignerOpen] = useState(false);
@@ -716,20 +719,29 @@ function CatalogManager({ draftApi }: { draftApi: DraftApi }) {
   };
 
   const newDesignerValid =
-    !!newDesigner.id.trim() && !!newDesigner.name.trim() && !!newDesigner.specialty.trim();
+    !!newDesigner.id.trim() &&
+    !!newDesigner.name.trim() &&
+    !!newDesigner.specialty.trim() &&
+    (!newDesigner.useCustomSpotlight || (!!newDesigner.spotlightTitle.trim() && !!newDesigner.spotlightText.trim()));
   const submitNewDesigner = () => {
     if (!newDesignerValid) return;
     const id = slugify(newDesigner.id);
+    const spotlightTitle = newDesigner.useCustomSpotlight
+      ? newDesigner.spotlightTitle.trim()
+      : `${newDesigner.name.trim()}: Featured Designer`;
+    const spotlightText = newDesigner.useCustomSpotlight
+      ? newDesigner.spotlightText.trim()
+      : `${newDesigner.name.trim()} brings their signature ${newDesigner.specialty.trim().toLowerCase()} to the No Maneno Bazaar showroom.`;
     addDesigner({
       id,
       name: newDesigner.name.trim(),
       specialty: newDesigner.specialty.trim(),
       location: newDesigner.location.trim() || "Mombasa",
       image: newDesigner.image.trim() || "https://images.pexels.com/photos/20453359/pexels-photo-20453359.jpeg?auto=compress&cs=tinysrgb&w=900",
-      spotlightTitle: newDesigner.spotlightTitle.trim() || `${newDesigner.name.trim()}: Featured Designer`,
-      spotlightText: newDesigner.spotlightText.trim() || `${newDesigner.name.trim()} brings their signature ${newDesigner.specialty.trim().toLowerCase()} to the No Maneno Bazaar showroom.`,
+      spotlightTitle,
+      spotlightText,
     });
-    setNewDesigner({ id: "", name: "", specialty: "", location: "Mombasa", image: "", spotlightTitle: "", spotlightText: "" });
+    setNewDesigner({ id: "", name: "", specialty: "", location: "Mombasa", image: "", useCustomSpotlight: false, spotlightTitle: "", spotlightText: "" });
     setAddDesignerOpen(false);
     setForm((f) => ({ ...f, designerId: id }));
   };
@@ -808,50 +820,65 @@ function CatalogManager({ draftApi }: { draftApi: DraftApi }) {
 
         <div className="grid max-h-[640px] grid-cols-2 gap-3 overflow-y-auto pr-1 sm:grid-cols-3 lg:grid-cols-4">
           {list.map((p) => (
-            <button key={p.id} onClick={() => setEditingId(p.id)} className="group flex flex-col overflow-hidden rounded-md border border-light-gray bg-white text-left transition-all hover:border-brand-secondary hover:shadow-md">
-              <div className="aspect-square overflow-hidden bg-warm-beige">
-                <img src={p.image} alt="" className="h-full w-full object-cover" />
-              </div>
-              <div className="p-2">
-                <p className="truncate text-xs font-medium text-brand-primary">{p.name}</p>
-                <p className="text-[10px] text-gray-400">{formatKES(p.price)}</p>
-                {p.custom && <span className="mt-0.5 inline-block rounded-sm bg-brand-secondary/20 px-1.5 text-[9px] font-bold uppercase text-brand-accent">New</span>}
-              </div>
-            </button>
+            <div key={p.id} className="group flex flex-col overflow-hidden rounded-md border border-light-gray bg-white text-left transition-all hover:border-brand-secondary hover:shadow-md">
+              <button onClick={() => setEditingId(p.id)} className="flex-1 text-left">
+                <div className="aspect-square overflow-hidden bg-warm-beige">
+                  <img src={p.image} alt="" className="h-full w-full object-cover" />
+                </div>
+                <div className="p-2">
+                  <p className="truncate text-xs font-medium text-brand-primary">{p.name}</p>
+                  <p className="text-[10px] text-gray-400">{formatKES(p.price)}</p>
+                  {p.custom && <span className="mt-0.5 inline-block rounded-sm bg-brand-secondary/20 px-1.5 text-[9px] font-bold uppercase text-brand-accent">New</span>}
+                </div>
+              </button>
+              <button
+                onClick={() => {
+                  setConfirmDeleteType("product");
+                  setDeleteTarget({ id: p.id, label: p.name });
+                }}
+                className="border-t border-light-gray px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-error hover:bg-error hover:text-white"
+              >
+                Delete
+              </button>
+            </div>
           ))}
           {list.length === 0 && <p className="col-span-full py-10 text-center text-xs text-gray-400">No products match.</p>}
         </div>
 
         {/* Manage custom categories & designers */}
-        {(draft.customCategories.length > 0 || draft.customDesigners.length > 0) && (
+        {(allCategories.length > 0 || allDesigners.length > 0) && (
           <div className="mt-6 border-t border-light-gray pt-4">
-            <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.15em] text-brand-accent">Manage Custom Items</p>
-            {draft.customCategories.length > 0 && (
-              <div className="mb-3">
-                <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-gray-400">Custom Categories</p>
-                <div className="flex flex-wrap gap-2">
-                  {draft.customCategories.map((c) => (
-                    <span key={c.slug} className="flex items-center gap-1.5 rounded-full border border-light-gray bg-off-white px-3 py-1 text-[11px]">
-                      {c.name}
-                      <button onClick={() => removeCategory(c.slug)} className="text-gray-400 hover:text-error" title="Delete category">×</button>
-                    </span>
-                  ))}
-                </div>
+            <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.15em] text-brand-accent">Manage Catalog Items</p>
+            <div className="mb-3">
+              <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-gray-400">Categories</p>
+              <div className="flex flex-wrap gap-2">
+                {allCategories.map((c) => (
+                  <span key={c.slug} className="flex items-center gap-1.5 rounded-full border border-light-gray bg-off-white px-3 py-1 text-[11px]">
+                    {c.name}
+                    <button onClick={() => setEditingCategory({ slug: c.slug, name: c.name, image: c.image })} className="text-gray-400 hover:text-brand-primary" title="Edit category">✎</button>
+                    <button onClick={() => {
+                      setConfirmDeleteType("category");
+                      setDeleteTarget({ id: c.slug, label: c.name });
+                    }} className="text-gray-400 hover:text-error" title="Delete category">×</button>
+                  </span>
+                ))}
               </div>
-            )}
-            {draft.customDesigners.length > 0 && (
-              <div>
-                <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-gray-400">Custom Designers</p>
-                <div className="flex flex-wrap gap-2">
-                  {draft.customDesigners.map((d) => (
-                    <span key={d.id} className="flex items-center gap-1.5 rounded-full border border-light-gray bg-off-white px-3 py-1 text-[11px]">
-                      {d.name}
-                      <button onClick={() => removeDesigner(d.id)} className="text-gray-400 hover:text-error" title="Delete designer">×</button>
-                    </span>
-                  ))}
-                </div>
+            </div>
+            <div>
+              <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-gray-400">Designers</p>
+              <div className="flex flex-wrap gap-2">
+                {allDesigners.map((d) => (
+                  <span key={d.id} className="flex items-center gap-1.5 rounded-full border border-light-gray bg-off-white px-3 py-1 text-[11px]">
+                    {d.name}
+                    <button onClick={() => setEditingDesigner({ id: d.id, name: d.name, specialty: d.specialty ?? "", location: d.location ?? "Mombasa", image: d.image ?? "" })} className="text-gray-400 hover:text-brand-primary" title="Edit designer">✎</button>
+                    <button onClick={() => {
+                      setConfirmDeleteType("designer");
+                      setDeleteTarget({ id: d.id, label: d.name });
+                    }} className="text-gray-400 hover:text-error" title="Delete designer">×</button>
+                  </span>
+                ))}
               </div>
-            )}
+            </div>
           </div>
         )}
       </div>
@@ -874,8 +901,128 @@ function CatalogManager({ draftApi }: { draftApi: DraftApi }) {
         onConfirm={() => { if (confirmDelete) removeProduct(confirmDelete); setConfirmDelete(null); }}
         onCancel={() => setConfirmDelete(null)}
       />
+      <ConfirmModal
+        open={!!confirmDeleteType && !!deleteTarget}
+        title={confirmDeleteType === "product" ? "Delete this product?" : confirmDeleteType === "category" ? "Delete this category?" : "Delete this designer?"}
+        message={confirmDeleteType === "product"
+          ? `"${deleteTarget?.label}" will be hidden from the catalog after you save.`
+          : confirmDeleteType === "category"
+          ? `"${deleteTarget?.label}" will be removed from the catalog after you save.`
+          : `"${deleteTarget?.label}" will be hidden from the showroom and catalog after you save.`}
+        confirmLabel="Delete"
+        tone="danger"
+        onConfirm={() => {
+          if (!deleteTarget) return;
+          if (confirmDeleteType === "product") removeProduct(deleteTarget.id);
+          if (confirmDeleteType === "category") removeCategory(deleteTarget.id);
+          if (confirmDeleteType === "designer") removeDesigner(deleteTarget.id);
+          setConfirmDeleteType(null);
+          setDeleteTarget(null);
+        }}
+        onCancel={() => {
+          setConfirmDeleteType(null);
+          setDeleteTarget(null);
+        }}
+      />
 
       {/* Add category modal */}
+      <ConfirmModal
+        open={addCatOpen}
+        title="Create New Category"
+        confirmLabel="Create Category"
+        confirmDisabled={!newCatValid}
+        onConfirm={submitNewCat}
+        onCancel={() => { setAddCatOpen(false); setNewCat({ name: "", image: "" }); }}
+      />
+
+      <ConfirmModal
+        open={!!editingCategory}
+        title="Edit Category"
+        confirmLabel="Save Category"
+        onConfirm={() => {
+          if (!editingCategory) return;
+          editCategory(editingCategory.slug, { name: editingCategory.name.trim(), image: editingCategory.image.trim() });
+          setEditingCategory(null);
+        }}
+        onCancel={() => setEditingCategory(null)}
+      >
+        <div className="mt-4 space-y-3">
+          <div>
+            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">Category Name</label>
+            <input
+              value={editingCategory?.name ?? ""}
+              onChange={(e) => setEditingCategory((s) => s ? { ...s, name: e.target.value } : s)}
+              className="w-full rounded-sm border border-light-gray bg-off-white px-3 py-2 text-sm outline-none"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">Header Image URL</label>
+            <input
+              value={editingCategory?.image ?? ""}
+              onChange={(e) => setEditingCategory((s) => s ? { ...s, image: e.target.value } : s)}
+              className="w-full rounded-sm border border-light-gray bg-off-white px-3 py-2 text-sm outline-none"
+            />
+          </div>
+        </div>
+      </ConfirmModal>
+
+      <ConfirmModal
+        open={!!editingDesigner}
+        title="Edit Designer"
+        confirmLabel="Save Designer"
+        size="lg"
+        onConfirm={() => {
+          if (!editingDesigner) return;
+          editDesigner(editingDesigner.id, {
+            name: editingDesigner.name.trim(),
+            specialty: editingDesigner.specialty.trim(),
+            location: editingDesigner.location.trim() || "Mombasa",
+            image: editingDesigner.image.trim(),
+          });
+          setEditingDesigner(null);
+        }}
+        onCancel={() => setEditingDesigner(null)}
+      >
+        <div className="mt-4 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">Full Name</label>
+              <input
+                value={editingDesigner?.name ?? ""}
+                onChange={(e) => setEditingDesigner((s) => s ? { ...s, name: e.target.value } : s)}
+                className="w-full rounded-sm border border-light-gray bg-off-white px-3 py-2 text-sm outline-none"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">Specialty</label>
+              <input
+                value={editingDesigner?.specialty ?? ""}
+                onChange={(e) => setEditingDesigner((s) => s ? { ...s, specialty: e.target.value } : s)}
+                className="w-full rounded-sm border border-light-gray bg-off-white px-3 py-2 text-sm outline-none"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">Location</label>
+              <input
+                value={editingDesigner?.location ?? ""}
+                onChange={(e) => setEditingDesigner((s) => s ? { ...s, location: e.target.value } : s)}
+                className="w-full rounded-sm border border-light-gray bg-off-white px-3 py-2 text-sm outline-none"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">Profile Image URL</label>
+              <input
+                value={editingDesigner?.image ?? ""}
+                onChange={(e) => setEditingDesigner((s) => s ? { ...s, image: e.target.value } : s)}
+                className="w-full rounded-sm border border-light-gray bg-off-white px-3 py-2 text-sm outline-none"
+              />
+            </div>
+          </div>
+        </div>
+      </ConfirmModal>
+
       <ConfirmModal
         open={addCatOpen}
         title="Create New Category"
@@ -919,7 +1066,7 @@ function CatalogManager({ draftApi }: { draftApi: DraftApi }) {
         onConfirm={submitNewDesigner}
         onCancel={() => {
           setAddDesignerOpen(false);
-          setNewDesigner({ id: "", name: "", specialty: "", location: "Mombasa", image: "", spotlightTitle: "", spotlightText: "" });
+          setNewDesigner({ id: "", name: "", specialty: "", location: "Mombasa", image: "", useCustomSpotlight: false, spotlightTitle: "", spotlightText: "" });
         }}
       >
         <div className="mt-4 space-y-3">
@@ -978,35 +1125,42 @@ function CatalogManager({ draftApi }: { draftApi: DraftApi }) {
             )}
           </div>
 
-          <div className="mt-2 rounded-md border border-light-gray/80 bg-off-white p-3">
-            <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-brand-accent">
-              Showroom Spotlight
-            </p>
-            <p className="mb-3 text-[11px] text-gray-500">
-              These two fields populate the "Designer Spotlight" card in the Showroom → Designer Collaborations section.
-            </p>
-            <div className="space-y-2">
-              <div>
-                <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">Spotlight Heading</label>
-                <input
-                  value={newDesigner.spotlightTitle}
-                  onChange={(e) => setNewDesigner((s) => ({ ...s, spotlightTitle: e.target.value }))}
-                  placeholder='e.g. "Amina Designs: Blending Tradition with Modernity"'
-                  className="w-full rounded-sm border border-light-gray bg-white px-3 py-2 text-sm outline-none"
-                />
+          <div className="rounded-md border border-light-gray/80 bg-off-white p-3">
+            <label className="flex items-center gap-2 text-[11px] font-semibold text-brand-primary">
+              <input
+                type="checkbox"
+                checked={newDesigner.useCustomSpotlight}
+                onChange={(e) => setNewDesigner((s) => ({ ...s, useCustomSpotlight: e.target.checked }))}
+                className="h-4 w-4 accent-brand-secondary"
+              />
+              Use custom spotlight text
+            </label>
+            <p className="mt-2 text-[11px] text-gray-500">Add a custom heading and a short two-line paragraph for the showroom spotlight card.</p>
+            {newDesigner.useCustomSpotlight && (
+              <div className="mt-3 space-y-2">
+                <div>
+                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">Spotlight Heading</label>
+                  <input
+                    value={newDesigner.spotlightTitle}
+                    onChange={(e) => setNewDesigner((s) => ({ ...s, spotlightTitle: e.target.value }))}
+                    placeholder="e.g. Amina's Signature Edit"
+                    className="w-full rounded-sm border border-light-gray bg-white px-3 py-2 text-sm outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">Spotlight Paragraph</label>
+                  <textarea
+                    rows={3}
+                    value={newDesigner.spotlightText}
+                    onChange={(e) => setNewDesigner((s) => ({ ...s, spotlightText: e.target.value }))}
+                    placeholder="Write a short 2-line spotlight paragraph for this designer."
+                    className="w-full rounded-sm border border-light-gray bg-white px-3 py-2 text-sm outline-none"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">Short Description / Paragraph</label>
-                <textarea
-                  rows={3}
-                  value={newDesigner.spotlightText}
-                  onChange={(e) => setNewDesigner((s) => ({ ...s, spotlightText: e.target.value }))}
-                  placeholder="A short paragraph (2–3 sentences) about the designer — what they're known for, their inspiration, and what they bring to No Maneno Bazaar."
-                  className="w-full rounded-sm border border-light-gray bg-white px-3 py-2 text-sm outline-none"
-                />
-              </div>
-            </div>
+            )}
           </div>
+
         </div>
       </ConfirmModal>
 
@@ -1024,7 +1178,11 @@ function CatalogManager({ draftApi }: { draftApi: DraftApi }) {
           onSave={(patch) => { editProduct(editingProduct.id, patch); }}
           onAddCategory={() => setAddCatOpen(true)}
           onAddDesigner={() => setAddDesignerOpen(true)}
-          onRemove={editingProduct.custom ? () => { setConfirmDelete(editingProduct.id); setEditingId(null); } : undefined}
+          onRemove={() => {
+            setConfirmDeleteType("product");
+            setDeleteTarget({ id: editingProduct.id, label: editingProduct.name });
+            setEditingId(null);
+          }}
         />
       )}
     </div>
@@ -1109,7 +1267,7 @@ function ProductEditor({
   };
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center p-2 sm:p-6">
+    <div className="fixed inset-0 z-120 flex items-center justify-center p-2 sm:p-6">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
       <div className="relative flex h-full max-h-[95vh] w-full max-w-6xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
         {/* Top bar */}

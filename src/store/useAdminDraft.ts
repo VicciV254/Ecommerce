@@ -1,13 +1,13 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import type { AdminData, Discount, CustomDesigner } from "./StoreContext";
-import type { Product } from "../data/products";
+import type { Product, Category } from "../data/products";
 
 /**
  * Manages an editable DRAFT copy of admin data (stock + discounts) with
  * undo/redo history. Nothing affects the live store until `getDraft()` is
  * committed by the caller (via commitAdmin).
  */
-export function useAdminDraft(committed: AdminData) {
+export function useAdminDraft(committed: AdminData, onCommit?: (data: AdminData) => void) {
   // snapshot of the committed baseline at mount / after save
   const baselineRef = useRef<string>(JSON.stringify(committed));
 
@@ -23,8 +23,9 @@ export function useAdminDraft(committed: AdminData) {
         return [...trimmed, clone(next)];
       });
       setCursor((c) => c + 1);
+      onCommit?.(clone(next));
     },
-    [cursor]
+    [cursor, onCommit]
   );
 
   /* ---------- Stock mutations ---------- */
@@ -96,11 +97,18 @@ export function useAdminDraft(committed: AdminData) {
 
   const removeProduct = useCallback(
     (id: string) => {
-      // Custom products: remove from list. Base products: store removed flag via override.
       const isCustom = draft.customProducts.some((p) => p.id === id);
       if (isCustom) {
         push({ ...draft, customProducts: draft.customProducts.filter((p) => p.id !== id) });
+        return;
       }
+
+      push({
+        ...draft,
+        deletedProductIds: draft.deletedProductIds.includes(id)
+          ? draft.deletedProductIds
+          : [...draft.deletedProductIds, id],
+      });
     },
     [draft, push]
   );
@@ -136,6 +144,27 @@ export function useAdminDraft(committed: AdminData) {
     [draft, push]
   );
 
+  const editCategory = useCallback(
+    (slug: string, patch: Partial<Category>) => {
+      const isCustom = draft.customCategories.some((c) => c.slug === slug);
+      if (isCustom) {
+        push({
+          ...draft,
+          customCategories: draft.customCategories.map((c) => (c.slug === slug ? { ...c, ...patch } : c)),
+        });
+      } else {
+        push({
+          ...draft,
+          categoryOverrides: {
+            ...draft.categoryOverrides,
+            [slug]: { ...(draft.categoryOverrides[slug] ?? {}), ...patch },
+          },
+        });
+      }
+    },
+    [draft, push]
+  );
+
   const addDesigner = useCallback(
     (d: CustomDesigner) => {
       if (draft.customDesigners.some((x) => x.id === d.id)) return;
@@ -144,23 +173,81 @@ export function useAdminDraft(committed: AdminData) {
     [draft, push]
   );
 
+  const editDesigner = useCallback(
+    (id: string, patch: Partial<CustomDesigner>) => {
+      const isCustom = draft.customDesigners.some((d) => d.id === id);
+      if (isCustom) {
+        push({
+          ...draft,
+          customDesigners: draft.customDesigners.map((d) => (d.id === id ? { ...d, ...patch } : d)),
+        });
+      } else {
+        push({
+          ...draft,
+          designerOverrides: {
+            ...draft.designerOverrides,
+            [id]: { ...(draft.designerOverrides[id] ?? {}), ...patch },
+          },
+        });
+      }
+    },
+    [draft, push]
+  );
+
   const removeCategory = useCallback(
     (slug: string) => {
-      push({ ...draft, customCategories: draft.customCategories.filter((c) => c.slug !== slug) });
+      const isCustom = draft.customCategories.some((c) => c.slug === slug);
+      if (isCustom) {
+        push({ ...draft, customCategories: draft.customCategories.filter((c) => c.slug !== slug) });
+        return;
+      }
+
+      push({
+        ...draft,
+        deletedCategorySlugs: draft.deletedCategorySlugs.includes(slug)
+          ? draft.deletedCategorySlugs
+          : [...draft.deletedCategorySlugs, slug],
+      });
     },
     [draft, push]
   );
 
   const removeDesigner = useCallback(
     (id: string) => {
-      push({ ...draft, customDesigners: draft.customDesigners.filter((d) => d.id !== id) });
+      const isCustom = draft.customDesigners.some((d) => d.id === id);
+      if (isCustom) {
+        push({ ...draft, customDesigners: draft.customDesigners.filter((d) => d.id !== id) });
+        return;
+      }
+
+      push({
+        ...draft,
+        deletedDesignerIds: draft.deletedDesignerIds.includes(id)
+          ? draft.deletedDesignerIds
+          : [...draft.deletedDesignerIds, id],
+      });
     },
     [draft, push]
   );
 
   /* ---------- Undo / Redo ---------- */
-  const undo = useCallback(() => setCursor((c) => Math.max(0, c - 1)), []);
-  const redo = useCallback(() => setCursor((c) => Math.min(history.length - 1, c + 1)), [history.length]);
+  const undo = useCallback(() => {
+    setCursor((c) => {
+      const next = Math.max(0, c - 1);
+      const nextDraft = history[next];
+      onCommit?.(clone(nextDraft));
+      return next;
+    });
+  }, [history, onCommit]);
+
+  const redo = useCallback(() => {
+    setCursor((c) => {
+      const next = Math.min(history.length - 1, c + 1);
+      const nextDraft = history[next];
+      onCommit?.(clone(nextDraft));
+      return next;
+    });
+  }, [history, onCommit]);
   const canUndo = cursor > 0;
   const canRedo = cursor < history.length - 1;
 
@@ -189,7 +276,9 @@ export function useAdminDraft(committed: AdminData) {
     removeProduct,
     editProduct,
     addCategory,
+    editCategory,
     addDesigner,
+    editDesigner,
     removeCategory,
     removeDesigner,
     undo,

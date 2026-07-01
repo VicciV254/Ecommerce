@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "../router";
-import { CATEGORIES, HERO_IMAGES, PRODUCTS } from "../data/products";
+import { HERO_IMAGES } from "../data/products";
 import { Container, ProductCard, Reveal, SectionTitle } from "../components/ui";
 import { useStore } from "../store/StoreContext";
 
@@ -122,10 +122,13 @@ function HScroll({ children }: { children: React.ReactNode }) {
 }
 
 export function Home() {
-  const { productWithStock } = useStore();
-  const bestSellers = PRODUCTS.filter((p) => p.bestSeller).slice(0, 10);
-  const babySpot = PRODUCTS.filter((p) => p.categorySlug === "baby-nursery").slice(0, 4);
-  const kitchenSpot = PRODUCTS.filter((p) => p.categorySlug === "home-kitchen").slice(0, 4);
+  const { productWithStock, catalog, allCategories } = useStore();
+  const bestSellers = [
+    ...catalog.filter((p) => p.bestSeller),
+    ...catalog.filter((p) => p.custom),
+  ].slice(0, 10);
+  const babySpot = catalog.filter((p) => p.categorySlug === "baby-nursery").slice(0, 4);
+  const kitchenSpot = catalog.filter((p) => p.categorySlug === "home-kitchen").slice(0, 4);
 
   const reviews = [
     { text: "Best shopping experience in Mombasa! Wide variety, helpful staff, great prices.", name: "Jane M.", loc: "Mombasa", avatar: "https://images.pexels.com/photos/20453359/pexels-photo-20453359.jpeg?auto=compress&cs=tinysrgb&w=80&h=80&fit=crop" },
@@ -158,7 +161,7 @@ export function Home() {
       <Container className="py-16">
         <SectionTitle subtitle="Browse our curated departments">Shop by Category</SectionTitle>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          {CATEGORIES.map((c, i) => (
+          {allCategories.map((c, i) => (
             <Reveal key={c.slug} delay={i * 50}>
               <Link
                 to={`/shop?cat=${c.slug}`}
