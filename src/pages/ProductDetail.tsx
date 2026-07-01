@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { COLOR_MAP, getProduct, PRODUCTS, stockStatus } from "../data/products";
 import { Breadcrumb, Container, ProductCard, Stars, StockBadge } from "../components/ui";
 import { formatKES, useStore } from "../store/StoreContext";
 import { Link, navigate } from "../router";
-import { resolveImageSet, imageRecordFor } from "../utils/imageSource";
+import { resolveImageSet } from "../utils/imageSource";
 
 const TABS = ["Description", "Materials", "Care", "Size Guide"] as const;
 
@@ -39,14 +39,11 @@ export function ProductDetail({ id }: { id: string }) {
     setTimeout(() => setAdded(false), 1500);
   };
 
-  // Image set is resolved from the built-in AI-generated images (or placeholders)
   const imageSet = resolveImageSet(p);
   const [activeAngle, setActiveAngle] = useState<"front" | "side" | "top" | "closeup">("front");
   const [imageError, setImageError] = useState(false);
-  const [imgSource, setImgSource] = useState<string>("");
   const [imgLoading, setImgLoading] = useState(true);
 
-  // 4 fixed angles — always shown (matches spec §8)
   const angleOrder: Array<"front" | "side" | "top" | "closeup"> = ["front", "side", "top", "closeup"];
   const angleLabels = {
     front: "Front View",
@@ -56,13 +53,6 @@ export function ProductDetail({ id }: { id: string }) {
   };
 
   const currentImage = imageSet[activeAngle];
-
-  // Log the generation record to console for debugging (matches spec §11)
-  useEffect(() => {
-    const record = imageRecordFor(p);
-    setImgSource(record.image_source);
-    console.log(`[ImageSource] Product "${p.name}" — source: "${record.image_source}"`);
-  }, [p]);
 
   return (
     <Container className="py-8">
@@ -93,8 +83,8 @@ export function ProductDetail({ id }: { id: string }) {
             {imageError ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400">
                 <span className="text-4xl mb-2">📷</span>
-                <p className="text-sm font-medium">Image being generated</p>
-                <p className="text-xs mt-1 text-gray-300">Professional photo coming soon...</p>
+                <p className="text-sm font-medium">Image unavailable</p>
+                <p className="text-xs mt-1 text-gray-300">Please try another angle or image source.</p>
               </div>
             ) : (
               <img
@@ -104,11 +94,6 @@ export function ProductDetail({ id }: { id: string }) {
                 onLoad={() => setImgLoading(false)}
                 onError={() => { setImageError(true); setImgLoading(false); }}
               />
-            )}
-            {imgSource && !imageError && (
-              <span className="absolute bottom-2 right-2 rounded-sm bg-black/40 px-2 py-0.5 text-[9px] uppercase tracking-wider text-white">
-                {imgSource}
-              </span>
             )}
           </div>
 
@@ -139,7 +124,7 @@ export function ProductDetail({ id }: { id: string }) {
               ))}
             </div>
             <p className="mt-2 text-center text-[10px] text-gray-400">
-              {imageError ? "All 4 angles will be generated" : "Click any angle to view"}
+              {imageError ? "Some angles may not have an image available" : "Click any angle to view"}
             </p>
           </div>
         </div>

@@ -128,8 +128,8 @@ export const COMMUNITY_POSTS = [
 ];
 
 export const BLOG_POSTS = [
-  { id: "b1", title: "Summer Trends 2026: What's Hot in Mombasa", excerpt: "Our fashion director shares the must-have pieces of the season.", date: "March 1, 2026", readTime: "5 min", image: PX(8675179) },
-  { id: "b2", title: "How to Style Kitenge: A Modern Guide", excerpt: "Celebrating African fashion with a contemporary twist.", date: "Feb 25, 2026", readTime: "4 min", image: PX(36990983) },
+  { id: "b1", title: "Summer Trends 2026: What's Hot in Mombasa", excerpt: "Our fashion director shares the must-have pieces of the season.", date: "March 1, 2026", readTime: "5 min", image: "https://my-image-host.victor-f6f.workers.dev/api/img/1782892541335-pasted-1782892537349.png" },
+  { id: "b2", title: "How to Style Kitenge: A Modern Guide", excerpt: "Celebrating African fashion with a contemporary twist.", date: "Feb 25, 2026", readTime: "4 min", image: "https://my-image-host.victor-f6f.workers.dev/api/img/1782892690333-pasted-1782892684924.png" },
   { id: "b3", title: "Q&A with Our Featured Designer", excerpt: "Behind the vision of Amina Designs.", date: "Feb 20, 2026", readTime: "6 min", image: "https://my-image-host.victor-f6f.workers.dev/api/img/1782863797948-pasted-1782863794772.png" },
 ];
 
