@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Container, Reveal, ProductCard } from "../components/ui";
 import { formatKES, useStore } from "../store/StoreContext";
 import { Link, navigate } from "../router";
+import { useAuth } from "../contexts/AuthContext";
 import { COLLECTIONS_META, type Product } from "../data/products";
 import {
   SHOWROOM_STATS, RUNWAY_SLIDES, EVENTS, DESIGNERS, designerProducts,
@@ -37,8 +38,9 @@ function shuffle<T>(arr: T[], seed = 7): T[] {
 
 const LOOKBOOK_PER_PAGE = 8;
 
-export function Showroom() {
+export default function Showroom() {
   const { addToCart, productWithStock, catalog, state } = useStore();
+  const { user } = useAuth();
   const [collection, setCollection] = useState<string>("summer-2026");
   const [activeRunway, setActiveRunway] = useState(0);
   const [lookTab, setLookTab] = useState<"All" | "Men" | "Women">("All");
@@ -95,6 +97,10 @@ export function Showroom() {
   const pageOutfits = outfitsFiltered.slice((curLookPage - 1) * LOOKBOOK_PER_PAGE, curLookPage * LOOKBOOK_PER_PAGE);
 
   const addOutfit = (o: Outfit) => {
+    if (!user) {
+      navigate("/login");
+      return;
+    }
     outfitProducts(o, catalog).forEach((p) => addToCart({ productId: p.id, qty: 1, size: p.sizes?.[0], color: p.colors?.[0] }));
     showToast(`✓ Added "${o.name}" (${outfitProducts(o, catalog).length} items) to cart`);
   };

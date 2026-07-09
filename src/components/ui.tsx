@@ -2,6 +2,8 @@ import { type ReactNode } from "react";
 import { Link } from "../router";
 import { type Product, stockStatus } from "../data/products";
 import { formatKES, useStore } from "../store/StoreContext";
+import { useAuth } from "../contexts/AuthContext";
+import { navigate } from "../router";
 
 /* ---------- Stars ---------- */
 export function Stars({ rating, size = 14 }: { rating: number; size?: number }) {
@@ -59,6 +61,7 @@ export function StockBadge({ stock }: { stock: number }) {
 /* ---------- Product Card ---------- */
 export function ProductCard({ product }: { product: Product }) {
   const { addToCart, toggleWish, state, productWithStock } = useStore();
+  const { user } = useAuth();
   const p = productWithStock(product);
   const wished = state.wishlist.includes(p.id);
   const out = p.stock <= 0;
@@ -130,14 +133,18 @@ export function ProductCard({ product }: { product: Product }) {
         </div>
         <button
           disabled={out}
-          onClick={() =>
+          onClick={() => {
+            if (!user) {
+              navigate("/login");
+              return;
+            }
             addToCart({
               productId: p.id,
               qty: 1,
               size: p.sizes?.[0],
               color: p.colors?.[0],
-            })
-          }
+            });
+          }}
           className={`mt-3 w-full rounded-sm py-2.5 font-body text-xs font-bold uppercase tracking-[0.1em] transition-all duration-200 ${
             out
               ? "cursor-not-allowed bg-gray-100 text-gray-400"

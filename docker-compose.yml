@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: nomaneno-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nomaneno
+      POSTGRES_PASSWORD: nomaneno123
+      POSTGRES_DB: nomaneno_bazaar
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - nomaneno-network
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: nomaneno-backend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://nomaneno:nomaneno123@postgres:5432/nomaneno_bazaar
+      JWT_SECRET: your-super-secret-jwt-key-change-in-production
+      JWT_REFRESH_SECRET: your-super-secret-refresh-key-change-in-production
+      PORT: 5000
+      IMAGE_HOST_API_URL: https://my-image-host.victor-f6f.workers.dev/api
+      IMAGE_HOST_API_KEY: your-image-host-api-key
+    depends_on:
+      - postgres
+    networks:
+      - nomaneno-network
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+
+  # Frontend (for development)
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: nomaneno-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_URL: http://localhost:5000/api
+    depends_on:
+      - backend
+    networks:
+      - nomaneno-network
+    volumes:
+      - .:/app
+      - /app/node_modules
+
+volumes:
+  postgres_data:
+
+networks:
+  nomaneno-network:
+    driver: bridge

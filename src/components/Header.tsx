@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link, navigate, useRoute } from "../router";
 import { useStore, formatKES } from "../store/StoreContext";
+import { useAuth } from "../contexts/AuthContext";
 import { searchSuggestions } from "../utils/search";
 import { Container } from "./ui";
 
 export function Header() {
   const { cartCount, state, catalog, allCategories } = useStore();
+  const { user } = useAuth();
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -150,6 +152,7 @@ export function Header() {
         <div className="flex items-center gap-1">
           <Link
             to="/wishlist"
+            aria-label="Wishlist"
             className="relative flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-warm-beige"
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
@@ -162,7 +165,26 @@ export function Header() {
             )}
           </Link>
           <Link
+            to={user ? "/account" : "/login"}
+            aria-label={user ? "Account" : "Sign in"}
+            className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-full transition-colors hover:bg-warm-beige"
+          >
+            {user?.profileImage ? (
+              <img src={user.profileImage} alt="" className="h-full w-full rounded-full object-cover ring-2 ring-brand-secondary/60" />
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" fill={user ? "currentColor" : "none"} viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6.75a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0zM4.5 20.25a7.5 7.5 0 0 1 15 0" />
+              </svg>
+            )}
+            {user && !user.profileImage && (
+              <span className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-success text-[9px] font-bold uppercase text-white">
+                {user.firstName?.[0] ?? "U"}
+              </span>
+            )}
+          </Link>
+          <Link
             to="/cart"
+            aria-label="Cart"
             className="relative flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-warm-beige"
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
@@ -266,6 +288,13 @@ export function Header() {
                 </Link>
               );
             })}
+            <Link
+              to={user ? "/account" : "/login"}
+              onClick={() => setOpen(false)}
+              className="rounded-sm px-3 py-2.5 text-sm font-semibold uppercase tracking-wider text-brand-primary transition-colors hover:bg-warm-beige"
+            >
+              {user ? "My Account" : "Sign In / Register"}
+            </Link>
             <div className="mt-3 border-t border-light-gray pt-3">
               <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.15em] text-brand-accent">Categories</p>
               <div className="grid grid-cols-2 gap-0.5">
@@ -292,5 +321,3 @@ export function Header() {
     </header>
   );
 }
-
-

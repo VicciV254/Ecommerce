@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { settingsAPI } from "../api/settings";
 
 export type FontOption = {
   id: string;
@@ -168,6 +169,17 @@ export function CustomizeProvider({ children }: { children: ReactNode }) {
     return raw ? JSON.parse(raw) : { ...DEFAULT_COLORS, id: "custom", name: "Custom" };
   });
 
+  useEffect(() => {
+    settingsAPI.getTheme()
+      .then(({ data }) => {
+        if (!data) return;
+        setFontIdState(data.fontId ?? "default");
+        setColorIdState(data.colorId ?? "default");
+        if (data.customColors) setCustomColorsState(data.customColors);
+      })
+      .catch(() => undefined);
+  }, []);
+
   const colors = useMemo<ColorPreset>(() => {
     if (colorId === "custom") return customColors;
     return COLOR_PRESETS.find((p) => p.id === colorId) ?? DEFAULT_COLORS;
@@ -200,20 +212,24 @@ export function CustomizeProvider({ children }: { children: ReactNode }) {
   const setFont = useCallback((id: string) => {
     setFontIdState(id);
     localStorage.setItem("nmb-font", id);
-  }, []);
+    settingsAPI.publishTheme({ fontId: id, colorId, customColors }).catch(() => undefined);
+  }, [colorId, customColors]);
 
   const setColorPreset = useCallback((id: string) => {
     setColorIdState(id);
     localStorage.setItem("nmb-colors", id);
-  }, []);
+    settingsAPI.publishTheme({ fontId, colorId: id, customColors }).catch(() => undefined);
+  }, [fontId, customColors]);
 
   const setCustomColor = useCallback((key: keyof ColorPreset, value: string) => {
     setCustomColorsState((cur) => {
       const next = { ...cur, [key]: value };
       localStorage.setItem("nmb-colors-custom", JSON.stringify(next));
+      settingsAPI.publishTheme({ fontId, colorId: "custom", customColors: next }).catch(() => undefined);
       return next;
     });
-  }, []);
+    setColorIdState("custom");
+  }, [fontId]);
 
   const resetAll = useCallback(() => {
     setFontIdState("default");
@@ -221,6 +237,7 @@ export function CustomizeProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem("nmb-font");
     localStorage.removeItem("nmb-colors");
     clearOverrides();
+    settingsAPI.publishTheme({ fontId: "default", colorId: "default", customColors: { ...DEFAULT_COLORS, id: "custom", name: "Custom" } }).catch(() => undefined);
   }, []);
 
   const value = useMemo<CustomizeCtx>(

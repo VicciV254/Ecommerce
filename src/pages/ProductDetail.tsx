@@ -1,14 +1,16 @@
 import { useState } from "react";
-import { COLOR_MAP, getProduct, PRODUCTS, stockStatus } from "../data/products";
+import { COLOR_MAP, getProduct, stockStatus } from "../data/products";
 import { Breadcrumb, Container, ProductCard, Stars, StockBadge } from "../components/ui";
 import { formatKES, useStore } from "../store/StoreContext";
 import { Link, navigate } from "../router";
 import { resolveImageSet } from "../utils/imageSource";
+import { useAuth } from "../contexts/AuthContext";
 
 const TABS = ["Description", "Materials", "Care", "Size Guide"] as const;
 
-export function ProductDetail({ id }: { id: string }) {
+export default function ProductDetail({ id }: { id: string }) {
   const { addToCart, toggleWish, state, productWithStock, catalog } = useStore();
+  const { user } = useAuth();
   const base = catalog.find((p) => p.id === id) ?? getProduct(id);
   const [size, setSize] = useState<string | undefined>(base?.sizes?.[0]);
   const [color, setColor] = useState<string | undefined>(base?.colors?.[0]);
@@ -34,6 +36,10 @@ export function ProductDetail({ id }: { id: string }) {
   const related = catalog.filter((r) => r.categorySlug === p.categorySlug && r.id !== p.id).slice(0, 4);
 
   const doAdd = () => {
+    if (!user) {
+      navigate("/login");
+      return;
+    }
     addToCart({ productId: p.id, qty, size, color });
     setAdded(true);
     setTimeout(() => setAdded(false), 1500);

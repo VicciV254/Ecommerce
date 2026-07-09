@@ -4,20 +4,28 @@ import "aos/dist/aos.css";
 import { StoreProvider } from "./store/StoreContext";
 
 import { CustomizeProvider } from "./store/CustomizeContext";
+import { AuthProvider } from "./contexts/AuthContext";
 import { useRoute, parseRoute } from "./router";
 import { Header } from "./components/Header";
 import { Footer } from "./components/Footer";
-import { Home } from "./pages/Home";
-import { Shop } from "./pages/Shop";
-import { ProductDetail } from "./pages/ProductDetail";
-import { Cart } from "./pages/Cart";
-import { Checkout } from "./pages/Checkout";
-import { About } from "./pages/About";
-import { Contact } from "./pages/Contact";
-import { Wishlist } from "./pages/Wishlist";
-import { Admin } from "./pages/Admin";
-import { TrackOrder } from "./pages/TrackOrder";
-import { Showroom } from "./pages/Showroom";
+import Home from "./pages/Home";
+import Shop from "./pages/Shop";
+import ProductDetail from "./pages/ProductDetail";
+import Cart from "./pages/Cart";
+import Checkout from "./pages/Checkout";
+import About from "./pages/About";
+import Contact from "./pages/Contact";
+import Wishlist from "./pages/Wishlist";
+import Admin from "./pages/Admin";
+import TrackOrder from "./pages/TrackOrder";
+import Showroom from "./pages/Showroom";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
+import Account from "./pages/Account";
+import AccountProfile from "./pages/AccountProfile";
+import AccountOrders from "./pages/AccountOrders";
+import AccountAddresses from "./pages/AccountAddresses";
+import VerifyEmail from "./pages/VerifyEmail";
 
 function Router() {
   const route = useRoute();
@@ -58,6 +66,40 @@ function Router() {
     case "showroom":
       page = <Showroom />;
       break;
+    case "login":
+      page = <Login />;
+      break;
+    case "register":
+      page = <Register />;
+      break;
+    case "verify-email":
+      page = <VerifyEmail />;
+      break;
+    case "account":
+      if (parts[1] === "profile") {
+        return (
+          <Account>
+            <AccountProfile />
+          </Account>
+        );
+      } else if (parts[1] === "orders") {
+        return (
+          <Account>
+            <AccountOrders />
+          </Account>
+        );
+      } else if (parts[1] === "addresses") {
+        return (
+          <Account>
+            <AccountAddresses />
+          </Account>
+        );
+      }
+      return (
+        <Account>
+          <AccountProfile />
+        </Account>
+      );
     case "admin":
       return <Admin />;
     default:
@@ -88,9 +130,11 @@ export default function App() {
 
   return (
     <CustomizeProvider>
-      <StoreProvider>
-        <Router />
-      </StoreProvider>
+      <AuthProvider>
+        <StoreProvider>
+          <Router />
+        </StoreProvider>
+      </AuthProvider>
     </CustomizeProvider>
   );
 }

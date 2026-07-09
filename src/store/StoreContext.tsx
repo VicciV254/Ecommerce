@@ -7,6 +7,8 @@ import {
   type ReactNode,
 } from "react";
 import { PRODUCTS, CATEGORIES, type Product, type Category } from "../data/products";
+import { settingsAPI } from "../api/settings";
+import { useAuth } from "../contexts/AuthContext";
 
 export const BASE_DESIGNERS = [
   {
@@ -104,6 +106,7 @@ export type CustomDesigner = {
 type State = {
   cart: CartItem[];
   wishlist: string[];
+  personalOwner: string | null;
   /** The persisted/committed admin data — what customers see. */
   admin: AdminData;
 };
@@ -114,6 +117,7 @@ type Action =
   | { type: "QTY"; index: number; qty: number }
   | { type: "CLEAR_CART" }
   | { type: "TOGGLE_WISH"; id: string }
+  | { type: "SET_PERSONAL"; owner: string | null; cart: CartItem[]; wishlist: string[] }
   | { type: "COMMIT_ADMIN"; data: AdminData };
 
 const initialStock: Record<string, number> = Object.fromEntries(
@@ -135,14 +139,34 @@ const initialAdmin: AdminData = {
   deletedDesignerIds: [],
 };
 
-function load(): State {
+function personalKey(userId?: string | null) {
+  return userId ? `nmb-store:${userId}` : "nmb-store:guest";
+}
+
+function loadPersonal(userId?: string | null): Pick<State, "cart" | "wishlist"> {
   try {
-    const raw = localStorage.getItem("nmb-store");
+    const raw = localStorage.getItem(personalKey(userId));
     if (raw) {
       const parsed = JSON.parse(raw);
       return {
         cart: parsed.cart ?? [],
         wishlist: parsed.wishlist ?? [],
+      };
+    }
+  } catch {
+    /* ignore */
+  }
+  return { cart: [], wishlist: [] };
+}
+
+function load(): State {
+  try {
+    const raw = localStorage.getItem("nmb-admin-store") ?? localStorage.getItem("nmb-store");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        ...loadPersonal(null),
+        personalOwner: null,
         admin: {
           stock: { ...initialStock, ...(parsed.admin?.stock ?? {}) },
           discounts: parsed.admin?.discounts ?? [],
@@ -162,7 +186,7 @@ function load(): State {
   } catch {
     /* ignore */
   }
-  return { cart: [], wishlist: [], admin: initialAdmin };
+  return { cart: [], wishlist: [], personalOwner: null, admin: initialAdmin };
 }
 
 function reducer(state: State, action: Action): State {
@@ -197,6 +221,8 @@ function reducer(state: State, action: Action): State {
           ? state.wishlist.filter((w) => w !== action.id)
           : [...state.wishlist, action.id],
       };
+    case "SET_PERSONAL":
+      return { ...state, personalOwner: action.owner, cart: action.cart, wishlist: action.wishlist };
     case "COMMIT_ADMIN":
       return { ...state, admin: action.data };
     default:
@@ -237,6 +263,7 @@ type Ctx = {
   clearCart: () => void;
   toggleWish: (id: string) => void;
   commitAdmin: (data: AdminData) => void;
+  publishAdmin: (data: AdminData) => Promise<void>;
   cartCount: number;
   /** Returns product with current stock AND active discount applied. */
   productWithStock: (p: Product) => Product;
@@ -251,11 +278,29 @@ type Ctx = {
 const StoreCtx = createContext<Ctx | null>(null);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
   const [state, dispatch] = useReducer(reducer, undefined, load);
 
   useEffect(() => {
-    localStorage.setItem("nmb-store", JSON.stringify(state));
-  }, [state]);
+    localStorage.setItem("nmb-admin-store", JSON.stringify({ admin: state.admin }));
+  }, [state.admin]);
+
+  useEffect(() => {
+    dispatch({ type: "SET_PERSONAL", owner: user?.id ?? null, ...loadPersonal(user?.id) });
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (state.personalOwner !== (user?.id ?? null)) return;
+    localStorage.setItem(personalKey(user?.id), JSON.stringify({ cart: state.cart, wishlist: state.wishlist }));
+  }, [state.cart, state.wishlist, state.personalOwner, user?.id]);
+
+  useEffect(() => {
+    settingsAPI.getAdminData()
+      .then(({ data }) => {
+        if (data) dispatch({ type: "COMMIT_ADMIN", data });
+      })
+      .catch(() => undefined);
+  }, []);
 
   const catalog = useMemo<Product[]>(() => {
     const deletedProductIds = new Set(state.admin.deletedProductIds);
@@ -282,6 +327,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       clearCart: () => dispatch({ type: "CLEAR_CART" }),
       toggleWish: (id) => dispatch({ type: "TOGGLE_WISH", id }),
       commitAdmin: (data) => dispatch({ type: "COMMIT_ADMIN", data }),
+      publishAdmin: async (data) => {
+        const response = await settingsAPI.publishAdminData(data);
+        dispatch({ type: "COMMIT_ADMIN", data: response.data });
+      },
       cartCount: state.cart.reduce((s, c) => s + c.qty, 0),
       productWithStock: (p) => {
         const stock = state.admin.stock[p.id] ?? p.stock;
@@ -327,3 +376,4 @@ export function useStore() {
 export function formatKES(n: number) {
   return "KES " + n.toLocaleString("en-KE");
 }
+

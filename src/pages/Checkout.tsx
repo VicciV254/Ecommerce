@@ -1,8 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { getProduct } from "../data/products";
 import { Breadcrumb, Container } from "../components/ui";
 import { formatKES, useStore } from "../store/StoreContext";
 import { Link, navigate } from "../router";
+import { useAuth } from "../contexts/AuthContext";
+import { saveReceipt, type LocalReceipt } from "../utils/userReceipts";
+import { ordersAPI } from "../api/orders";
 
 const STEPS = ["Shipping", "Delivery", "Payment"];
 
@@ -12,25 +15,38 @@ const DELIVERY = [
   { id: "standard", label: "Standard Delivery", desc: "Nationwide (3–5 business days)", price: 300 },
 ];
 
-const PAYMENTS = [
-  { id: "mpesa", label: "M-Pesa (Recommended)", icon: "📱" },
-  { id: "card", label: "Card Payment", icon: "💳" },
-  { id: "bank", label: "Bank Transfer", icon: "🏦" },
-  { id: "cod", label: "Cash on Delivery (Mombasa only)", icon: "💵" },
-];
-
-export function Checkout() {
+export default function Checkout() {
   const { state, clearCart } = useStore();
+  const { user, addAddress } = useAuth();
   const [step, setStep] = useState(0);
   const [delivery, setDelivery] = useState("standard");
-  const [payment, setPayment] = useState("mpesa");
   const [orderNo, setOrderNo] = useState("");
   const [copied, setCopied] = useState(false);
+  const [saveAddress, setSaveAddress] = useState(true);
+  const [paymentError, setPaymentError] = useState("");
+  const [paymentNotice, setPaymentNotice] = useState("");
+  const [placingOrder, setPlacingOrder] = useState(false);
+  const [confirmPaymentOpen, setConfirmPaymentOpen] = useState(false);
   // pending navigation target after the copy-prompt popup
   const [copyPrompt, setCopyPrompt] = useState<null | { dest: string }>(null);
   const [ship, setShip] = useState({
     name: "", email: "", phone: "", address: "", city: "", county: "", zip: "",
   });
+
+  useEffect(() => {
+    if (!user) return;
+    const defaultAddress = user.addresses?.find((address) => address.isDefault) ?? user.addresses?.[0];
+    setShip((current) => ({
+      ...current,
+      name: current.name || `${user.firstName} ${user.lastName}`.trim(),
+      email: current.email || user.email,
+      phone: current.phone || user.phone || "",
+      address: current.address || defaultAddress?.street || "",
+      city: current.city || defaultAddress?.city || "",
+      county: current.county || defaultAddress?.county || "",
+      zip: current.zip || defaultAddress?.postalCode || "",
+    }));
+  }, [user]);
 
   const lines = state.cart
     .map((c) => ({ c, product: getProduct(c.productId) }))
@@ -46,6 +62,33 @@ export function Checkout() {
         <p className="text-6xl">🛒</p>
         <h1 className="mt-4 font-display text-2xl">Your cart is empty</h1>
         <Link to="/shop" className="mt-4 inline-block text-ocean-blue underline">Go Shopping</Link>
+      </Container>
+    );
+  }
+
+  if (!user) {
+    return (
+      <Container className="py-16">
+        <Breadcrumb items={[{ label: "Cart", to: "/cart" }, { label: "Checkout" }]} />
+        <div className="mx-auto mt-8 max-w-xl rounded-lg bg-white p-8 text-center shadow-sm">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-brand-secondary/20 text-brand-primary">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-7 w-7">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 0 0-9 0v3.75m-.75 0h10.5A2.25 2.25 0 0 1 19.5 12.75v6A2.25 2.25 0 0 1 17.25 21H6.75A2.25 2.25 0 0 1 4.5 18.75v-6A2.25 2.25 0 0 1 6.75 10.5z" />
+            </svg>
+          </div>
+          <h1 className="mt-5 font-display text-2xl uppercase tracking-wider text-brand-primary">Sign in to checkout</h1>
+          <p className="mt-2 text-sm text-gray-500">
+            You can browse freely, but purchases need an account so we can save addresses, receipts, and tracking history.
+          </p>
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+            <Link to="/login" className="flex-1 rounded-sm bg-brand-primary py-3 text-xs font-bold uppercase tracking-[0.12em] text-white hover:bg-brand-secondary hover:text-brand-primary">
+              Sign In
+            </Link>
+            <Link to="/register" className="flex-1 rounded-sm border border-brand-primary py-3 text-xs font-bold uppercase tracking-[0.12em] text-brand-primary hover:bg-brand-primary hover:text-white">
+              Create Account
+            </Link>
+          </div>
+        </div>
       </Container>
     );
   }
@@ -86,8 +129,8 @@ export function Checkout() {
               <span className="text-charcoal">{new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</span>
             </div>
             <div className="space-y-1 border-t border-light-gray pt-3 text-xs text-charcoal">
-              <p>📧 Confirmation sent to your email</p>
-              {payment === "mpesa" && <p>📱 M-Pesa payment confirmation sent to your phone</p>}
+              <p>Confirmation saved to your account</p>
+              <p>Visual payment confirmed</p>
             </div>
           </div>
 
@@ -99,7 +142,7 @@ export function Checkout() {
               Continue Shopping
             </button>
             <button
-              onClick={() => setCopyPrompt({ dest: `/track?order=${encodeURIComponent(orderNo)}` })}
+              onClick={() => navigate(`/track?order=${encodeURIComponent(orderNo)}`)}
               className="flex-1 rounded-sm border border-brand-primary py-3 text-xs font-bold uppercase tracking-[0.12em] text-brand-primary transition-all hover:bg-brand-primary hover:text-white"
             >
               Track Order
@@ -147,10 +190,82 @@ export function Checkout() {
     );
   }
 
-  const placeOrder = () => {
+  const createPaidOrder = async () => {
+    setPlacingOrder(true);
+    setPaymentError("");
+    setPaymentNotice("");
     const no = "NM-2026-" + Math.floor(100000 + Math.random() * 900000);
+    const now = new Date().toISOString();
+
+    const receipt: LocalReceipt = {
+      id: crypto.randomUUID?.() ?? no,
+      orderNumber: no,
+      items: lines.map((line, index) => ({
+        productId: line.c.productId,
+        productName: line.product!.name,
+        productPrice: line.product!.price,
+        quantity: line.c.qty,
+        subtotal: line.product!.price * line.c.qty,
+        productImage: line.product!.image,
+        size: line.c.size,
+        color: line.c.color,
+        id: `${no}-${index}`,
+      })),
+      subtotal,
+      tax,
+      shippingCost: deliveryFee,
+      total,
+      status: "PROCESSING",
+      paymentMethod: "VISUAL",
+      paymentStatus: "PAID",
+      deliveryMethod: delivery,
+      address: ship,
+      createdAt: now,
+      updatedAt: now,
+    } as LocalReceipt;
+
+    try {
+      await ordersAPI.createCheckout({
+        orderNumber: no,
+        items: receipt.items,
+        subtotal,
+        tax,
+        shippingCost: deliveryFee,
+        total,
+        paymentMethod: "card",
+        paymentStatus: "PAID",
+        deliveryMethod: delivery,
+        address: ship,
+        notes: "Visual payment confirmed by customer",
+      });
+    } catch (error: any) {
+      setPaymentError(error?.response?.data?.error || "Order could not be saved to the backend. Please restart the backend and try again.");
+      setPlacingOrder(false);
+      return;
+    }
+
+    saveReceipt(user, receipt);
+
+    if (saveAddress && ship.address && ship.city && ship.county) {
+      await addAddress({
+        street: ship.address,
+        city: ship.city,
+        county: ship.county,
+        postalCode: ship.zip,
+        isDefault: (user.addresses?.length ?? 0) === 0,
+      }).catch(() => undefined);
+    }
+
     setOrderNo(no);
     clearCart();
+    setConfirmPaymentOpen(false);
+    setPlacingOrder(false);
+  };
+
+  const placeOrder = () => {
+    setPaymentError("");
+    setPaymentNotice("");
+    setConfirmPaymentOpen(true);
   };
 
   return (
@@ -211,7 +326,13 @@ export function Checkout() {
                 ))}
               </div>
               <label className="mt-4 flex items-center gap-2 text-sm">
-                <input type="checkbox" className="accent-brand-secondary" /> Save this address for future orders
+                <input
+                  type="checkbox"
+                  checked={saveAddress}
+                  onChange={(e) => setSaveAddress(e.target.checked)}
+                  className="accent-brand-secondary"
+                />
+                Save this address for future orders
               </label>
               <button className="mt-6 rounded bg-brand-secondary px-6 py-3 text-sm font-semibold uppercase tracking-wide text-brand-primary hover:bg-brand-accent">
                 Continue to Delivery →
@@ -261,52 +382,23 @@ export function Checkout() {
 
           {step === 2 && (
             <div>
-              <h2 className="font-body text-lg font-bold uppercase tracking-wide text-brand-primary">Payment Method</h2>
-              <div className="mt-4 space-y-3">
-                {PAYMENTS.map((pm) => (
-                  <label
-                    key={pm.id}
-                    className={`block cursor-pointer rounded-lg border p-4 ${
-                      payment === pm.id ? "border-brand-secondary bg-brand-secondary/10" : "border-light-gray"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="radio"
-                        checked={payment === pm.id}
-                        onChange={() => setPayment(pm.id)}
-                        className="accent-brand-secondary"
-                      />
-                      <span className="text-xl">{pm.icon}</span>
-                      <span className="font-medium text-brand-primary">{pm.label}</span>
-                    </div>
-                    {payment === pm.id && pm.id === "mpesa" && (
-                      <div className="mt-3 pl-9">
-                        <input
-                          placeholder="07XX XXX XXX"
-                          className="w-full max-w-xs rounded border border-light-gray px-3 py-2 text-sm"
-                        />
-                        <p className="mt-1 text-xs text-gray-500">You will receive a prompt on your phone to confirm.</p>
-                      </div>
-                    )}
-                    {payment === pm.id && pm.id === "card" && (
-                      <div className="mt-3 grid max-w-md grid-cols-2 gap-2 pl-9">
-                        <input placeholder="Card Number" className="col-span-2 rounded border border-light-gray px-3 py-2 text-sm" />
-                        <input placeholder="MM/YY" className="rounded border border-light-gray px-3 py-2 text-sm" />
-                        <input placeholder="CVV" className="rounded border border-light-gray px-3 py-2 text-sm" />
-                      </div>
-                    )}
-                  </label>
-                ))}
+              <h2 className="font-body text-lg font-bold uppercase tracking-wide text-brand-primary">Payment</h2>
+              <div className="mt-4 rounded-lg border border-brand-secondary/40 bg-brand-secondary/10 p-5">
+                <p className="font-medium text-brand-primary">Visual payment mode</p>
+                <p className="mt-1 text-sm text-gray-500">
+                  No real money is collected. Confirming payment will mark the order as paid and move it straight into processing.
+                </p>
               </div>
               <div className="mt-6 flex gap-3">
                 <button onClick={() => setStep(1)} className="rounded border border-light-gray px-6 py-3 text-sm font-semibold uppercase tracking-wide">
                   Back
                 </button>
-                <button onClick={placeOrder} className="rounded bg-ocean-blue px-6 py-3 text-sm font-semibold uppercase tracking-wide text-white hover:bg-ocean-blue-dark">
-                  Place Order
+                <button disabled={placingOrder} onClick={placeOrder} className="rounded bg-ocean-blue px-6 py-3 text-sm font-semibold uppercase tracking-wide text-white hover:bg-ocean-blue-dark disabled:cursor-not-allowed disabled:bg-gray-300">
+                  {placingOrder ? "Processing..." : "Place Order"}
                 </button>
               </div>
+              {paymentNotice && <p className="mt-3 rounded-sm bg-success/10 p-3 text-sm text-success">{paymentNotice}</p>}
+              {paymentError && <p className="mt-3 rounded-sm bg-error/10 p-3 text-sm text-error">{paymentError}</p>}
             </div>
           )}
         </div>
@@ -334,6 +426,34 @@ export function Checkout() {
           </div>
         </div>
       </div>
+
+      {confirmPaymentOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <button className="absolute inset-0 bg-black/50" aria-label="Close payment confirmation" onClick={() => setConfirmPaymentOpen(false)} />
+          <div className="relative w-full max-w-md rounded-lg bg-white p-6 shadow-2xl">
+            <h3 className="font-display text-xl uppercase tracking-wider text-brand-primary">Confirm Payment</h3>
+            <p className="mt-2 text-sm text-gray-500">
+              This is a visual payment. Confirming will mark this order as paid and start processing.
+            </p>
+            <div className="mt-5 space-y-2 rounded-md bg-off-white p-4 text-sm">
+              <div className="flex justify-between"><span>Subtotal</span><span>{formatKES(subtotal)}</span></div>
+              <div className="flex justify-between"><span>Delivery</span><span>{deliveryFee === 0 ? "Free" : formatKES(deliveryFee)}</span></div>
+              <div className="flex justify-between"><span>Tax</span><span>{formatKES(tax)}</span></div>
+              <div className="flex justify-between border-t border-light-gray pt-2 font-bold text-brand-primary"><span>Total</span><span>{formatKES(total)}</span></div>
+            </div>
+            <div className="mt-6 flex gap-3">
+              <button onClick={() => setConfirmPaymentOpen(false)} className="flex-1 rounded-sm border border-light-gray py-3 text-xs font-bold uppercase tracking-wider text-charcoal hover:bg-off-white">
+                Back
+              </button>
+              <button disabled={placingOrder} onClick={createPaidOrder} className="flex-1 rounded-sm bg-brand-primary py-3 text-xs font-bold uppercase tracking-wider text-white hover:bg-brand-secondary hover:text-brand-primary disabled:opacity-50">
+                {placingOrder ? "Confirming..." : "Confirm Payment"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Container>
   );
 }
+
+
