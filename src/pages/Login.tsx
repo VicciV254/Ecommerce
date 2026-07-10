@@ -90,17 +90,6 @@ export default function Login() {
               {notice}
             </div>
           )}
-          <div className="rounded-md border border-brand-secondary/30 bg-light-pink/40 p-3 text-center text-sm text-charcoal">
-            Need a new verification code?
-            <button
-              type="button"
-              onClick={resendVerification}
-              disabled={resending}
-              className="ml-2 font-bold text-brand-primary underline underline-offset-4 disabled:opacity-50"
-            >
-              {resending ? 'Sending...' : 'Resend OTP'}
-            </button>
-          </div>
           <div className="rounded-md shadow-sm -space-y-px">
             <div>
               <label htmlFor="email" className="sr-only">

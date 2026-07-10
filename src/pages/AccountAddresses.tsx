@@ -1,10 +1,13 @@
 // src/pages/AccountAddresses.tsx
 import { useState, FormEvent } from 'react';
 import { useAuth, Address } from '../contexts/AuthContext';
+import { ConfirmModal } from '../components/Modal';
 
 export default function AccountAddresses() {
   const { user, addAddress, updateAddress, deleteAddress } = useAuth();
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteAddressId, setDeleteAddressId] = useState<string | null>(null);
   const [formData, setFormData] = useState<Omit<Address, 'id'>>({
     street: '',
     city: '',
@@ -42,12 +45,21 @@ export default function AccountAddresses() {
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm('Delete this address?')) {
-      try {
-        await deleteAddress(id);
-      } catch (error) {
-        console.error('Failed to delete address:', error);
-      }
+    setDeleteAddressId(id);
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteAddressId) return;
+    try {
+      await deleteAddress(deleteAddressId);
+      setDeleteConfirmOpen(false);
+      setDeleteAddressId(null);
+      alert('Address deleted successfully');
+    } catch (error: any) {
+      console.error('Failed to delete address:', error);
+      const errorMessage = error?.response?.data?.error || error?.message || 'Failed to delete address. Please try again.';
+      alert(errorMessage);
     }
   };
 
@@ -165,6 +177,17 @@ export default function AccountAddresses() {
       {addresses.length === 0 && (
         <p className="text-gray-500 text-center py-8">No addresses saved yet.</p>
       )}
+      
+      <ConfirmModal
+        open={deleteConfirmOpen}
+        title="Delete Address"
+        message="Delete this address?"
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        tone="danger"
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setDeleteConfirmOpen(false)}
+      />
     </div>
   );
 }

@@ -26,6 +26,14 @@ export const adminAPI: {
   orders: {
     getAll(params?: Record<string, unknown>): Promise<{ data: { orders: unknown[]; pagination?: unknown } }>;
     updateStatus(id: string, data: unknown): Promise<unknown>;
+    approveRefund(id: string): Promise<unknown>;
     importLocal(receipts: unknown[]): Promise<{ data: { results: Array<{ imported: boolean }> } }>;
+    toggleAutoStage(id: string, enabled: boolean): Promise<unknown>;
+    bulkToggleAutoStage(data: { orderIds: string[]; enabled: boolean }): Promise<unknown>;
+  };
+  subscriptions: {
+    getAll(params?: Record<string, unknown>): Promise<{ data: { subscriptions: unknown[] } }>;
+    sendPromotional(data: { subject: string; content: string }): Promise<{ data: { successful: number; failed: number; results: unknown[] } }>;
+    delete(id: string): Promise<unknown>;
   };
 };

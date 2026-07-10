@@ -15,6 +15,12 @@ const DELIVERY = [
   { id: "standard", label: "Standard Delivery", desc: "Nationwide (3–5 business days)", price: 300 },
 ];
 
+const PAYMENT_METHODS = [
+  { id: "mpesa", label: "M-Pesa", desc: "Pay via M-Pesa mobile money" },
+  { id: "card", label: "Credit/Debit Card", desc: "Visa, Mastercard, or other cards" },
+  { id: "bank", label: "Bank Transfer", desc: "Direct bank transfer" },
+];
+
 export default function Checkout() {
   const { state, clearCart } = useStore();
   const { user, addAddress } = useAuth();
@@ -27,6 +33,7 @@ export default function Checkout() {
   const [paymentNotice, setPaymentNotice] = useState("");
   const [placingOrder, setPlacingOrder] = useState(false);
   const [confirmPaymentOpen, setConfirmPaymentOpen] = useState(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("mpesa");
   // pending navigation target after the copy-prompt popup
   const [copyPrompt, setCopyPrompt] = useState<null | { dest: string }>(null);
   const [ship, setShip] = useState({
@@ -152,7 +159,7 @@ export default function Checkout() {
 
         {/* Copy-tracking-code prompt */}
         {copyPrompt && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-100 flex items-center justify-center p-4">
             <div
               className="absolute inset-0 bg-black/50 animate-fade-in"
               onClick={() => { const dest = copyPrompt.dest; setCopyPrompt(null); navigate(dest); }}
@@ -382,13 +389,37 @@ export default function Checkout() {
 
           {step === 2 && (
             <div>
-              <h2 className="font-body text-lg font-bold uppercase tracking-wide text-brand-primary">Payment</h2>
-              <div className="mt-4 rounded-lg border border-brand-secondary/40 bg-brand-secondary/10 p-5">
-                <p className="font-medium text-brand-primary">Visual payment mode</p>
-                <p className="mt-1 text-sm text-gray-500">
-                  No real money is collected. Confirming payment will mark the order as paid and move it straight into processing.
-                </p>
+              <h2 className="font-body text-lg font-bold uppercase tracking-wide text-brand-primary">Payment Method</h2>
+              <div className="mt-4 space-y-3">
+                {PAYMENT_METHODS.map((method) => (
+                  <label
+                    key={method.id}
+                    className={`flex cursor-pointer items-center justify-between rounded-lg border p-4 ${
+                      selectedPaymentMethod === method.id ? "border-brand-secondary bg-brand-secondary/10" : "border-light-gray"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="radio"
+                        checked={selectedPaymentMethod === method.id}
+                        onChange={() => setSelectedPaymentMethod(method.id)}
+                        className="accent-brand-secondary"
+                      />
+                      <div>
+                        <p className="font-medium text-brand-primary">{method.label}</p>
+                        <p className="text-xs text-gray-500">{method.desc}</p>
+                      </div>
+                    </div>
+                  </label>
+                ))}
               </div>
+              {selectedPaymentMethod !== "visual" && (
+                <div className="mt-4 rounded-lg border border-warning/40 bg-warning/10 p-4">
+                  <p className="text-sm text-warning">
+                    Note: Only visual payment is currently functional. Other payment methods will be added in future updates.
+                  </p>
+                </div>
+              )}
               <div className="mt-6 flex gap-3">
                 <button onClick={() => setStep(1)} className="rounded border border-light-gray px-6 py-3 text-sm font-semibold uppercase tracking-wide">
                   Back
@@ -428,7 +459,7 @@ export default function Checkout() {
       </div>
 
       {confirmPaymentOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-100 flex items-center justify-center p-4">
           <button className="absolute inset-0 bg-black/50" aria-label="Close payment confirmation" onClick={() => setConfirmPaymentOpen(false)} />
           <div className="relative w-full max-w-md rounded-lg bg-white p-6 shadow-2xl">
             <h3 className="font-display text-xl uppercase tracking-wider text-brand-primary">Confirm Payment</h3>

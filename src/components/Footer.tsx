@@ -2,11 +2,31 @@ import { useState } from "react";
 import { Link } from "../router";
 import { Container } from "./ui";
 import { useStore } from "../store/StoreContext";
+import { subscriptionsAPI } from "../api/subscriptions";
+import toast from "react-hot-toast";
 
 export function Footer() {
   const { allCategories } = useStore();
   const [email, setEmail] = useState("");
   const [done, setDone] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const handleSubscribe = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email) return;
+
+    setLoading(true);
+    try {
+      await subscriptionsAPI.subscribe({ email });
+      setDone(true);
+      setEmail("");
+      toast.success("Successfully subscribed!");
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || "Failed to subscribe");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <footer className="mt-20 bg-brand-primary text-white">
@@ -21,7 +41,7 @@ export function Footer() {
             <p className="text-xs font-semibold text-brand-secondary">✓ Thank you for subscribing!</p>
           ) : (
             <form
-              onSubmit={(e) => { e.preventDefault(); if (email) setDone(true); }}
+              onSubmit={handleSubscribe}
               className="flex w-full max-w-md"
             >
               <input
@@ -30,10 +50,15 @@ export function Footer() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="Your email address"
-                className="w-full rounded-l-sm bg-white/10 px-4 py-3 text-xs text-white placeholder-gray-400 outline-none transition-colors focus:bg-white/15"
+                disabled={loading}
+                className="w-full rounded-l-sm bg-white/10 px-4 py-3 text-xs text-white placeholder-gray-400 outline-none transition-colors focus:bg-white/15 disabled:opacity-50"
               />
-              <button className="rounded-r-sm bg-brand-secondary px-6 text-[11px] font-bold uppercase tracking-[0.12em] text-brand-primary transition-colors hover:bg-white">
-                Subscribe
+              <button 
+                type="submit"
+                disabled={loading}
+                className="rounded-r-sm bg-brand-secondary px-6 text-[11px] font-bold uppercase tracking-[0.12em] text-brand-primary transition-colors hover:bg-white disabled:opacity-50"
+              >
+                {loading ? "Subscribing..." : "Subscribe"}
               </button>
             </form>
           )}

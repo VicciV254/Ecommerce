@@ -78,27 +78,51 @@ function Router() {
     case "account":
       if (parts[1] === "profile") {
         return (
-          <Account>
-            <AccountProfile />
-          </Account>
+          <>
+            <Header />
+            <main key={route} className="flex-1 animate-fade-in">
+              <Account>
+                <AccountProfile />
+              </Account>
+            </main>
+            <Footer />
+          </>
         );
       } else if (parts[1] === "orders") {
         return (
-          <Account>
-            <AccountOrders />
-          </Account>
+          <>
+            <Header />
+            <main key={route} className="flex-1 animate-fade-in">
+              <Account>
+                <AccountOrders />
+              </Account>
+            </main>
+            <Footer />
+          </>
         );
       } else if (parts[1] === "addresses") {
         return (
-          <Account>
-            <AccountAddresses />
-          </Account>
+          <>
+            <Header />
+            <main key={route} className="flex-1 animate-fade-in">
+              <Account>
+                <AccountAddresses />
+              </Account>
+            </main>
+            <Footer />
+          </>
         );
       }
       return (
-        <Account>
-          <AccountProfile />
-        </Account>
+        <>
+          <Header />
+          <main key={route} className="flex-1 animate-fade-in">
+            <Account>
+              <AccountProfile />
+            </Account>
+          </main>
+          <Footer />
+        </>
       );
     case "admin":
       return <Admin />;

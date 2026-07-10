@@ -384,14 +384,26 @@ export const deleteAddress = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const existing = await prisma.address.findUnique({ where: { id } });
+    const existing = await prisma.address.findUnique({ 
+      where: { id },
+      include: { orders: true }
+    });
+    
     if (!existing || existing.userId !== req.user.id) {
       return res.status(404).json({ error: 'Address not found' });
+    }
+
+    // Check if address has associated orders
+    if (existing.orders && existing.orders.length > 0) {
+      return res.status(400).json({ 
+        error: 'Cannot delete address with associated orders. This address is linked to your order history.' 
+      });
     }
 
     await prisma.address.delete({ where: { id } });
     res.json({ message: 'Address deleted successfully' });
   } catch (error) {
+    console.error('Delete address error:', error);
     next(error);
   }
 };
@@ -423,7 +435,7 @@ export const setDefaultAddress = async (req, res, next) => {
 
 export const updateProfile = async (req, res, next) => {
   try {
-    const { firstName, lastName, phone, profileImage } = req.body;
+    const { firstName, lastName, phone, profileImage, promotionalEmails } = req.body;
     
     const user = await prisma.user.update({
       where: { id: req.user.id },
@@ -432,6 +444,7 @@ export const updateProfile = async (req, res, next) => {
         lastName,
         phone,
         profileImage,
+        ...(promotionalEmails !== undefined && { promotionalEmails }),
       },
       select: {
         id: true,
@@ -441,9 +454,28 @@ export const updateProfile = async (req, res, next) => {
         phone: true,
         profileImage: true,
         emailVerified: true,
+        promotionalEmails: true,
         updatedAt: true,
       },
     });
+    
+    // Handle subscription sync
+    if (promotionalEmails !== undefined) {
+      if (promotionalEmails) {
+        // Add to subscription if enabled
+        await prisma.subscription.upsert({
+          where: { email: user.email },
+          update: { isActive: true },
+          create: { email: user.email, isActive: true },
+        });
+      } else {
+        // Deactivate subscription if disabled
+        await prisma.subscription.updateMany({
+          where: { email: user.email },
+          data: { isActive: false },
+        });
+      }
+    }
     
     res.json(user);
   } catch (error) {

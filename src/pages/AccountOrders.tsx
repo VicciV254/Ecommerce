@@ -4,31 +4,36 @@ import { useAuth } from "../contexts/AuthContext";
 import { ordersAPI } from "../api/orders";
 import { formatKES } from "../store/StoreContext";
 import { getReceipts, type LocalReceipt } from "../utils/userReceipts";
+import CancelOrderModal from "../components/CancelOrderModal";
+import ReturnOrderModal from "../components/ReturnOrderModal";
 
-type OrderStatus = LocalReceipt["status"] | "CANCELLED" | "RETURNED";
+type OrderStatus = LocalReceipt["status"] | "CANCELLED" | "AWAITING_REFUND" | "RETURNED";
 type AccountOrder = Omit<LocalReceipt, "status" | "paymentStatus"> & {
   status: OrderStatus;
   paymentStatus: "PENDING" | "PAID" | "FAILED" | "REFUNDED";
   source?: "backend" | "local";
+  pickedUpAt?: string;
 };
 
-const statusLabels: Record<OrderStatus, string> = {
+const statusLabels: Record<string, string> = {
   PENDING: "Pending",
   PROCESSING: "Processing",
   SHIPPED: "Shipped",
-  OUT_FOR_DELIVERY: "Out for delivery",
+  READY_FOR_PICKUP: "Ready for pickup",
   DELIVERED: "Delivered",
   CANCELLED: "Cancelled",
+  AWAITING_REFUND: "Awaiting Refund",
   RETURNED: "Returned",
 };
 
-const statusClasses: Record<OrderStatus, string> = {
+const statusClasses: Record<string, string> = {
   PENDING: "bg-warning/15 text-warning",
   PROCESSING: "bg-ocean-blue/10 text-ocean-blue",
   SHIPPED: "bg-brand-secondary/20 text-brand-accent",
-  OUT_FOR_DELIVERY: "bg-coral/10 text-coral",
+  READY_FOR_PICKUP: "bg-coral/10 text-coral",
   DELIVERED: "bg-success/10 text-success",
   CANCELLED: "bg-error/10 text-error",
+  AWAITING_REFUND: "bg-orange-100 text-orange-600",
   RETURNED: "bg-gray-100 text-gray-600",
 };
 
@@ -67,6 +72,7 @@ function mapBackendOrder(order: any, fallbackUser: ReturnType<typeof useAuth>["u
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
     source: "backend",
+    pickedUpAt: order.pickedUpAt,
   };
 }
 
@@ -174,6 +180,16 @@ export default function AccountOrders() {
   const [backendOrders, setBackendOrders] = useState<AccountOrder[]>([]);
   const [actionMessage, setActionMessage] = useState("");
   const [actionLoading, setActionLoading] = useState("");
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [orderToCancel, setOrderToCancel] = useState<AccountOrder | null>(null);
+  const [returnModalOpen, setReturnModalOpen] = useState(false);
+  const [orderToReturn, setOrderToReturn] = useState<AccountOrder | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; title: string; message: string; onConfirm: (() => void) | null }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    onConfirm: null
+  });
 
   const loadBackendOrders = useCallback(async () => {
     if (!user) {
@@ -196,46 +212,62 @@ export default function AccountOrders() {
   };
 
   const cancelOrder = async (order: AccountOrder) => {
-    const reason = window.prompt("Why are you cancelling this order?", "Customer requested cancellation");
-    if (reason === null) return;
-    setActionLoading(`${order.id}-cancel`);
-    setActionMessage("");
-    try {
-      const { data } = await ordersAPI.cancel(order.id, { reason });
-      applyUpdatedOrder(data);
-      setActionMessage(data.paymentStatus === "REFUNDED" ? "Order cancelled and refund marked as processed." : "Order cancelled.");
-    } catch (error: any) {
-      setActionMessage(error?.response?.data?.error || "Could not cancel this order.");
-    } finally {
-      setActionLoading("");
-    }
+    setOrderToCancel(order);
+    setCancelModalOpen(true);
+  };
+
+  const handleOrderCancelled = () => {
+    loadBackendOrders();
+    setActionMessage("Order cancelled successfully");
+  };
+
+  const isWithinReturnWindow = (pickedUpAt: string) => {
+    if (!pickedUpAt) return false;
+    const pickupTime = new Date(pickedUpAt);
+    const now = new Date();
+    const diffMinutes = (now.getTime() - pickupTime.getTime()) / (1000 * 60);
+    return diffMinutes <= 5;
   };
 
   const pickupOrder = async (order: AccountOrder) => {
-    if (!window.confirm("Confirm that you have picked up this order from No Maneno Bazaar?")) return;
-    setActionLoading(`${order.id}-pickup`);
-    setActionMessage("");
-    try {
-      const { data } = await ordersAPI.pickup(order.id);
-      applyUpdatedOrder(data);
-      setActionMessage("Pickup confirmed. The order is now marked as delivered.");
-    } catch (error: any) {
-      setActionMessage(error?.response?.data?.error || "Could not confirm pickup.");
-    } finally {
-      setActionLoading("");
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: "Confirm Pickup",
+      message: "Confirm that you have picked up this order from No Maneno Bazaar?",
+      onConfirm: async () => {
+        setConfirmModal({ isOpen: false, title: "", message: "", onConfirm: null });
+        setActionLoading(`${order.id}-pickup`);
+        setActionMessage("");
+        try {
+          const { data } = await ordersAPI.pickup(order.id);
+          applyUpdatedOrder(data);
+          setActionMessage("Pickup confirmed. The order is now marked as delivered.");
+        } catch (error: any) {
+          setActionMessage(error?.response?.data?.error || "Could not confirm pickup.");
+        } finally {
+          setActionLoading("");
+        }
+      }
+    });
   };
 
   const returnOrder = async (order: AccountOrder) => {
-    const reason = window.prompt("Tell us why you are returning this order.", "Item return requested");
-    if (reason === null) return;
-    const resolution = window.prompt("Choose resolution: REFUND, EXCHANGE, or STORE_CREDIT", "REFUND") || "REFUND";
-    setActionLoading(`${order.id}-return`);
+    setOrderToReturn(order);
+    setReturnModalOpen(true);
+  };
+
+  const handleReturnSubmit = async (data: { reason: string; resolution: string; images: string[] }) => {
+    if (!orderToReturn) return;
+    setActionLoading(`${orderToReturn.id}-return`);
     setActionMessage("");
     try {
-      const { data } = await ordersAPI.returnOrder(order.id, { reason, resolution: resolution.toUpperCase().replace(/\s+/g, "_") });
-      applyUpdatedOrder(data);
-      setActionMessage(data.rma ? `Return started. Your RMA is ${data.rma}.` : "Return started.");
+      const { data: returnData } = await ordersAPI.returnOrder(orderToReturn.id, {
+        reason: data.reason,
+        resolution: data.resolution.toUpperCase().replace(/\s+/g, "_"),
+        images: data.images,
+      }) as any;
+      applyUpdatedOrder(returnData);
+      setActionMessage(returnData.rma ? `Return started. Your RMA is ${returnData.rma}.` : "Return started.");
     } catch (error: any) {
       setActionMessage(error?.response?.data?.error || "Could not start this return.");
     } finally {
@@ -287,8 +319,9 @@ export default function AccountOrders() {
         {orders.map((order) => {
           const isBackend = order.source === "backend";
           const canCancel = isBackend && ["PENDING", "PROCESSING"].includes(order.status);
-          const canPickup = isBackend && order.deliveryMethod === "STORE_PICKUP" && ["PROCESSING", "SHIPPED", "OUT_FOR_DELIVERY"].includes(order.status);
-          const canReturn = isBackend && ["DELIVERED", "OUT_FOR_DELIVERY"].includes(order.status);
+          const canPickup = isBackend && order.status === "READY_FOR_PICKUP" && !order.pickedUpAt;
+          const canReturn = isBackend && order.status === "DELIVERED" && !order.pickedUpAt || (isBackend && order.status === "DELIVERED" && order.pickedUpAt && isWithinReturnWindow(order.pickedUpAt));
+          const isPickedUp = !!order.pickedUpAt;
           return (
           <div key={`${order.source}-${order.id}`} className="overflow-hidden rounded-lg border border-light-gray bg-white">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-light-gray p-4">
@@ -340,6 +373,11 @@ export default function AccountOrders() {
                       Pick Up
                     </button>
                   )}
+                  {isPickedUp && (
+                    <button disabled className="rounded-sm border border-gray-300 px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-gray-400 cursor-not-allowed">
+                      Already Picked
+                    </button>
+                  )}
                   {canReturn && (
                     <button disabled={actionLoading === `${order.id}-return`} onClick={() => returnOrder(order)} className="rounded-sm border border-brand-accent px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-brand-accent hover:bg-brand-accent hover:text-white disabled:opacity-50">
                       Return
@@ -353,9 +391,9 @@ export default function AccountOrders() {
       </div>
 
       {selected && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <button className="absolute inset-0 bg-black/50" aria-label="Close receipt details" onClick={() => setSelected(null)} />
-          <div className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-6 shadow-2xl">
+        <div className="fixed inset-0 z-100 flex items-center justify-center p-4">
+          <button className="absolute inset-0 bg-black/30" aria-label="Close receipt details" onClick={() => setSelected(null)} />
+          <div className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-6 shadow-xl">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h3 className="font-display text-xl text-brand-primary">Receipt Details</h3>
@@ -382,16 +420,56 @@ export default function AccountOrders() {
                   Cancel & Refund
                 </button>
               )}
-              {selected.source === "backend" && selected.deliveryMethod === "STORE_PICKUP" && ["PROCESSING", "SHIPPED", "OUT_FOR_DELIVERY"].includes(selected.status) && (
+              {selected.source === "backend" && selected.status === "READY_FOR_PICKUP" && !selected.pickedUpAt && (
                 <button disabled={actionLoading === `${selected.id}-pickup`} onClick={() => pickupOrder(selected)} className="rounded-sm border border-success py-3 text-xs font-bold uppercase tracking-wider text-success hover:bg-success hover:text-white disabled:opacity-50">
                   Pick Up
                 </button>
               )}
-              {selected.source === "backend" && ["DELIVERED", "OUT_FOR_DELIVERY"].includes(selected.status) && (
+              {selected.source === "backend" && selected.pickedUpAt && (
+                <button disabled className="rounded-sm border border-gray-300 py-3 text-xs font-bold uppercase tracking-wider text-gray-400 cursor-not-allowed">
+                  Already Picked
+                </button>
+              )}
+              {selected.source === "backend" && selected.status === "DELIVERED" && (!selected.pickedUpAt || isWithinReturnWindow(selected.pickedUpAt)) && (
                 <button disabled={actionLoading === `${selected.id}-return`} onClick={() => returnOrder(selected)} className="rounded-sm border border-brand-accent py-3 text-xs font-bold uppercase tracking-wider text-brand-accent hover:bg-brand-accent hover:text-white disabled:opacity-50">
                   Return
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <CancelOrderModal
+        isOpen={cancelModalOpen}
+        onClose={() => setCancelModalOpen(false)}
+        orderId={orderToCancel?.id || ''}
+        onOrderCancelled={handleOrderCancelled}
+      />
+      <ReturnOrderModal
+        isOpen={returnModalOpen}
+        onClose={() => setReturnModalOpen(false)}
+        orderId={orderToReturn?.id || ''}
+        onReturn={handleReturnSubmit}
+      />
+      {confirmModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="rounded-lg bg-white p-6 shadow-lg max-w-md w-full mx-4">
+            <h3 className="text-lg font-bold text-brand-primary mb-2">{confirmModal.title}</h3>
+            <p className="text-sm text-gray-600 mb-4">{confirmModal.message}</p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setConfirmModal({ isOpen: false, title: "", message: "", onConfirm: null })}
+                className="px-4 py-2 rounded-sm border border-light-gray text-sm font-medium text-gray-600 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmModal.onConfirm || (() => {})}
+                className="px-4 py-2 rounded-sm bg-brand-primary text-sm font-medium text-white hover:bg-brand-secondary"
+              >
+                Confirm
+              </button>
             </div>
           </div>
         </div>

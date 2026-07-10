@@ -20,6 +20,7 @@ import adminRoutes from './admin.js';
 import contactRoutes from './contactRoutes.js';
 import mpesaRoutes from './mpesaRoutes.js';
 import settingsRoutes from './settingsRoutes.js';
+import subscriptionRoutes from './subscriptionRoutes.js';
 
 const router = express.Router();
 
@@ -49,6 +50,7 @@ router.use('/designers', designerRoutes);
 router.use('/cart', cartRoutes);
 router.use('/wishlist', wishlistRoutes);
 router.use('/orders', orderRoutes);
+router.use('/subscriptions', subscriptionRoutes);
 router.use('/contact', contactRoutes);
 router.use('/mpesa', mpesaRoutes);
 router.use('/settings', settingsRoutes);

@@ -30,7 +30,7 @@ export type LocalReceipt = {
   tax: number;
   shippingCost: number;
   total: number;
-  status: "PENDING" | "PROCESSING" | "SHIPPED" | "OUT_FOR_DELIVERY" | "DELIVERED";
+  status: "PENDING" | "PROCESSING" | "SHIPPED" | "READY_FOR_PICKUP" | "DELIVERED";
   paymentMethod: string;
   paymentStatus: "PENDING" | "PAID";
   deliveryMethod: string;

@@ -10,6 +10,7 @@ export default function Register() {
     firstName: '',
     lastName: '',
     phone: '',
+    promotionalEmails: false,
   });
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
@@ -18,9 +19,10 @@ export default function Register() {
   const { register } = useAuth();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value, type, checked } = e.target;
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value,
+      [name]: type === 'checkbox' ? checked : value,
     });
   };
 
@@ -166,6 +168,20 @@ export default function Register() {
                 className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-brand-secondary focus:border-brand-secondary sm:text-sm"
                 placeholder="Password (min. 8 characters)"
               />
+            </div>
+
+            <div className="flex items-center">
+              <input
+                id="promotionalEmails"
+                name="promotionalEmails"
+                type="checkbox"
+                checked={formData.promotionalEmails}
+                onChange={handleChange}
+                className="h-4 w-4 text-brand-secondary focus:ring-brand-secondary border-gray-300 rounded"
+              />
+              <label htmlFor="promotionalEmails" className="ml-2 block text-sm text-gray-700">
+                I would like to receive promotional emails about new products and special offers
+              </label>
             </div>
           </div>
 

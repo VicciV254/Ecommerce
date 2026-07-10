@@ -3,6 +3,8 @@ import { Breadcrumb, Container } from "../components/ui";
 import { parseRoute } from "../router";
 import { ordersAPI } from "../api/orders";
 import { findReceiptByOrderNumber, type LocalReceipt } from "../utils/userReceipts";
+import { useAuth } from "../contexts/AuthContext";
+import { Link } from "../router";
 
 type TrackEvent = {
   status: string;
@@ -18,7 +20,7 @@ type BackendTracking = {
 };
 
 const fallbackTimeline: TrackEvent[] = [
-  { status: "OUT_FOR_DELIVERY", description: "Out for Delivery", location: "Mombasa CBD Hub", createdAt: new Date().toISOString() },
+  { status: "READY_FOR_PICKUP", description: "Ready for Pickup", location: "Mombasa CBD Hub", createdAt: new Date().toISOString() },
   { status: "SHIPPED", description: "Arrived at Sorting Facility", location: "Mombasa Main Station", createdAt: new Date().toISOString() },
   { status: "SHIPPED", description: "Order Shipped", location: "Dispatched from warehouse", createdAt: new Date().toISOString() },
   { status: "PROCESSING", description: "Order Processed", location: "No Maneno Bazaar Warehouse", createdAt: new Date().toISOString() },
@@ -43,12 +45,14 @@ function formatTrackTime(value: string) {
 export default function TrackOrder({ route }: { route: string }) {
   const { params } = parseRoute(route);
   const prefilledOrder = params.get("order") ?? "";
+  const { user } = useAuth();
 
   const [orderId, setOrderId] = useState(prefilledOrder);
   const [status, setStatus] = useState<null | "searching" | "found" | "not-found">(null);
   const [copied, setCopied] = useState(false);
   const [receipt, setReceipt] = useState<LocalReceipt | null>(null);
   const [backendTracking, setBackendTracking] = useState<BackendTracking | null>(null);
+  const [userOrders, setUserOrders] = useState<any[]>([]);
 
   const runTrack = async (number: string) => {
     const trimmed = number.trim();
@@ -75,6 +79,24 @@ export default function TrackOrder({ route }: { route: string }) {
       runTrack(prefilledOrder);
     }
   }, [prefilledOrder]);
+
+  useEffect(() => {
+    if (user) {
+      loadUserOrders();
+    }
+  }, [user]);
+
+  const loadUserOrders = async () => {
+    try {
+      const response = await ordersAPI.getMyOrders() as { data: { orders: any[] } };
+      const activeOrders = (response.data.orders || []).filter((order: any) => 
+        !['DELIVERED', 'CANCELLED', 'RETURNED'].includes(order.status)
+      );
+      setUserOrders(activeOrders);
+    } catch (error) {
+      console.error('Failed to load user orders:', error);
+    }
+  };
 
   const handleTrack = (e: React.FormEvent) => {
     e.preventDefault();
@@ -199,6 +221,47 @@ export default function TrackOrder({ route }: { route: string }) {
                     <p className={`text-sm font-semibold ${i === 0 ? "text-success" : "text-brand-primary"}`}>{step.description || formatStatus(step.status)}</p>
                     <p className="text-xs text-gray-400">{step.location || formatStatus(step.status)}</p>
                     <p className="mt-0.5 text-[10px] text-gray-300">{formatTrackTime(step.createdAt)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {user && userOrders.length > 0 && (
+          <div className="mt-10 animate-fade-in">
+            <h2 className="font-display text-lg uppercase tracking-wider text-brand-primary mb-4">Your Active Orders</h2>
+            <div className="space-y-3">
+              {userOrders.map((order) => (
+                <div key={order.id} className="rounded-md border border-light-gray bg-white p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-mono text-sm font-bold text-brand-primary">{order.orderNumber}</p>
+                      <p className="text-xs text-gray-500">{new Date(order.createdAt).toLocaleDateString()}</p>
+                    </div>
+                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                      order.status === 'PENDING' ? 'bg-warning/15 text-warning' :
+                      order.status === 'PROCESSING' ? 'bg-ocean-blue/10 text-ocean-blue' :
+                      order.status === 'SHIPPED' ? 'bg-brand-secondary/20 text-brand-accent' :
+                      order.status === 'READY_FOR_PICKUP' ? 'bg-coral/10 text-coral' :
+                      'bg-gray-100 text-gray-600'
+                    }`}>
+                      {formatStatus(order.status)}
+                    </span>
+                  </div>
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      onClick={() => { setOrderId(order.orderNumber); runTrack(order.orderNumber); }}
+                      className="text-xs font-semibold text-brand-primary hover:text-brand-secondary"
+                    >
+                      Track
+                    </button>
+                    <Link
+                      to="/account/orders"
+                      className="text-xs font-semibold text-gray-500 hover:text-brand-primary"
+                    >
+                      View Details
+                    </Link>
                   </div>
                 </div>
               ))}

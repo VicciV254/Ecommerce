@@ -25,6 +25,7 @@ model User {
   otpAttempts     Int           @default(0)
   otpLastSentAt   DateTime?
   isDisabled      Boolean       @default(false)
+  promotionalEmails Boolean     @default(false)
   addresses       Address[]
   orders          Order[]
   wishlist        Wishlist[]
@@ -112,6 +113,14 @@ model PasswordReset {
   expiresAt       DateTime
   usedAt          DateTime?
   createdAt       DateTime      @default(now())
+}
+
+model Subscription {
+  id              String        @id @default(cuid())
+  email           String        @unique
+  isActive        Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 }
 
 // ========== ADMIN MODELS ==========
@@ -314,6 +323,15 @@ model Order {
   address         Address       @relation(fields: [addressId], references: [id])
   trackingNumber  String?
   notes           String?
+  cancellationReason String?
+  refundApproved  Boolean       @default(false)
+  pickedUpAt      DateTime?
+  autoStageEnabled Boolean      @default(true)
+  autoStagePaused Boolean       @default(false)
+  autoStageLastUpdate DateTime?
+  awaitingRefundAt DateTime?
+  refundNotificationSent Boolean @default(false)
+  refundNotificationLastSentAt DateTime?
   trackingHistory TrackingEvent[]
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
@@ -345,9 +363,10 @@ enum OrderStatus {
   PENDING
   PROCESSING
   SHIPPED
-  OUT_FOR_DELIVERY
+  READY_FOR_PICKUP
   DELIVERED
   CANCELLED
+  AWAITING_REFUND
   RETURNED
 }
 

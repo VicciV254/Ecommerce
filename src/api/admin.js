@@ -47,6 +47,15 @@ export const adminAPI = {
   orders: {
     getAll: (params) => apiClient.get('/orders/admin/all', { params, ...adminAuth() }),
     updateStatus: (id, data) => apiClient.put(`/orders/admin/${id}/status`, data, adminAuth()),
+    approveRefund: (id) => apiClient.put(`/orders/admin/${id}/refund`, {}, adminAuth()),
     importLocal: (receipts) => apiClient.post('/admin/orders/import-local', { receipts }, adminAuth()),
+    toggleAutoStage: (id, data) => apiClient.put(`/orders/admin/${id}/auto-stage`, data, adminAuth()),
+    bulkToggleAutoStage: (data) => apiClient.post('/orders/admin/auto-stage/bulk', data, adminAuth()),
+  },
+
+  subscriptions: {
+    getAll: (params) => apiClient.get('/subscriptions/admin/all', { params, ...adminAuth() }),
+    sendPromotional: (data) => apiClient.post('/subscriptions/admin/send-promotional', data, adminAuth()),
+    delete: (id) => apiClient.delete(`/subscriptions/admin/${id}`, adminAuth()),
   },
 };

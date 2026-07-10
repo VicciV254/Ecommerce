@@ -18,6 +18,7 @@ export interface User {
   profileImage?: string;
   emailVerified?: boolean;
   addresses?: Address[];
+  promotionalEmails?: boolean;
 }
 
 export interface RegisterData {
@@ -26,6 +27,7 @@ export interface RegisterData {
   firstName: string;
   lastName: string;
   phone?: string;
+  promotionalEmails?: boolean;
 }
 
 export interface LoginData {

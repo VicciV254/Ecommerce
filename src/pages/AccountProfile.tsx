@@ -1,8 +1,8 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function AccountProfile() {
-  const { user, updateProfile } = useAuth();
+  const { user, updateProfile, updatePromotionalEmails } = useAuth();
   const [formData, setFormData] = useState({
     firstName: user?.firstName ?? '',
     lastName: user?.lastName ?? '',
@@ -11,6 +11,14 @@ export default function AccountProfile() {
   });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [promotionalEmails, setPromotionalEmails] = useState(user?.promotionalEmails ?? false);
+
+  // Sync promotionalEmails when user data changes
+  useEffect(() => {
+    if (user?.promotionalEmails !== undefined) {
+      setPromotionalEmails(user.promotionalEmails);
+    }
+  }, [user?.promotionalEmails]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -41,12 +49,25 @@ export default function AccountProfile() {
     }
   };
 
+  const handlePromotionalEmailsToggle = async () => {
+    const newValue = !promotionalEmails;
+    setSaving(true);
+    try {
+      await updatePromotionalEmails(newValue);
+      setPromotionalEmails(newValue);
+      setMessage('Email preferences updated.');
+    } catch {
+      setMessage('Failed to update email preferences.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div>
       <div className="mb-6 rounded-lg bg-brand-primary p-5 text-white">
         <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-brand-secondary">Account</p>
         <h2 className="mt-1 font-display text-2xl">Profile Settings</h2>
-        <p className="mt-2 max-w-xl text-sm text-white/70">Your photo, checkout preferences, and profile details follow the current site theme.</p>
       </div>
       <form onSubmit={handleSubmit} className="max-w-md space-y-4">
         <div className="rounded-md border border-brand-secondary/30 bg-light-pink p-4">
@@ -114,6 +135,28 @@ export default function AccountProfile() {
             disabled
             className="w-full rounded-md border border-light-gray bg-light-pink/40 p-2 text-charcoal/60"
           />
+        </div>
+        <div className="rounded-md border border-brand-secondary/30 bg-light-pink p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-brand-primary">Promotional Emails</h3>
+              <p className="mt-1 text-xs text-gray-500">Receive updates about new products and special offers.</p>
+            </div>
+            <button
+              type="button"
+              onClick={handlePromotionalEmailsToggle}
+              disabled={saving}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                promotionalEmails ? 'bg-brand-primary' : 'bg-gray-300'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  promotionalEmails ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
         </div>
         <div className="rounded-md border border-brand-secondary/30 bg-light-pink p-4">
           <h3 className="text-sm font-semibold text-brand-primary">Checkout Preferences</h3>

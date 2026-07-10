@@ -7,12 +7,37 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import api from '../api/client';
 import {
-  authAPI,
   type Address,
   type RegisterData,
   type User,
 } from '../api/auth';
+
+// Recreate authAPI locally to ensure all functions are available
+const authAPI = {
+  login: (data: any) => api.post('/auth/login', data),
+  register: (data: any) => api.post('/auth/register', data),
+  logout: () => api.post('/auth/logout'),
+  getMe: () => api.get<User>('/auth/me'),
+  refreshToken: (refreshToken: string) =>
+    api.post('/auth/refresh', { refreshToken }),
+  updateProfile: (data: Partial<User>) => api.put<User>('/auth/profile', data),
+  changePassword: (data: { currentPassword: string; newPassword: string }) =>
+    api.put('/auth/password', data),
+  verifyEmail: (token: string) => api.post('/auth/verify-email', { token }),
+  verifyOtp: (email: string, code: string) =>
+    api.post('/auth/verify-otp', { email, code }),
+  resendVerification: (email: string) =>
+    api.post('/auth/resend-verification', { email }),
+  addAddress: (address: Omit<Address, 'id'>) =>
+    api.post<Address>('/auth/addresses', address),
+  updateAddress: (id: string, address: Partial<Address>) =>
+    api.put<Address>(`/auth/addresses/${id}`, address),
+  deleteAddress: (id: string) => api.delete(`/auth/addresses/${id}`),
+  setDefaultAddress: (id: string) =>
+    api.put(`/auth/addresses/${id}/default`),
+};
 
 interface AuthContextValue {
   user: User | null;
@@ -24,6 +49,7 @@ interface AuthContextValue {
   addAddress: (address: Omit<Address, 'id'>) => Promise<void>;
   updateAddress: (id: string, address: Partial<Address>) => Promise<void>;
   deleteAddress: (id: string) => Promise<void>;
+  updatePromotionalEmails: (enabled: boolean) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -147,6 +173,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const updatePromotionalEmails = useCallback(async (enabled: boolean) => {
+    const { data: updated } = await authAPI.updateProfile({ promotionalEmails: enabled });
+    setUser((prev) => {
+      const next = prev ? { ...prev, ...updated } : updated;
+      localStorage.setItem('user', JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
   const value = useMemo(
     () => ({
       user,
@@ -158,6 +193,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       addAddress,
       updateAddress,
       deleteAddress,
+      updatePromotionalEmails,
     }),
     [
       user,
@@ -169,6 +205,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       addAddress,
       updateAddress,
       deleteAddress,
+      updatePromotionalEmails,
     ]
   );
 

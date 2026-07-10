@@ -19,7 +19,7 @@ export interface Order {
   tax: number;
   shippingCost: number;
   total: number;
-  status: 'PENDING' | 'PROCESSING' | 'SHIPPED' | 'OUT_FOR_DELIVERY' | 'DELIVERED' | 'CANCELLED' | 'RETURNED';
+  status: 'PENDING' | 'PROCESSING' | 'SHIPPED' | 'READY_FOR_PICKUP' | 'DELIVERED' | 'CANCELLED' | 'RETURNED';
   paymentMethod: string;
   paymentStatus: string;
   deliveryMethod: string;

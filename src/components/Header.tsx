@@ -59,7 +59,7 @@ export function Header() {
     <header
       className={`sticky top-0 z-50 transition-all duration-300 ${
         scrolled
-          ? "bg-light-pink/[.97] shadow-[0_1px_20px_rgba(0,0,0,0.06)] backdrop-blur-md"
+          ? "bg-light-pink/97 shadow-[0_1px_20px_rgba(0,0,0,0.06)] backdrop-blur-md"
           : "bg-light-pink border-b border-light-gray"
       }`}
     >
@@ -165,24 +165,6 @@ export function Header() {
             )}
           </Link>
           <Link
-            to={user ? "/account" : "/login"}
-            aria-label={user ? "Account" : "Sign in"}
-            className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-full transition-colors hover:bg-warm-beige"
-          >
-            {user?.profileImage ? (
-              <img src={user.profileImage} alt="" className="h-full w-full rounded-full object-cover ring-2 ring-brand-secondary/60" />
-            ) : (
-              <svg xmlns="http://www.w3.org/2000/svg" fill={user ? "currentColor" : "none"} viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6.75a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0zM4.5 20.25a7.5 7.5 0 0 1 15 0" />
-              </svg>
-            )}
-            {user && !user.profileImage && (
-              <span className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-success text-[9px] font-bold uppercase text-white">
-                {user.firstName?.[0] ?? "U"}
-              </span>
-            )}
-          </Link>
-          <Link
             to="/cart"
             aria-label="Cart"
             className="relative flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-warm-beige"
@@ -194,6 +176,19 @@ export function Header() {
               <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-secondary px-1 text-[9px] font-bold text-brand-primary">
                 {cartCount}
               </span>
+            )}
+          </Link>
+          <Link
+            to={user ? "/account" : "/login"}
+            aria-label={user ? "Account" : "Sign in"}
+            className="relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-full transition-colors hover:bg-warm-beige"
+          >
+            {user?.profileImage ? (
+              <img src={user.profileImage} alt="" className="h-full w-full rounded-full object-cover" />
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" fill={user ? "currentColor" : "none"} viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-4 w-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6.75a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0zM4.5 20.25a7.5 7.5 0 0 1 15 0" />
+              </svg>
             )}
           </Link>
           <button
@@ -219,7 +214,7 @@ export function Header() {
               <Link
                 key={c.slug}
                 to={`/shop?cat=${c.slug}`}
-                className={`whitespace-nowrap px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.1em] transition-colors ${
+                className={`whitespace-nowrap px-4 py-2.5 text-[11px] font-semibold uppercase tracking-widest transition-colors ${
                   active
                     ? "bg-brand-primary text-white"
                     : "text-charcoal/80 hover:bg-warm-beige hover:text-brand-primary"

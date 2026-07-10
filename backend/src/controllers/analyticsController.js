@@ -117,7 +117,7 @@ export const getDashboardMetrics = async (req, res, next) => {
         pending: orderStatus.PENDING || 0,
         processing: orderStatus.PROCESSING || 0,
         shipped: orderStatus.SHIPPED || 0,
-        outForDelivery: orderStatus.OUT_FOR_DELIVERY || 0,
+        outForDelivery: orderStatus.READY_FOR_PICKUP || 0,
         delivered: orderStatus.DELIVERED || 0,
         cancelled: cancelledOrders,
         returned: returnedOrders,
