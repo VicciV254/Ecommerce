@@ -21,7 +21,7 @@ function seededShuffle<T>(arr: T[], seed: number): T[] {
   return a;
 }
 
-export function Shop({ route }: { route: string }) {
+export default function Shop({ route }: { route: string }) {
   const { productWithStock, catalog, allCategories, allDesigners } = useStore();
   const { params } = parseRoute(route);
   const initialCat = params.get("cat") ?? "";

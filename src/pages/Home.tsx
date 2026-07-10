@@ -121,7 +121,7 @@ function HScroll({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function Home() {
+export default function Home() {
   const { productWithStock, catalog, allCategories } = useStore();
   const bestSellers = [
     ...catalog.filter((p) => p.bestSeller),

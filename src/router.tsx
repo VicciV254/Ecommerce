@@ -1,17 +1,27 @@
 import { useEffect, useState, useCallback } from "react";
 
+function currentRoute() {
+  const hashRoute = window.location.hash.replace(/^#/, "");
+  if (hashRoute) return hashRoute;
+
+  const pathRoute = `${window.location.pathname}${window.location.search}`;
+  return pathRoute === "/" ? "/" : pathRoute;
+}
+
 export function useRoute() {
-  const [route, setRoute] = useState<string>(
-    () => window.location.hash.replace(/^#/, "") || "/"
-  );
+  const [route, setRoute] = useState<string>(() => currentRoute());
 
   useEffect(() => {
-    const onHash = () => {
-      setRoute(window.location.hash.replace(/^#/, "") || "/");
+    const onRouteChange = () => {
+      setRoute(currentRoute());
       window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
     };
-    window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
+    window.addEventListener("hashchange", onRouteChange);
+    window.addEventListener("popstate", onRouteChange);
+    return () => {
+      window.removeEventListener("hashchange", onRouteChange);
+      window.removeEventListener("popstate", onRouteChange);
+    };
   }, []);
 
   return route;
@@ -52,4 +62,10 @@ export function parseRoute(route: string) {
   const parts = path.split("/").filter(Boolean);
   const params = new URLSearchParams(query || "");
   return { parts, params };
+}
+
+export function useLocation() {
+  const route = useRoute();
+  const pathname = route.split("?")[0] || "/";
+  return { pathname };
 }

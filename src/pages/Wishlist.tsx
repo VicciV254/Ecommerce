@@ -2,7 +2,7 @@ import { Breadcrumb, Container, ProductCard } from "../components/ui";
 import { useStore } from "../store/StoreContext";
 import { Link } from "../router";
 
-export function Wishlist() {
+export default function Wishlist() {
   const { state, productWithStock, catalog } = useStore();
   const items = catalog.filter((p) => state.wishlist.includes(p.id));
 

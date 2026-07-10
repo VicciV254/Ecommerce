@@ -2,9 +2,11 @@ import { useState } from "react";
 import { Breadcrumb, Container, ProductImage } from "../components/ui";
 import { formatKES, useStore } from "../store/StoreContext";
 import { Link, navigate } from "../router";
+import { useAuth } from "../contexts/AuthContext";
 
-export function Cart() {
+export default function Cart() {
   const { state, removeFromCart, setQty, catalog } = useStore();
+  const { user } = useAuth();
   const [promo, setPromo] = useState("");
   const [applied, setApplied] = useState(0);
   const [promoMsg, setPromoMsg] = useState("");
@@ -18,6 +20,22 @@ export function Cart() {
   const taxed = subtotal - discount;
   const tax = Math.round(taxed * 0.16);
   const total = taxed + tax;
+
+  if (!user) {
+    return (
+      <Container className="py-16">
+        <Breadcrumb items={[{ label: "Cart" }]} />
+        <div className="mx-auto mt-8 max-w-xl rounded-lg bg-white p-8 text-center shadow-sm">
+          <h1 className="font-display text-2xl text-brand-primary">Sign in to use your cart</h1>
+          <p className="mt-2 text-sm text-gray-500">You can browse products freely, but saving cart items requires an account.</p>
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+            <Link to="/login" className="flex-1 rounded-sm bg-brand-primary py-3 text-xs font-bold uppercase tracking-wider text-white hover:bg-brand-secondary hover:text-brand-primary">Sign In</Link>
+            <Link to="/register" className="flex-1 rounded-sm border border-brand-primary py-3 text-xs font-bold uppercase tracking-wider text-brand-primary hover:bg-brand-primary hover:text-white">Create Account</Link>
+          </div>
+        </div>
+      </Container>
+    );
+  }
 
   const applyPromo = () => {
     if (promo.trim().toUpperCase() === "IKOKITU") {

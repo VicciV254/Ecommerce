@@ -1,9 +1,27 @@
 import { useState } from "react";
 import { Breadcrumb, Container } from "../components/ui";
+import { contactAPI } from "../api/contact";
 
-export function Contact() {
+export default function Contact() {
   const [sent, setSent] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
   const [form, setForm] = useState({ name: "", email: "", phone: "", message: "" });
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSending(true);
+    setError("");
+    try {
+      await contactAPI.send(form);
+      setSent(true);
+      setForm({ name: "", email: "", phone: "", message: "" });
+    } catch {
+      setError("Message could not be sent. Please check email settings or call us directly.");
+    } finally {
+      setSending(false);
+    }
+  };
 
   return (
     <Container className="py-8">
@@ -36,9 +54,10 @@ export function Contact() {
             </div>
           ) : (
             <form
-              onSubmit={(e) => { e.preventDefault(); setSent(true); }}
+              onSubmit={submit}
               className="mt-4 space-y-3"
             >
+              {error && <p className="rounded-sm bg-error/10 p-3 text-xs font-semibold text-error">{error}</p>}
               {[
                 ["name", "Name", "text"],
                 ["email", "Email", "email"],
@@ -65,8 +84,11 @@ export function Contact() {
                   className="w-full rounded-sm border border-light-gray bg-off-white px-3 py-2.5 text-sm outline-none focus:border-brand-secondary"
                 />
               </div>
-              <button className="rounded-sm bg-brand-primary px-6 py-3 text-xs font-bold uppercase tracking-[0.12em] text-white transition-all hover:bg-brand-secondary hover:text-brand-primary">
-                Send Message
+              <button
+                disabled={sending}
+                className="rounded-sm bg-brand-primary px-6 py-3 text-xs font-bold uppercase tracking-[0.12em] text-white transition-all hover:bg-brand-secondary hover:text-brand-primary disabled:cursor-not-allowed disabled:bg-gray-300"
+              >
+                {sending ? "Sending..." : "Send Message"}
               </button>
             </form>
           )}
@@ -84,7 +106,7 @@ export function Contact() {
             <h3 className="font-display text-xl tracking-wider">Find Us on Digo Road</h3>
             <p className="mt-1 text-xs text-white/70">Mombasa CBD, Kenya</p>
             <a
-              href="https://maps.google.com/?q=Digo+Road+Mombasa"
+              href="https://maps.app.goo.gl/KZX8BFhd1KTEVrwx5"
               target="_blank"
               rel="noreferrer"
               className="mt-5 inline-block rounded-sm bg-brand-secondary px-5 py-2.5 text-[11px] font-bold uppercase tracking-[0.12em] text-brand-primary transition-all hover:bg-white"

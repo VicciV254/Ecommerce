@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Container, Reveal, ProductCard } from "../components/ui";
 import { formatKES, useStore } from "../store/StoreContext";
 import { Link, navigate } from "../router";
+import { useAuth } from "../contexts/AuthContext";
 import { COLLECTIONS_META, type Product } from "../data/products";
 import {
   SHOWROOM_STATS, RUNWAY_SLIDES, EVENTS, DESIGNERS, designerProducts,
@@ -37,8 +38,9 @@ function shuffle<T>(arr: T[], seed = 7): T[] {
 
 const LOOKBOOK_PER_PAGE = 8;
 
-export function Showroom() {
+export default function Showroom() {
   const { addToCart, productWithStock, catalog, state } = useStore();
+  const { user } = useAuth();
   const [collection, setCollection] = useState<string>("summer-2026");
   const [activeRunway, setActiveRunway] = useState(0);
   const [lookTab, setLookTab] = useState<"All" | "Men" | "Women">("All");
@@ -95,6 +97,10 @@ export function Showroom() {
   const pageOutfits = outfitsFiltered.slice((curLookPage - 1) * LOOKBOOK_PER_PAGE, curLookPage * LOOKBOOK_PER_PAGE);
 
   const addOutfit = (o: Outfit) => {
+    if (!user) {
+      navigate("/login");
+      return;
+    }
     outfitProducts(o, catalog).forEach((p) => addToCart({ productId: p.id, qty: 1, size: p.sizes?.[0], color: p.colors?.[0] }));
     showToast(`✓ Added "${o.name}" (${outfitProducts(o, catalog).length} items) to cart`);
   };
@@ -111,10 +117,10 @@ export function Showroom() {
             key={sl.id}
             src={sl.img}
             alt="Runway"
-            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-[1500ms] ease-in-out ${i === activeRunway ? "opacity-50" : "opacity-0"}`}
+            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-1500 ease-in-out ${i === activeRunway ? "opacity-50" : "opacity-0"}`}
           />
         ))}
-        <div className="absolute inset-0 bg-gradient-to-t from-brand-primary via-brand-primary/40 to-brand-primary/70" />
+        <div className="absolute inset-0 bg-linear-to-t from-brand-primary via-brand-primary/40 to-brand-primary/70" />
         <Container className="relative flex h-full flex-col items-center justify-center text-center text-white">
           <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-brand-secondary">IKO KITU! — Where Fashion Comes Alive</p>
           <h1 className="mt-4 font-display text-4xl uppercase leading-tight tracking-wider sm:text-6xl">No Maneno Bazaar<br />Fashion Showroom</h1>
@@ -142,7 +148,7 @@ export function Showroom() {
               <button
                 key={s.id}
                 onClick={() => scrollTo(s.id)}
-                className="flex-1 whitespace-nowrap px-2 py-1.5 text-center text-[11px] font-semibold uppercase tracking-[0.1em] text-charcoal/70 transition-colors hover:text-brand-secondary"
+                className="flex-1 whitespace-nowrap px-2 py-1.5 text-center text-[11px] font-semibold uppercase tracking-widest text-charcoal/70 transition-colors hover:text-brand-secondary"
               >
                 {s.label}
               </button>
@@ -174,7 +180,7 @@ export function Showroom() {
           {/* One scrollable row on small/medium, grid on large */}
           <div className="no-scrollbar -mx-4 flex gap-4 overflow-x-auto px-4 pb-2 lg:mx-0 lg:grid lg:grid-cols-4 lg:gap-4 lg:overflow-visible lg:px-0">
             {collectionProducts.map((p) => (
-              <div key={p.id} className="w-[200px] shrink-0 sm:w-[240px] lg:w-auto">
+              <div key={p.id} className="w-[200px] shrink-0 sm:w-60 lg:w-auto">
                 <ProductCard product={productWithStock(p)} />
               </div>
             ))}
@@ -207,13 +213,13 @@ export function Showroom() {
             {/* Right — slideshow */}
             <div>
               <div className="relative overflow-hidden rounded-lg">
-                <div className="relative aspect-[3/4] w-full sm:aspect-[4/5]">
+                <div className="relative aspect-3/4 w-full sm:aspect-4/5">
                   {RUNWAY_SLIDES.map((sl, i) => (
                     <img
                       key={sl.id}
                       src={sl.img}
                       alt={sl.label}
-                      className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-[1200ms] ease-in-out ${i === activeRunway ? "opacity-100" : "opacity-0"}`}
+                      className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-1200 ease-in-out ${i === activeRunway ? "opacity-100" : "opacity-0"}`}
                     />
                   ))}
                 </div>
@@ -221,14 +227,14 @@ export function Showroom() {
                   <button onClick={() => setActiveRunway((i) => (i - 1 + RUNWAY_SLIDES.length) % RUNWAY_SLIDES.length)} className="flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur hover:bg-black/60">‹</button>
                   <button onClick={() => setActiveRunway((i) => (i + 1) % RUNWAY_SLIDES.length)} className="flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur hover:bg-black/60">›</button>
                 </div>
-                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
+                <div className="absolute bottom-0 left-0 right-0 bg-linear-to-t from-black/80 to-transparent p-4">
                   <p className="font-display text-lg">{RUNWAY_SLIDES[activeRunway].label}</p>
                   <p className="text-xs text-white/70">Look {activeRunway + 1} of {RUNWAY_SLIDES.length} · Summer 2026 Runway</p>
                 </div>
               </div>
               <div className="no-scrollbar mt-3 flex gap-2 overflow-x-auto">
                 {RUNWAY_SLIDES.map((s, i) => (
-                  <button key={s.id} onClick={() => setActiveRunway(i)} className={`relative aspect-[3/4] w-14 shrink-0 overflow-hidden rounded-sm border-2 transition-all ${i === activeRunway ? "border-brand-secondary" : "border-transparent opacity-60"}`}>
+                  <button key={s.id} onClick={() => setActiveRunway(i)} className={`relative aspect-3/4 w-14 shrink-0 overflow-hidden rounded-sm border-2 transition-all ${i === activeRunway ? "border-brand-secondary" : "border-transparent opacity-60"}`}>
                     <img src={s.img} alt={s.label} className="h-full w-full object-cover" />
                   </button>
                 ))}
@@ -468,7 +474,7 @@ export function Showroom() {
             {BLOG_POSTS.map((b, i) => (
               <Reveal key={b.id} delay={i * 80}>
                 <div className="group h-full overflow-hidden rounded-lg bg-white shadow-sm">
-                  <div className="aspect-[16/10] overflow-hidden"><img src={b.image} alt={b.title} className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110" /></div>
+                  <div className="aspect-16/10 overflow-hidden"><img src={b.image} alt={b.title} className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110" /></div>
                   <div className="p-5">
                     <p className="text-[10px] font-bold uppercase tracking-wider text-brand-accent">{b.date} · {b.readTime} read</p>
                     <h3 className="mt-2 font-display text-base leading-snug text-brand-primary">{b.title}</h3>
@@ -496,7 +502,7 @@ export function Showroom() {
       </section>
 
       {toast && (
-        <div className="fixed bottom-6 left-1/2 z-[110] -translate-x-1/2 animate-fade-in">
+        <div className="fixed bottom-6 left-1/2 z-110 -translate-x-1/2 animate-fade-in">
           <div className="rounded-sm bg-brand-primary px-5 py-3 text-xs font-bold uppercase tracking-wider text-white shadow-xl">{toast}</div>
         </div>
       )}
@@ -509,7 +515,7 @@ function OutfitCard({ outfit, catalog, onAdd }: { outfit: Outfit; catalog: Produ
   const items = outfitProducts(outfit, catalog);
   return (
     <div className="overflow-hidden rounded-lg bg-white shadow-sm">
-      <Link to={`/product/${items[0]?.id ?? ""}`} className="block aspect-[3/4] overflow-hidden">
+      <Link to={`/product/${items[0]?.id ?? ""}`} className="block aspect-3/4 overflow-hidden">
         <img src={outfitImage(outfit, catalog)} alt={outfit.name} className="h-full w-full object-cover transition-transform duration-500 hover:scale-105" />
       </Link>
       <div className="p-4">

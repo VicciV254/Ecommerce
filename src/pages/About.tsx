@@ -8,7 +8,7 @@ const FLOORS = [
   ["Third Floor", "Home Decor, Kitchen, Office Supplies"],
 ];
 
-export function About() {
+export default function About() {
   return (
     <div>
       {/* Hero */}

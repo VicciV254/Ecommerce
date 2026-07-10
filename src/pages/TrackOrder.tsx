@@ -1,29 +1,106 @@
 import { useState, useEffect } from "react";
 import { Breadcrumb, Container } from "../components/ui";
 import { parseRoute } from "../router";
+import { ordersAPI } from "../api/orders";
+import { findReceiptByOrderNumber, type LocalReceipt } from "../utils/userReceipts";
+import { useAuth } from "../contexts/AuthContext";
+import { Link } from "../router";
 
-export function TrackOrder({ route }: { route: string }) {
+type TrackEvent = {
+  status: string;
+  description: string;
+  location?: string;
+  createdAt: string;
+};
+
+type BackendTracking = {
+  orderNumber: string;
+  status: string;
+  trackingHistory: TrackEvent[];
+};
+
+const fallbackTimeline: TrackEvent[] = [
+  { status: "READY_FOR_PICKUP", description: "Ready for Pickup", location: "Mombasa CBD Hub", createdAt: new Date().toISOString() },
+  { status: "SHIPPED", description: "Arrived at Sorting Facility", location: "Mombasa Main Station", createdAt: new Date().toISOString() },
+  { status: "SHIPPED", description: "Order Shipped", location: "Dispatched from warehouse", createdAt: new Date().toISOString() },
+  { status: "PROCESSING", description: "Order Processed", location: "No Maneno Bazaar Warehouse", createdAt: new Date().toISOString() },
+  { status: "PENDING", description: "Order Placed", location: "Payment confirmed", createdAt: new Date().toISOString() },
+];
+
+function formatStatus(status: string) {
+  return status.replace(/_/g, " ");
+}
+
+function formatTrackTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("en-KE", {
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+export default function TrackOrder({ route }: { route: string }) {
   const { params } = parseRoute(route);
   const prefilledOrder = params.get("order") ?? "";
+  const { user } = useAuth();
 
   const [orderId, setOrderId] = useState(prefilledOrder);
-  const [status, setStatus] = useState<null | "searching" | "found">(null);
+  const [status, setStatus] = useState<null | "searching" | "found" | "not-found">(null);
   const [copied, setCopied] = useState(false);
+  const [receipt, setReceipt] = useState<LocalReceipt | null>(null);
+  const [backendTracking, setBackendTracking] = useState<BackendTracking | null>(null);
+  const [userOrders, setUserOrders] = useState<any[]>([]);
 
-  // Auto-track if order number came from checkout
+  const runTrack = async (number: string) => {
+    const trimmed = number.trim();
+    if (!trimmed) return;
+    setStatus("searching");
+    setReceipt(null);
+    setBackendTracking(null);
+
+    try {
+      const response = (await ordersAPI.track(trimmed)) as { data: BackendTracking };
+      setBackendTracking(response.data);
+      setStatus("found");
+      return;
+    } catch {
+      const localReceipt = findReceiptByOrderNumber(trimmed);
+      setReceipt(localReceipt);
+      setStatus(localReceipt ? "found" : "not-found");
+    }
+  };
+
   useEffect(() => {
     if (prefilledOrder) {
       setOrderId(prefilledOrder);
-      setStatus("searching");
-      setTimeout(() => setStatus("found"), 1200);
+      runTrack(prefilledOrder);
     }
   }, [prefilledOrder]);
 
+  useEffect(() => {
+    if (user) {
+      loadUserOrders();
+    }
+  }, [user]);
+
+  const loadUserOrders = async () => {
+    try {
+      const response = await ordersAPI.getMyOrders() as { data: { orders: any[] } };
+      const activeOrders = (response.data.orders || []).filter((order: any) => 
+        !['DELIVERED', 'CANCELLED', 'RETURNED'].includes(order.status)
+      );
+      setUserOrders(activeOrders);
+    } catch (error) {
+      console.error('Failed to load user orders:', error);
+    }
+  };
+
   const handleTrack = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!orderId.trim()) return;
-    setStatus("searching");
-    setTimeout(() => setStatus("found"), 1200);
+    runTrack(orderId);
   };
 
   const copyOrderId = () => {
@@ -33,12 +110,23 @@ export function TrackOrder({ route }: { route: string }) {
     });
   };
 
+  const timeline = backendTracking?.trackingHistory?.length
+    ? backendTracking.trackingHistory
+    : receipt
+      ? [
+          { status: receipt.status, description: formatStatus(receipt.status), location: "No Maneno Bazaar", createdAt: receipt.updatedAt },
+          { status: "PENDING", description: "Order Placed", location: "Payment confirmed", createdAt: receipt.createdAt },
+        ]
+      : fallbackTimeline;
+
+  const currentStatus = backendTracking?.status || receipt?.status || "IN_TRANSIT";
+
   return (
     <Container className="py-8">
       <div className="flex items-center justify-between">
         <Breadcrumb items={[{ label: "Track Order" }]} />
         <button onClick={() => window.history.back()} className="text-[11px] font-bold uppercase tracking-wider text-brand-primary hover:text-brand-secondary">
-          ← Go Back
+          Back
         </button>
       </div>
 
@@ -66,9 +154,14 @@ export function TrackOrder({ route }: { route: string }) {
           </div>
         )}
 
+        {status === "not-found" && (
+          <div className="mt-8 rounded-md border border-error/20 bg-error/10 p-4 text-sm text-error">
+            We could not find that order number. Check the number on your receipt and try again.
+          </div>
+        )}
+
         {status === "found" && (
           <div className="mt-10 animate-fade-in space-y-6">
-            {/* Order ID with copy */}
             <div className="flex items-center justify-between rounded-md bg-off-white p-4">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Order Number</p>
@@ -82,56 +175,93 @@ export function TrackOrder({ route }: { route: string }) {
                     : "border-light-gray text-gray-400 hover:border-brand-primary hover:text-brand-primary"
                 }`}
               >
-                {copied ? (
-                  <span className="flex items-center gap-1">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-3 w-3"><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
-                    Copied!
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-3 w-3"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75" /></svg>
-                    Copy
-                  </span>
-                )}
+                {copied ? "Copied" : "Copy"}
               </button>
             </div>
 
-            {/* Status header */}
             <div className="flex items-center justify-between border-b border-light-gray pb-4">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Status</p>
-                <p className="text-sm font-bold uppercase tracking-wide text-success">In Transit</p>
+                <p className="text-sm font-bold uppercase tracking-wide text-success">
+                  {formatStatus(currentStatus)}
+                </p>
               </div>
               <div className="text-right">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Expected Delivery</p>
-                <p className="text-sm font-semibold text-brand-primary">Jan 22, 2026</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Last Update</p>
+                <p className="text-sm font-semibold text-brand-primary">
+                  {timeline[0] ? formatTrackTime(timeline[0].createdAt) : "Pending"}
+                </p>
               </div>
             </div>
 
-            {/* Timeline */}
+            {receipt && (
+              <div className="rounded-md bg-off-white p-4 text-sm">
+                <div className="flex justify-between gap-4">
+                  <span className="text-gray-500">Total</span>
+                  <span className="font-bold text-brand-primary">KES {receipt.total.toLocaleString("en-KE")}</span>
+                </div>
+                <p className="mt-2 text-xs text-gray-500">
+                  Delivering to {receipt.address.address}, {receipt.address.city}, {receipt.address.county}
+                </p>
+              </div>
+            )}
+
             <div className="relative space-y-0 pl-6">
-              {[
-                { t: "Out for Delivery", d: "Mombasa CBD Hub", time: "Today, 2:15 PM", active: true },
-                { t: "Arrived at Sorting Facility", d: "Mombasa Main Station", time: "Today, 8:30 AM", active: false },
-                { t: "Order Shipped", d: "Dispatched from warehouse", time: "Jan 19, 5:00 PM", active: false },
-                { t: "Order Processed", d: "No Maneno Bazaar Warehouse", time: "Jan 18, 3:45 PM", active: false },
-                { t: "Order Placed", d: "Payment confirmed", time: "Jan 18, 11:24 AM", active: false },
-              ].map((step, i, arr) => (
-                <div key={i} className="relative flex gap-4 pb-8 last:pb-0">
-                  {/* Line */}
+              {timeline.map((step, i, arr) => (
+                <div key={`${step.status}-${step.createdAt}-${i}`} className="relative flex gap-4 pb-8 last:pb-0">
                   {i < arr.length - 1 && (
                     <div className="absolute -left-[18.5px] top-5 h-full w-px bg-light-gray" />
                   )}
-                  {/* Dot */}
                   <div className={`absolute -left-6 top-1 z-10 h-3.5 w-3.5 rounded-full border-2 ${
-                    step.active
+                    i === 0
                       ? "border-success bg-success shadow-[0_0_0_3px_rgba(39,174,96,0.15)]"
                       : "border-brand-secondary bg-brand-secondary"
                   }`} />
                   <div className="ml-1">
-                    <p className={`text-sm font-semibold ${step.active ? "text-success" : "text-brand-primary"}`}>{step.t}</p>
-                    <p className="text-xs text-gray-400">{step.d}</p>
-                    <p className="mt-0.5 text-[10px] text-gray-300">{step.time}</p>
+                    <p className={`text-sm font-semibold ${i === 0 ? "text-success" : "text-brand-primary"}`}>{step.description || formatStatus(step.status)}</p>
+                    <p className="text-xs text-gray-400">{step.location || formatStatus(step.status)}</p>
+                    <p className="mt-0.5 text-[10px] text-gray-300">{formatTrackTime(step.createdAt)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {user && userOrders.length > 0 && (
+          <div className="mt-10 animate-fade-in">
+            <h2 className="font-display text-lg uppercase tracking-wider text-brand-primary mb-4">Your Active Orders</h2>
+            <div className="space-y-3">
+              {userOrders.map((order) => (
+                <div key={order.id} className="rounded-md border border-light-gray bg-white p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-mono text-sm font-bold text-brand-primary">{order.orderNumber}</p>
+                      <p className="text-xs text-gray-500">{new Date(order.createdAt).toLocaleDateString()}</p>
+                    </div>
+                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                      order.status === 'PENDING' ? 'bg-warning/15 text-warning' :
+                      order.status === 'PROCESSING' ? 'bg-ocean-blue/10 text-ocean-blue' :
+                      order.status === 'SHIPPED' ? 'bg-brand-secondary/20 text-brand-accent' :
+                      order.status === 'READY_FOR_PICKUP' ? 'bg-coral/10 text-coral' :
+                      'bg-gray-100 text-gray-600'
+                    }`}>
+                      {formatStatus(order.status)}
+                    </span>
+                  </div>
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      onClick={() => { setOrderId(order.orderNumber); runTrack(order.orderNumber); }}
+                      className="text-xs font-semibold text-brand-primary hover:text-brand-secondary"
+                    >
+                      Track
+                    </button>
+                    <Link
+                      to="/account/orders"
+                      className="text-xs font-semibold text-gray-500 hover:text-brand-primary"
+                    >
+                      View Details
+                    </Link>
                   </div>
                 </div>
               ))}
