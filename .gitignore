@@ -57,3 +57,7 @@ coverage/
 *.pid
 *.seed
 *.pid.lock
+
+# Vercel
+.vercel/
+backend/.vercel/
