@@ -603,9 +603,10 @@ function OrdersManager({ showToast }: { showToast: (message: string) => void }) 
       } else {
         // Live orders: Only show orders in progress (exclude DELIVERED, AWAITING_REFUND, CANCELLED, RETURNED)
         const { data } = await adminAPI.orders.getAll({ status: statusFilter, deliveryMethod: deliveryMethod || undefined, orderedDay: orderedDay || undefined, limit: 100 });
-        const filteredOrders = (data.orders || []).filter((order: AdminOrder) => 
+        const ordersArray = (data.orders || []) as AdminOrder[];
+        const filteredOrders = ordersArray.filter((order) => 
           !["DELIVERED", "AWAITING_REFUND", "CANCELLED", "RETURNED"].includes(order.status)
-        ) as AdminOrder[];
+        );
         setOrders(filteredOrders);
       }
     } catch (err: any) {
