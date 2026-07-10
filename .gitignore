@@ -1,12 +1,28 @@
 # Dependencies
 node_modules/
+backend/node_modules/
 
-# Environment variables
+# Environment variables and confidential files
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+backend/.env
+*.key
+*.pem
+*.crt
+*.p12
+*.pfx
+secrets/
+credentials/
+config/secrets.json
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+dump.sql
 
 # IDE and editor files
 .vscode/
@@ -19,6 +35,8 @@ node_modules/
 # Build outputs
 dist/
 build/
+backend/dist/
+backend/build/
 *.log
 
 # OS files
@@ -29,6 +47,7 @@ Thumbs.db
 .cache/
 .parcel-cache/
 .vite/
+backend/.vite/
 
 # Testing
 coverage/
