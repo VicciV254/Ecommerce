@@ -12,6 +12,7 @@
     "studio": "prisma studio",
     "migrate": "prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy",
+    "migrate:prod": "prisma migrate deploy",
     "reset": "prisma migrate reset",
     "gmail:token": "node src/scripts/getGmailToken.js"
   },
