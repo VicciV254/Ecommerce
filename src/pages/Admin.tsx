@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CATEGORIES, PRODUCTS, stockStatus, type Product } from "../data/products";
 import { Container } from "../components/ui";
+import { PasswordInput } from "../components/PasswordInput";
 import {
   formatKES,
   useStore,
@@ -100,7 +101,7 @@ function AdminLogin({ onLogin }: { onLogin: (admin: AdminSession) => void }) {
           </div>
           <div>
             <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">Password</label>
-            <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-sm border border-light-gray px-3 py-2.5 text-sm outline-none focus:border-brand-secondary" />
+            <PasswordInput required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-sm border border-light-gray px-3 py-2.5 text-sm outline-none focus:border-brand-secondary" />
           </div>
         </div>
         <button disabled={loading} className="mt-6 w-full rounded-sm bg-brand-primary py-3 text-xs font-bold uppercase tracking-wider text-white hover:bg-brand-secondary hover:text-brand-primary disabled:cursor-not-allowed disabled:bg-gray-300">
