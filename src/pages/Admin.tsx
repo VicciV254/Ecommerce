@@ -75,8 +75,12 @@ function AdminLogin({ onLogin }: { onLogin: (admin: AdminSession) => void }) {
       localStorage.setItem("adminRefreshToken", data.refreshToken);
       localStorage.setItem("adminUser", JSON.stringify(data.admin));
       onLogin(data.admin);
-    } catch {
-      setError("Invalid admin email or password.");
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.error ||
+        (err?.code === "ERR_NETWORK" ? "Could not reach the server. Check your connection or try again shortly." : null) ||
+        "Invalid admin email or password.";
+      setError(message);
     } finally {
       setLoading(false);
     }
