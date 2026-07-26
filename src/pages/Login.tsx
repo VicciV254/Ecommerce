@@ -2,6 +2,7 @@ import { FormEvent, useState } from 'react';
 import { Link, navigate, parseRoute, useRoute } from '../router';
 import { useAuth } from '../contexts/AuthContext';
 import { authAPI } from '../api/auth';
+import { PasswordInput } from '../components/PasswordInput';
 
 export default function Login() {
   const route = useRoute();
@@ -111,10 +112,9 @@ export default function Login() {
               <label htmlFor="password" className="sr-only">
                 Password
               </label>
-              <input
+              <PasswordInput
                 id="password"
                 name="password"
-                type="password"
                 autoComplete="current-password"
                 required
                 value={password}

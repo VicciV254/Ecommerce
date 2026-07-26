@@ -2,6 +2,7 @@ import { FormEvent, useState } from 'react';
 import { Link, navigate } from '../router';
 import { useAuth } from '../contexts/AuthContext';
 import { authAPI } from '../api/auth';
+import { PasswordInput } from '../components/PasswordInput';
 
 export default function Register() {
   const [formData, setFormData] = useState({
@@ -157,10 +158,9 @@ export default function Register() {
               <label htmlFor="password" className="block text-sm font-medium text-gray-700">
                 Password
               </label>
-              <input
+              <PasswordInput
                 id="password"
                 name="password"
-                type="password"
                 autoComplete="new-password"
                 required
                 value={formData.password}
