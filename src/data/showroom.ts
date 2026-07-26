@@ -71,25 +71,25 @@ export type Designer = {
 export const DESIGNERS: Designer[] = [
   {
     id: "amina", name: "Amina Designs", specialty: "Kitenge Couture & Resort", location: "Mombasa",
-    image: "https://my-image-host.victor-f6f.workers.dev/api/img/1782863797948-pasted-1782863794772.png",
+    image: "https://my-image-host.victor-f6f.workers.dev/api/img/vicciv254/ecormerce/1782863797948-pasted-1782863794772.png",
     spotlightTitle: "Amina Designs: Blending Tradition with Modernity",
     spotlightText: "Amina Mohamed fuses heritage Ankara and kitenge craft with contemporary silhouettes, leading our Resort 2026 line with vibrant, coast-ready pieces for the whole family.",
   },
   {
     id: "kamau", name: "Kamau Studio", specialty: "Modern Tailoring & Summer", location: "Nairobi",
-    image: "https://my-image-host.victor-f6f.workers.dev/api/img/1782863651902-pasted-1782863648177.png",
+    image: "https://my-image-host.victor-f6f.workers.dev/api/img/vicciv254/ecormerce/1782863651902-pasted-1782863648177.png",
     spotlightTitle: "Kamau Studio: The Art of Effortless Tailoring",
     spotlightText: "Known for clean lines and breathable fabrics, Kamau Studio defines our Summer 2026 essentials — relaxed tailoring that moves from boardroom to beach.",
   },
   {
     id: "fatma", name: "Fatma Collective", specialty: "Luxe Evening & Outerwear", location: "Mombasa",
-    image: "https://my-image-host.victor-f6f.workers.dev/api/img/1782863924527-pasted-1782863922363.png",
+    image: "https://my-image-host.victor-f6f.workers.dev/api/img/vicciv254/ecormerce/1782863924527-pasted-1782863922363.png",
     spotlightTitle: "Fatma Collective: Drama After Dark",
     spotlightText: "Fatma Collective brings structured outerwear and statement evening looks to our Fall/Winter 2026 collection — rich textures, bold confidence.",
   },
   {
     id: "omar", name: "Omar Fashion", specialty: "Street Style & Denim", location: "Mombasa",
-    image: "https://my-image-host.victor-f6f.workers.dev/api/img/1782862623421-pasted-1782862527863.png",
+    image: "https://my-image-host.victor-f6f.workers.dev/api/img/vicciv254/ecormerce/1782862623421-pasted-1782862527863.png",
     spotlightTitle: "Omar Fashion: Streetwear with Soul",
     spotlightText: "Omar's edit champions everyday street style — denim, graphic tees and easy layering that keeps Mombasa's youth looking sharp season-round.",
   },
@@ -101,10 +101,10 @@ export function designerProducts(designerId: string, catalog: Product[] = PRODUC
 
 /* ---------- Stylists & services ---------- */
 export const STYLISTS = [
-  { id: "mariam", name: "Mariam K.", experience: "10 years", specialty: "Women's Fashion", image: "https://my-image-host.victor-f6f.workers.dev/api/img/1782862626064-pasted-1782862570187.png" },
-  { id: "james", name: "James M.", experience: "8 years", specialty: "Men's Fashion", image: "https://my-image-host.victor-f6f.workers.dev/api/img/1782862627576-pasted-1782862620397.png" },
-  { id: "sarah", name: "Sarah W.", experience: "6 years", specialty: "Accessories", image: "https://my-image-host.victor-f6f.workers.dev/api/img/1782862624713-pasted-1782862542049.png" },
-  { id: "david", name: "David O.", experience: "5 years", specialty: "Formal Wear", image: "https://my-image-host.victor-f6f.workers.dev/api/img/1782863159706-pasted-1782863156959.png" },
+  { id: "mariam", name: "Mariam K.", experience: "10 years", specialty: "Women's Fashion", image: "https://my-image-host.victor-f6f.workers.dev/api/img/vicciv254/ecormerce/1782862626064-pasted-1782862570187.png" },
+  { id: "james", name: "James M.", experience: "8 years", specialty: "Men's Fashion", image: "https://my-image-host.victor-f6f.workers.dev/api/img/vicciv254/ecormerce/1782862627576-pasted-1782862620397.png" },
+  { id: "sarah", name: "Sarah W.", experience: "6 years", specialty: "Accessories", image: "https://my-image-host.victor-f6f.workers.dev/api/img/vicciv254/ecormerce/1782862624713-pasted-1782862542049.png" },
+  { id: "david", name: "David O.", experience: "5 years", specialty: "Formal Wear", image: "https://my-image-host.victor-f6f.workers.dev/api/img/vicciv254/ecormerce/1782863159706-pasted-1782863156959.png" },
 ];
 
 export const STYLING_SERVICES = [
@@ -122,15 +122,15 @@ export const WORKSHOPS = [
 
 /* ---------- Community & blog ---------- */
 export const COMMUNITY_POSTS = [
-  { id: "p1", user: "Jane M.", avatar: PX(20453359), content: "Loved the Summer Collection! Can't wait for the next show!", image: "https://my-image-host.victor-f6f.workers.dev/api/img/1782863387107-images.jpg", likes: 45, comments: 12 },
-  { id: "p2", user: "David O.", avatar: PX(27897903), content: "Styling tips from today's workshop — learned so much!", image: "https://my-image-host.victor-f6f.workers.dev/api/img/1782863524308-pasted-1782863521924.png", likes: 32, comments: 8 },
+  { id: "p1", user: "Jane M.", avatar: PX(20453359), content: "Loved the Summer Collection! Can't wait for the next show!", image: "https://my-image-host.victor-f6f.workers.dev/api/img/vicciv254/ecormerce/1782863387107-images.jpg", likes: 45, comments: 12 },
+  { id: "p2", user: "David O.", avatar: PX(27897903), content: "Styling tips from today's workshop — learned so much!", image: "https://my-image-host.victor-f6f.workers.dev/api/img/vicciv254/ecormerce/1782863524308-pasted-1782863521924.png", likes: 32, comments: 8 },
   { id: "p3", user: "Fatma K.", avatar: PX(3209624), content: "Proud to showcase my Kitenge designs at the showroom!", image: PX(36990983), likes: 67, comments: 23 },
 ];
 
 export const BLOG_POSTS = [
-  { id: "b1", title: "Summer Trends 2026: What's Hot in Mombasa", excerpt: "Our fashion director shares the must-have pieces of the season.", date: "March 1, 2026", readTime: "5 min", image: "https://my-image-host.victor-f6f.workers.dev/api/img/1782892541335-pasted-1782892537349.png" },
-  { id: "b2", title: "How to Style Kitenge: A Modern Guide", excerpt: "Celebrating African fashion with a contemporary twist.", date: "Feb 25, 2026", readTime: "4 min", image: "https://my-image-host.victor-f6f.workers.dev/api/img/1782892690333-pasted-1782892684924.png" },
-  { id: "b3", title: "Q&A with Our Featured Designer", excerpt: "Behind the vision of Amina Designs.", date: "Feb 20, 2026", readTime: "6 min", image: "https://my-image-host.victor-f6f.workers.dev/api/img/1782863797948-pasted-1782863794772.png" },
+  { id: "b1", title: "Summer Trends 2026: What's Hot in Mombasa", excerpt: "Our fashion director shares the must-have pieces of the season.", date: "March 1, 2026", readTime: "5 min", image: "https://my-image-host.victor-f6f.workers.dev/api/img/vicciv254/ecormerce/1782892541335-pasted-1782892537349.png" },
+  { id: "b2", title: "How to Style Kitenge: A Modern Guide", excerpt: "Celebrating African fashion with a contemporary twist.", date: "Feb 25, 2026", readTime: "4 min", image: "https://my-image-host.victor-f6f.workers.dev/api/img/vicciv254/ecormerce/1782892690333-pasted-1782892684924.png" },
+  { id: "b3", title: "Q&A with Our Featured Designer", excerpt: "Behind the vision of Amina Designs.", date: "Feb 20, 2026", readTime: "6 min", image: "https://my-image-host.victor-f6f.workers.dev/api/img/vicciv254/ecormerce/1782863797948-pasted-1782863794772.png" },
 ];
 
 

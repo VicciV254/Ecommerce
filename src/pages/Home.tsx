@@ -11,7 +11,7 @@ const SLIDES = [
     sub: "Discover something new across every floor — fashion, home, electronics & more.",
     cta: "/shop",
     ctaLabel: "Shop Now",
-    image: "https://my-image-host.victor-f6f.workers.dev/api/img/1782861912145-hero-banner.jpg",
+    image: "https://my-image-host.victor-f6f.workers.dev/api/img/vicciv254/ecormerce/1782861912145-hero-banner.jpg",
   },
   {
     badge: "Fashion Showroom",

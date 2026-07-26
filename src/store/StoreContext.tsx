@@ -10,13 +10,70 @@ import { PRODUCTS, CATEGORIES, type Product, type Category } from "../data/produ
 import { settingsAPI } from "../api/settings";
 import { useAuth } from "../contexts/AuthContext";
 
+/**
+ * Legacy image-host migration fix.
+ *
+ * The image host moved from flat URLs (`/api/img/<file>`) to namespaced
+ * URLs (`/api/img/vicciv254/ecormerce/<file>`). Any admin override / custom
+ * product / custom designer saved *before* the migration still has the old,
+ * now-404ing URL baked in — and overrides always win over the corrected
+ * base data in `data/products.ts` / `data/showroom.ts`, so the broken links
+ * kept showing even after the base files were fixed.
+ *
+ * `fixLegacyImageUrl` rewrites any old-format URL to the new namespaced
+ * path. It's a no-op for URLs that are already correct or that don't point
+ * at our image host at all (e.g. stock photos used as designer defaults).
+ */
+const LEGACY_IMG_HOST_RE =
+  /^(https:\/\/my-image-host\.victor-f6f\.workers\.dev\/api\/img\/)(\d{13}-)/;
+const NAMESPACE = "vicciv254/ecormerce/";
+
+function fixLegacyImageUrl(url: string | undefined | null): string | undefined | null {
+  if (!url) return url;
+  if (!LEGACY_IMG_HOST_RE.test(url)) return url; // already fixed, or unrelated host
+  return url.replace(LEGACY_IMG_HOST_RE, `$1${NAMESPACE}$2`);
+}
+
+/** Deep-fixes every image-bearing field on an AdminData blob (overrides + custom entries). */
+function sanitizeAdminData(data: AdminData): AdminData {
+  const fixProduct = <T extends Partial<Product>>(p: T): T => ({
+    ...p,
+    ...(p.image !== undefined ? { image: fixLegacyImageUrl(p.image) as string } : {}),
+    ...(p.main_image !== undefined ? { main_image: fixLegacyImageUrl(p.main_image) as string } : {}),
+    ...(p.gallery_images !== undefined
+      ? { gallery_images: p.gallery_images.map((g) => fixLegacyImageUrl(g) as string) }
+      : {}),
+  });
+
+  const fixEntry = <T extends { image?: string }>(d: T): T => ({
+    ...d,
+    ...(d.image !== undefined ? { image: fixLegacyImageUrl(d.image) as string } : {}),
+  });
+
+  return {
+    ...data,
+    productOverrides: Object.fromEntries(
+      Object.entries(data.productOverrides ?? {}).map(([id, ov]) => [id, fixProduct(ov)])
+    ),
+    customProducts: (data.customProducts ?? []).map(fixProduct),
+    designerOverrides: Object.fromEntries(
+      Object.entries(data.designerOverrides ?? {}).map(([id, ov]) => [id, fixEntry(ov)])
+    ),
+    customDesigners: (data.customDesigners ?? []).map(fixEntry),
+    categoryOverrides: Object.fromEntries(
+      Object.entries(data.categoryOverrides ?? {}).map(([slug, ov]) => [slug, fixEntry(ov)])
+    ),
+    customCategories: (data.customCategories ?? []).map(fixEntry),
+  };
+}
+
 export const BASE_DESIGNERS = [
   {
     id: "amina",
     name: "Amina Designs",
     specialty: "Kitenge Couture & Resort",
     location: "Mombasa",
-    image: "https://my-image-host.victor-f6f.workers.dev/api/img/1782863797948-pasted-1782863794772.png",
+    image: "https://my-image-host.victor-f6f.workers.dev/api/img/vicciv254/ecormerce/1782863797948-pasted-1782863794772.png",
     spotlightTitle: "Amina Designs: Blending Tradition with Modernity",
     spotlightText: "Amina Mohamed fuses heritage Ankara and kitenge craft with contemporary silhouettes, leading our Resort 2026 line with vibrant, coast-ready pieces for the whole family.",
   },
@@ -25,7 +82,7 @@ export const BASE_DESIGNERS = [
     name: "Kamau Studio",
     specialty: "Modern Tailoring & Summer",
     location: "Nairobi",
-    image: "https://my-image-host.victor-f6f.workers.dev/api/img/1782863651902-pasted-1782863648177.png",
+    image: "https://my-image-host.victor-f6f.workers.dev/api/img/vicciv254/ecormerce/1782863651902-pasted-1782863648177.png",
     spotlightTitle: "Kamau Studio: The Art of Effortless Tailoring",
     spotlightText: "Known for clean lines and breathable fabrics, Kamau Studio defines our Summer 2026 essentials — relaxed tailoring that moves from boardroom to beach.",
   },
@@ -34,7 +91,7 @@ export const BASE_DESIGNERS = [
     name: "Fatma Collective",
     specialty: "Luxe Evening & Outerwear",
     location: "Mombasa",
-    image: "https://my-image-host.victor-f6f.workers.dev/api/img/1782863924527-pasted-1782863922363.png",
+    image: "https://my-image-host.victor-f6f.workers.dev/api/img/vicciv254/ecormerce/1782863924527-pasted-1782863922363.png",
     spotlightTitle: "Fatma Collective: Drama After Dark",
     spotlightText: "Fatma Collective brings structured outerwear and statement evening looks to our Fall/Winter 2026 collection — rich textures, bold confidence.",
   },
@@ -43,7 +100,7 @@ export const BASE_DESIGNERS = [
     name: "Omar Fashion",
     specialty: "Street Style & Denim",
     location: "Mombasa",
-    image: "https://my-image-host.victor-f6f.workers.dev/api/img/1782862623421-pasted-1782862527863.png",
+    image: "https://my-image-host.victor-f6f.workers.dev/api/img/vicciv254/ecormerce/1782862623421-pasted-1782862527863.png",
     spotlightTitle: "Omar Fashion: Streetwear with Soul",
     spotlightText: "Omar's edit champions everyday street style — denim, graphic tees and easy layering that keeps Mombasa's youth looking sharp season-round.",
   },
@@ -167,7 +224,7 @@ function load(): State {
       return {
         ...loadPersonal(null),
         personalOwner: null,
-        admin: {
+        admin: sanitizeAdminData({
           stock: { ...initialStock, ...(parsed.admin?.stock ?? {}) },
           discounts: parsed.admin?.discounts ?? [],
           tagOverrides: parsed.admin?.tagOverrides ?? {},
@@ -180,7 +237,7 @@ function load(): State {
           deletedProductIds: parsed.admin?.deletedProductIds ?? [],
           deletedCategorySlugs: parsed.admin?.deletedCategorySlugs ?? [],
           deletedDesignerIds: parsed.admin?.deletedDesignerIds ?? [],
-        },
+        }),
       };
     }
   } catch {
@@ -224,7 +281,7 @@ function reducer(state: State, action: Action): State {
     case "SET_PERSONAL":
       return { ...state, personalOwner: action.owner, cart: action.cart, wishlist: action.wishlist };
     case "COMMIT_ADMIN":
-      return { ...state, admin: action.data };
+      return { ...state, admin: sanitizeAdminData(action.data) };
     default:
       return state;
   }
@@ -297,7 +354,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     settingsAPI.getAdminData()
       .then(({ data }) => {
-        if (data) dispatch({ type: "COMMIT_ADMIN", data });
+        if (!data) return;
+        const fixed = sanitizeAdminData(data);
+        dispatch({ type: "COMMIT_ADMIN", data: fixed });
+
+        // If this session is an admin and the sync fix actually changed something,
+        // publish the corrected data back so the source of truth is repaired too
+        // (otherwise every visitor keeps re-downloading the stale URLs).
+        const isAdmin = Boolean(localStorage.getItem("adminToken"));
+        if (isAdmin && JSON.stringify(fixed) !== JSON.stringify(data)) {
+          settingsAPI.publishAdminData(fixed).catch(() => undefined);
+        }
       })
       .catch(() => undefined);
   }, []);
