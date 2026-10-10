@@ -1,19 +1,8 @@
 import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 
-const getDatabaseUrl = () => {
-  if (process.env.NODE_ENV === "production") {
-    return process.env.DATABASE_URL;
-  }
-  return process.env.DATABASE_URL_LOCAL || process.env.DATABASE_URL;
-};
-
+// Uses DATABASE_URL from prisma/schema.prisma, shared with the Prisma CLI
 const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: getDatabaseUrl(),
-    },
-  },
   log: ["query", "error", "warn"],
 });
 
