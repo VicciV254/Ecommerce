@@ -5,7 +5,7 @@ const getDatabaseUrl = () => {
   if (process.env.NODE_ENV === "production") {
     return process.env.DATABASE_URL;
   }
-  return process.env.DATABASE_URL_LOCAL;
+  return process.env.DATABASE_URL_LOCAL || process.env.DATABASE_URL;
 };
 
 const prisma = new PrismaClient({
