@@ -9,6 +9,7 @@ export const autoStageService = {
       // Find all orders that are eligible for auto-stage progression
       const orders = await prisma.order.findMany({
         where: {
+          isDemo: false,
           autoStageEnabled: true,
           autoStagePaused: false,
           status: {
@@ -109,6 +110,7 @@ export const autoStageService = {
     return prisma.order.updateMany({
       where: {
         id: { in: orderIds },
+        isDemo: false,
       },
       data: {
         autoStageEnabled: enabled,

@@ -21,6 +21,8 @@ import contactRoutes from './contactRoutes.js';
 import mpesaRoutes from './mpesaRoutes.js';
 import settingsRoutes from './settingsRoutes.js';
 import subscriptionRoutes from './subscriptionRoutes.js';
+import { getCatalog, getAdminCatalog, createMedia } from '../controllers/productController.js';
+import { authenticateAdmin, authorize } from '../middleware/adminAuth.js';
 
 const router = express.Router();
 
@@ -43,6 +45,9 @@ router.get('/health', (req, res) => {
 });
 
 // API routes
+router.get('/catalog', getCatalog);
+router.get('/admin/catalog', authenticateAdmin, getAdminCatalog);
+router.post('/media', authenticateAdmin, authorize('SUPER_ADMIN', 'ADMIN'), createMedia);
 router.use('/auth', authRoutes);
 router.use('/products', productRoutes);
 router.use('/categories', categoryRoutes);

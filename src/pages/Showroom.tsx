@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react";
-import { Container, Reveal, ProductCard } from "../components/ui";
-import { formatKES, useStore } from "../store/StoreContext";
-import { Link, navigate } from "../router";
-import { useAuth } from "../contexts/AuthContext";
-import { COLLECTIONS_META, type Product } from "../data/products";
+import { Container, DemoBadge, ErrorPanel, LoadingPanel, MissingImage, Reveal, ProductCard } from "../components/ui";
+import { formatKES } from "../utils/format";
+import { navigate } from "../router";
+import { useCatalog } from "../store/CatalogContext";
 import {
-  SHOWROOM_STATS, RUNWAY_SLIDES, EVENTS, DESIGNERS, designerProducts,
+  SHOWROOM_STATS, RUNWAY_SLIDES, EVENTS,
   STYLISTS, STYLING_SERVICES, WORKSHOPS, BTS_CLIPS, COMMUNITY_POSTS,
-  BLOG_POSTS, SECTIONS, OUTFITS, outfitProducts, outfitTotal,
-  outfitImage, YT_HOME, type Outfit,
+  BLOG_POSTS, SECTIONS, YT_HOME,
 } from "../data/showroom";
+
+const COLLECTION_PRODUCT_LIMIT = 8;
+const DESIGNER_PRODUCT_LIMIT = 6;
 
 function Heading({ kicker, title, sub }: { kicker?: string; title: string; sub?: string }) {
   return (
@@ -25,45 +26,11 @@ function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }).toUpperCase();
 }
 
-function shuffle<T>(arr: T[], seed = 7): T[] {
-  const a = [...arr];
-  let s = seed;
-  for (let i = a.length - 1; i > 0; i--) {
-    s = (s * 9301 + 49297) % 233280;
-    const j = Math.floor((s / 233280) * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
-const LOOKBOOK_PER_PAGE = 8;
-
 export default function Showroom() {
-  const { addToCart, catalog, state } = useStore();
-  const { user } = useAuth();
-  const [collection, setCollection] = useState<string>("summer-2026");
+  const catalog = useCatalog();
+  const [chosenCollection, setCollection] = useState<string | null>(null);
   const [activeRunway, setActiveRunway] = useState(0);
-  const [lookTab, setLookTab] = useState<"All" | "Men" | "Women">("All");
-  const [lookPage, setLookPage] = useState(1);
-
-  // Merge base showroom designers with admin-added custom designers.
-  // Custom designers may have missing fields — fall back to sensible defaults.
-  const allDesigners = [
-    ...DESIGNERS,
-    ...state.admin.customDesigners.map((d) => ({
-      id: d.id,
-      name: d.name,
-      specialty: d.specialty || "Featured Designer",
-      location: d.location || "Mombasa",
-      image: d.image || "https://images.pexels.com/photos/20453359/pexels-photo-20453359.jpeg?auto=compress&cs=tinysrgb&w=900",
-      spotlightTitle: d.spotlightTitle || `${d.name}: Featured Designer`,
-      spotlightText:
-        d.spotlightText ||
-        `${d.name} brings their signature ${(d.specialty || "design").toLowerCase()} to the No Maneno Bazaar showroom.`,
-    })),
-  ];
-
-  const [activeDesigner, setActiveDesigner] = useState(allDesigners[0]?.id ?? DESIGNERS[0].id);
+  const [chosenDesigner, setActiveDesigner] = useState<string | null>(null);
   const [toast, setToast] = useState("");
 
   const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(""), 2500); };
@@ -87,26 +54,15 @@ export default function Showroom() {
     if (go) setTimeout(() => scrollTo(go), 300);
   }, []);
 
-  /* Collections */
-  const collectionProducts = catalog.filter((p) => p.collection === collection).slice(0, 8);
-
-  /* Lookbook */
-  const outfitsFiltered = (lookTab === "All" ? shuffle(OUTFITS, 42) : OUTFITS.filter((o) => o.gender === lookTab));
-  const lookTotalPages = Math.max(1, Math.ceil(outfitsFiltered.length / LOOKBOOK_PER_PAGE));
-  const curLookPage = Math.min(lookPage, lookTotalPages);
-  const pageOutfits = outfitsFiltered.slice((curLookPage - 1) * LOOKBOOK_PER_PAGE, curLookPage * LOOKBOOK_PER_PAGE);
-
-  const addOutfit = (o: Outfit) => {
-    if (!user) {
-      navigate("/login");
-      return;
-    }
-    outfitProducts(o, catalog).forEach((p) => addToCart({ productId: p.id, qty: 1, size: p.sizes?.[0], color: p.colors?.[0] }));
-    showToast(`✓ Added "${o.name}" (${outfitProducts(o, catalog).length} items) to cart`);
-  };
-
-  const dProducts = designerProducts(activeDesigner, catalog);
-  const activeDesignerObj = allDesigners.find((d) => d.id === activeDesigner) ?? allDesigners[0];
+  /* Collections and designers come only from the canonical catalog. */
+  const collections = [...new Set(catalog.products.flatMap((product) => product.collection ?? []))];
+  const collection = chosenCollection !== null && collections.includes(chosenCollection) ? chosenCollection : collections[0];
+  const collectionProducts = catalog.products.filter((product) => product.collection === collection).slice(0, COLLECTION_PRODUCT_LIMIT);
+  const designers = catalog.designers;
+  const activeDesignerObj = designers.find((designer) => designer.id === chosenDesigner) ?? designers[0];
+  const dProducts = activeDesignerObj ? catalog.products.filter((product) => product.designerId === activeDesignerObj.id) : [];
+  const sections = SECTIONS.filter((section) =>
+    (section.id !== "collections" || collections.length > 0) && (section.id !== "designers" || designers.length > 0));
 
   return (
     <div>
@@ -144,7 +100,7 @@ export default function Showroom() {
       <div className="sticky top-[68px] z-30 border-b border-light-gray bg-white/95 backdrop-blur-md lg:top-[84px]">
         <Container>
           <div className="no-scrollbar flex items-center justify-between gap-1 overflow-x-auto py-2">
-            {SECTIONS.map((s) => (
+            {sections.map((s) => (
               <button
                 key={s.id}
                 onClick={() => scrollTo(s.id)}
@@ -158,35 +114,44 @@ export default function Showroom() {
       </div>
 
       {/* ===== COLLECTIONS ===== */}
-      <section id="collections" className="scroll-mt-44 py-16">
-        <Container>
-          <Heading kicker="Discover the Latest Looks" title="Current Collections" />
-          <div className="mb-8 flex flex-wrap justify-center gap-2">
-            {COLLECTIONS_META.map((c) => (
-              <button
-                key={c.id}
-                onClick={() => setCollection(c.id)}
-                className={`rounded-sm border px-4 py-2 text-[11px] font-bold uppercase tracking-wider transition-colors ${
-                  collection === c.id ? "border-brand-primary bg-brand-primary text-white" : "border-light-gray text-charcoal hover:border-brand-accent"
-                }`}
-              >
-                {c.name}
-              </button>
-            ))}
-          </div>
-          <p className="mb-6 text-center text-sm italic text-gray-400">
-            {COLLECTIONS_META.find((c) => c.id === collection)?.theme} — Men's, Women's & Footwear
-          </p>
-          {/* One scrollable row on small/medium, grid on large */}
-          <div className="no-scrollbar -mx-4 flex gap-4 overflow-x-auto px-4 pb-2 lg:mx-0 lg:grid lg:grid-cols-4 lg:gap-4 lg:overflow-visible lg:px-0">
-            {collectionProducts.map((p) => (
-              <div key={p.id} className="w-[200px] shrink-0 sm:w-60 lg:w-auto">
-                <ProductCard product={p} />
-              </div>
-            ))}
-          </div>
-        </Container>
-      </section>
+      {catalog.status !== "ready" ? (
+        <section id="collections" className="scroll-mt-44 py-16">
+          <Container>
+            {catalog.status === "loading"
+              ? <LoadingPanel label="Loading collections…" />
+              : <ErrorPanel title="Collections are unavailable" message={catalog.error ?? "The catalog could not be loaded."} onRetry={catalog.reload} />}
+          </Container>
+        </section>
+      ) : collections.length > 0 && (
+        <section id="collections" className="scroll-mt-44 py-16">
+          <Container>
+            <Heading kicker="Discover the Latest Looks" title="Current Collections" />
+            <div className="mb-8 flex flex-wrap justify-center gap-2">
+              {collections.map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  aria-pressed={collection === name}
+                  onClick={() => setCollection(name)}
+                  className={`rounded-sm border px-4 py-2 text-[11px] font-bold uppercase tracking-wider transition-colors ${
+                    collection === name ? "border-brand-primary bg-brand-primary text-white" : "border-light-gray text-charcoal hover:border-brand-accent"
+                  }`}
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
+            {/* One scrollable row on small/medium, grid on large */}
+            <div className="no-scrollbar -mx-4 flex gap-4 overflow-x-auto px-4 pb-2 lg:mx-0 lg:grid lg:grid-cols-4 lg:gap-4 lg:overflow-visible lg:px-0">
+              {collectionProducts.map((p) => (
+                <div key={p.id} className="w-[200px] shrink-0 sm:w-60 lg:w-auto">
+                  <ProductCard product={p} />
+                </div>
+              ))}
+            </div>
+          </Container>
+        </section>
+      )}
 
       {/* ===== VIRTUAL RUNWAY (text left, slideshow right) ===== */}
       <section id="runway" className="scroll-mt-44 bg-brand-primary py-16 text-white">
@@ -284,80 +249,66 @@ export default function Showroom() {
       </section>
 
       {/* ===== DESIGNERS ===== */}
-      <section id="designers" className="scroll-mt-44 bg-warm-beige/40 py-16">
-        <Container>
-          <Heading kicker="Where Designers Meet Mombasa" title="Designer Collaborations" sub="Each designer curates 6 pieces across Men's, Women's & Footwear" />
-          {/* Designer selector — always keeps a fixed-size single row (2-up on mobile, 4-up on large).
-              Extra (admin-added) designers don't shrink the cards — they simply overflow and
-              become scrollable. Deleting a custom designer restores the original fitted layout. */}
-          <div className="no-scrollbar -mx-4 flex gap-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
-            {allDesigners.map((d, i) => (
-              <Reveal
-                key={d.id}
-                delay={i * 80}
-                className="w-[calc(50%-0.5rem)] shrink-0 lg:w-[calc(25%-0.75rem)]"
-              >
-                <button onClick={() => setActiveDesigner(d.id)} className={`group block w-full overflow-hidden rounded-lg bg-white text-left shadow-sm transition-all ${activeDesigner === d.id ? "ring-2 ring-brand-secondary" : ""}`}>
-                  <div className="aspect-square overflow-hidden">
-                    <img src={d.image} alt={d.name} className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110" />
-                  </div>
-                  <div className="p-4 text-center">
-                    <h3 className="font-display text-base text-brand-primary">{d.name}</h3>
-                    <p className="text-[11px] text-brand-accent">{d.specialty}</p>
-                    <p className="mt-0.5 text-[10px] text-gray-400">📍 {d.location}</p>
-                  </div>
-                </button>
-              </Reveal>
-            ))}
-          </div>
-
-          {/* Spotlight for active designer */}
-          <div className="mt-8 rounded-lg bg-brand-primary p-8 text-center text-white">
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-brand-secondary">🏆 Designer Spotlight</p>
-            <h3 className="mt-2 font-display text-xl">{activeDesignerObj.spotlightTitle}</h3>
-            <p className="mx-auto mt-2 max-w-2xl text-sm text-white/70">{activeDesignerObj.spotlightText}</p>
-          </div>
-
-          {/* Designer's products */}
-          <div className="mb-4 mt-8 flex items-center justify-between">
-            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-brand-accent">{activeDesignerObj.name} — Collection ({dProducts.length} pieces)</p>
-            <button onClick={() => navigate(`/shop?designer=${activeDesigner}`)} className="text-[11px] font-bold uppercase tracking-wider text-brand-primary underline-offset-4 hover:text-brand-secondary hover:underline">View All →</button>
-          </div>
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
-            {dProducts.slice(0, 6).map((p) => (
-              <ProductCard key={p.id} product={p} />
-            ))}
-          </div>
-        </Container>
-      </section>
-
-      {/* ===== LOOKBOOK ===== */}
-      <section id="lookbook" className="scroll-mt-44 py-16">
-        <Container>
-          <Heading kicker="Style Inspiration at Your Fingertips" title="Lookbook 2026" sub="16 complete outfits — 8 for him, 8 for her" />
-          <div className="mb-8 flex flex-wrap justify-center gap-2">
-            {(["All", "Men", "Women"] as const).map((f) => (
-              <button key={f} onClick={() => { setLookTab(f); setLookPage(1); }} className={`rounded-sm border px-5 py-2 text-[11px] font-bold uppercase tracking-wider transition-colors ${lookTab === f ? "border-brand-primary bg-brand-primary text-white" : "border-light-gray text-charcoal hover:border-brand-accent"}`}>{f}</button>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            {pageOutfits.map((o) => (
-              <OutfitCard key={o.id} outfit={o} catalog={catalog} onAdd={addOutfit} />
-            ))}
-          </div>
-
-          {lookTotalPages > 1 && (
-            <div className="mt-8 flex items-center justify-center gap-1.5">
-              <button disabled={curLookPage === 1} onClick={() => setLookPage(curLookPage - 1)} className="rounded-sm border border-light-gray px-3 py-2 text-xs disabled:opacity-30">← Prev</button>
-              {Array.from({ length: lookTotalPages }, (_, i) => i + 1).map((n) => (
-                <button key={n} onClick={() => setLookPage(n)} className={`h-8 w-8 rounded-sm text-xs ${n === curLookPage ? "bg-brand-primary text-white" : "border border-light-gray hover:bg-warm-beige"}`}>{n}</button>
+      {catalog.status === "ready" && activeDesignerObj && (
+        <section id="designers" className="scroll-mt-44 bg-warm-beige/40 py-16">
+          <Container>
+            <Heading kicker="Where Designers Meet the Store" title="Designer Collaborations" />
+            {/* Fixed-size cards (2-up on mobile, 4-up on large); extra designers scroll horizontally. */}
+            <div className="no-scrollbar -mx-4 flex gap-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
+              {designers.map((d, i) => (
+                <Reveal
+                  key={d.id}
+                  delay={i * 80}
+                  className="w-[calc(50%-0.5rem)] shrink-0 lg:w-[calc(25%-0.75rem)]"
+                >
+                  <button
+                    type="button"
+                    aria-pressed={activeDesignerObj.id === d.id}
+                    onClick={() => setActiveDesigner(d.id)}
+                    className={`group block w-full overflow-hidden rounded-lg bg-white text-left shadow-sm transition-all ${activeDesignerObj.id === d.id ? "ring-2 ring-brand-secondary" : ""}`}
+                  >
+                    <div className="relative aspect-square overflow-hidden">
+                      {d.image
+                        ? <img src={d.image} alt="" className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                        : <MissingImage label="No designer photo" />}
+                      {d.isDemo && <DemoBadge className="absolute left-2 top-2" />}
+                    </div>
+                    <div className="p-4 text-center">
+                      <h3 className="font-display text-base text-brand-primary">{d.name}</h3>
+                      <p className="text-[11px] text-brand-accent">{d.specialty}</p>
+                      {d.location && <p className="mt-0.5 text-[10px] text-gray-500">{d.location}</p>}
+                    </div>
+                  </button>
+                </Reveal>
               ))}
-              <button disabled={curLookPage === lookTotalPages} onClick={() => setLookPage(curLookPage + 1)} className="rounded-sm border border-light-gray px-3 py-2 text-xs disabled:opacity-30">Next →</button>
             </div>
-          )}
-        </Container>
-      </section>
+
+            {(activeDesignerObj.spotlightTitle || activeDesignerObj.spotlightText) && (
+              <div className="mt-8 rounded-lg bg-brand-primary p-8 text-center text-white">
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-brand-secondary">Designer Spotlight</p>
+                {activeDesignerObj.spotlightTitle && <h3 className="mt-2 font-display text-xl">{activeDesignerObj.spotlightTitle}</h3>}
+                {activeDesignerObj.spotlightText && <p className="mx-auto mt-2 max-w-2xl text-sm text-white/80">{activeDesignerObj.spotlightText}</p>}
+              </div>
+            )}
+
+            <div className="mb-4 mt-8 flex items-center justify-between">
+              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-brand-accent">{activeDesignerObj.name} — Collection ({dProducts.length} {dProducts.length === 1 ? "piece" : "pieces"})</p>
+              {dProducts.length > 0 && (
+                <button type="button" onClick={() => navigate(`/shop?designer=${encodeURIComponent(activeDesignerObj.slug)}`)} className="text-[11px] font-bold uppercase tracking-wider text-brand-primary underline-offset-4 hover:text-brand-secondary hover:underline">View All →</button>
+              )}
+            </div>
+            {dProducts.length ? (
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
+                {dProducts.slice(0, DESIGNER_PRODUCT_LIMIT).map((p) => (
+                  <ProductCard key={p.id} product={p} />
+                ))}
+              </div>
+            ) : (
+              <p className="rounded-lg bg-white p-6 text-center text-sm text-gray-500 shadow-sm">No pieces are listed for this designer yet.</p>
+            )}
+          </Container>
+        </section>
+      )}
 
       {/* ===== STYLISTS ===== */}
       <section id="stylists" className="scroll-mt-44 bg-warm-beige/40 py-16">
@@ -506,35 +457,6 @@ export default function Showroom() {
           <div className="rounded-sm bg-brand-primary px-5 py-3 text-xs font-bold uppercase tracking-wider text-white shadow-xl">{toast}</div>
         </div>
       )}
-    </div>
-  );
-}
-
-/* ---------- Outfit card ---------- */
-function OutfitCard({ outfit, catalog, onAdd }: { outfit: Outfit; catalog: Product[]; onAdd: (o: Outfit) => void }) {
-  const items = outfitProducts(outfit, catalog);
-  return (
-    <div className="overflow-hidden rounded-lg bg-white shadow-sm">
-      <Link to={`/product/${items[0]?.id ?? ""}`} className="block aspect-3/4 overflow-hidden">
-        <img src={outfitImage(outfit, catalog)} alt={outfit.name} className="h-full w-full object-cover transition-transform duration-500 hover:scale-105" />
-      </Link>
-      <div className="p-4">
-        <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-brand-accent">{outfit.gender} · {outfit.vibe}</span>
-        <h3 className="font-display text-base text-brand-primary">{outfit.name}</h3>
-        <ul className="mt-2 space-y-1">
-          {items.map((p) => (
-            <li key={p.id} className="flex items-center justify-between text-[11px]">
-              <Link to={`/product/${p.id}`} className="truncate pr-2 text-charcoal hover:text-brand-secondary">{p.name}</Link>
-              <span className="shrink-0 text-gray-400">{formatKES(p.price)}</span>
-            </li>
-          ))}
-        </ul>
-        <div className="mt-2 flex items-center justify-between border-t border-light-gray pt-2">
-          <span className="text-[10px] uppercase tracking-wider text-gray-400">Total</span>
-          <span className="font-display text-base text-brand-primary">{formatKES(outfitTotal(outfit, catalog))}</span>
-        </div>
-        <button onClick={() => onAdd(outfit)} className="mt-3 w-full rounded-sm bg-brand-primary py-2.5 text-[11px] font-bold uppercase tracking-wider text-white transition-colors hover:bg-brand-secondary hover:text-brand-primary">Shop the Look</button>
-      </div>
     </div>
   );
 }

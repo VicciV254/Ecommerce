@@ -10,9 +10,8 @@ import {
   getRecentProducts,
   getAllTags,
 } from '../controllers/productController.js';
-import { authenticate, optionalAuth } from '../middleware/auth.js';
+import { optionalAuth } from '../middleware/auth.js';
 import { authenticateAdmin, authorize } from '../middleware/adminAuth.js';
-import { uploadProductImages } from '../middleware/upload.js';
 
 const router = express.Router();
 
@@ -25,8 +24,8 @@ router.get('/tags', getAllTags);
 router.get('/:id', optionalAuth, getProductById);
 
 // Admin routes
-router.post('/', authenticateAdmin, authorize('SUPER_ADMIN', 'ADMIN'), uploadProductImages, createProduct);
-router.put('/:id', authenticateAdmin, authorize('SUPER_ADMIN', 'ADMIN'), uploadProductImages, updateProduct);
+router.post('/', authenticateAdmin, authorize('SUPER_ADMIN', 'ADMIN'), createProduct);
+router.put('/:id', authenticateAdmin, authorize('SUPER_ADMIN', 'ADMIN'), updateProduct);
 router.delete('/:id', authenticateAdmin, authorize('SUPER_ADMIN', 'ADMIN'), deleteProduct);
 
 export default router;

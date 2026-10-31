@@ -1,25 +1,15 @@
-import { useState } from "react";
-import { Breadcrumb, Container, ProductImage } from "../components/ui";
-import { formatKES, useStore } from "../store/StoreContext";
-import { Link } from "../router";
+import { Breadcrumb, Container, DemoBadge, DemoCatalogNotice, ErrorPanel, LoadingPanel, ProductImage } from "../components/ui";
 import { useAuth } from "../contexts/AuthContext";
+import { Link } from "../router";
+import { useCatalog } from "../store/CatalogContext";
+import { describeVariant } from "../store/catalogModel";
+import { useStore } from "../store/StoreContext";
+import { formatKES } from "../utils/format";
 
 export default function Cart() {
-  const { state, removeFromCart, setQty, catalog } = useStore();
+  const { state, removeFromCart, setQuantity } = useStore();
+  const catalog = useCatalog();
   const { user } = useAuth();
-  const [promo, setPromo] = useState("");
-  const [applied, setApplied] = useState(0);
-  const [promoMsg, setPromoMsg] = useState("");
-
-  const lines = state.cart
-    .map((c, index) => ({ c, index, product: catalog.find((p) => p.id === c.productId) }))
-    .filter((l) => l.product);
-
-  const subtotal = lines.reduce((s, l) => s + (l.product!.price * l.c.qty), 0);
-  const discount = Math.round(subtotal * applied);
-  const taxed = subtotal - discount;
-  const tax = Math.round(taxed * 0.16);
-  const total = taxed + tax;
 
   if (!user) {
     return (
@@ -37,30 +27,14 @@ export default function Cart() {
     );
   }
 
-  const applyPromo = () => {
-    if (promo.trim().toUpperCase() === "IKOKITU") {
-      setApplied(0.1);
-      setPromoMsg("10% discount applied!");
-    } else {
-      setApplied(0);
-      setPromoMsg("Invalid promo code.");
-    }
-  };
-
-  if (lines.length === 0) {
+  if (state.cart.length === 0) {
     return (
       <Container className="py-8">
         <Breadcrumb items={[{ label: "Cart" }]} />
         <div className="mt-10 rounded-lg bg-white p-16 text-center shadow-sm">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor" className="mx-auto h-16 w-16 text-gray-200">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 1 0-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 0 1-1.12-1.243l1.264-12A1.125 1.125 0 0 1 5.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0zm7.5 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0z" />
-          </svg>
-          <h1 className="mt-4 font-display text-xl text-brand-primary">Your cart is empty</h1>
-          <p className="mt-1 text-sm text-gray-400">Browse our collection and find something you love.</p>
-          <Link
-            to="/shop"
-            className="mt-6 inline-block rounded-sm bg-brand-primary px-8 py-3 text-xs font-bold uppercase tracking-[0.12em] text-white hover:bg-brand-secondary hover:text-brand-primary"
-          >
+          <h1 className="font-display text-xl text-brand-primary">Your cart is empty</h1>
+          <p className="mt-1 text-sm text-gray-500">Browse the shop and find something you love.</p>
+          <Link to="/shop" className="mt-6 inline-block rounded-sm bg-brand-primary px-8 py-3 text-xs font-bold uppercase tracking-[0.12em] text-white hover:bg-brand-secondary hover:text-brand-primary">
             Start Shopping
           </Link>
         </div>
@@ -68,74 +42,115 @@ export default function Cart() {
     );
   }
 
+  if (catalog.status !== "ready") {
+    return (
+      <Container className="py-8">
+        <Breadcrumb items={[{ label: "Cart" }]} />
+        <div className="mt-8">
+          {catalog.status === "loading"
+            ? <LoadingPanel label="Loading current prices for your cart…" />
+            : <ErrorPanel title="Cart prices are unavailable" message={`${catalog.error ?? "The catalog could not be loaded."} Your cart is unchanged.`} onRetry={catalog.reload} />}
+        </div>
+      </Container>
+    );
+  }
+
+  const lines = state.cart.map((line, index) => {
+    const product = catalog.productsById.get(line.productId);
+    const variant = product?.variants.find((item) => item.id === line.variantId && item.isActive);
+    return { line, index, product, variant };
+  });
+  let subtotal = 0;
+  let itemCount = 0;
+  for (const { line, product, variant } of lines) {
+    if (!product || !variant) continue;
+    subtotal += catalog.priceOfVariant(product, variant).price * line.quantity;
+    itemCount += line.quantity;
+  }
+  const unavailableCount = lines.filter((entry) => !entry.product || !entry.variant).length;
+
   return (
     <Container className="py-8">
       <Breadcrumb items={[{ label: "Cart" }]} />
-      <h1 className="mt-5 font-display text-2xl uppercase tracking-wider text-brand-primary">
-        Shopping Cart
-      </h1>
-      <p className="mt-1 text-xs text-gray-400">{lines.reduce((s, l) => s + l.c.qty, 0)} items</p>
+      <h1 className="mt-5 font-display text-2xl uppercase tracking-wider text-brand-primary">Shopping Cart</h1>
+      <p className="mt-1 text-xs text-gray-500">{itemCount} {itemCount === 1 ? "item" : "items"}</p>
+      <div className="mt-4"><DemoCatalogNotice /></div>
 
       <div className="mt-6 grid gap-8 lg:grid-cols-[1fr_360px]">
-        <div className="divide-y divide-light-gray rounded-lg bg-light-pink shadow-sm">
-          {lines.map(({ c, index, product }) => (
-            <div key={index} className="flex gap-4 p-4">
-              <div className="h-20 w-20 shrink-0 overflow-hidden rounded-md bg-warm-beige">
-                <ProductImage product={product!} />
-              </div>
-              <div className="flex flex-1 flex-col">
-                <div className="flex items-start justify-between gap-2">
-                  <Link to={`/product/${product!.id}`} className="text-sm font-medium text-brand-primary hover:text-brand-secondary">
-                    {product!.name}
-                  </Link>
-                  <button onClick={() => removeFromCart(index)} className="text-gray-300 hover:text-error">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-4 w-4"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
-                  </button>
-                </div>
-                <p className="mt-0.5 text-[11px] text-gray-400">
-                  {c.size && `Size: ${c.size}`} {c.color && `· Color: ${c.color}`}
-                </p>
-                <div className="mt-auto flex items-end justify-between pt-2">
-                  <div className="flex items-center rounded-sm border border-light-gray">
-                    <button onClick={() => setQty(index, c.qty - 1)} className="px-2.5 py-1 text-xs text-gray-500">−</button>
-                    <span className="w-7 text-center text-xs">{c.qty}</span>
-                    <button onClick={() => setQty(index, c.qty + 1)} className="px-2.5 py-1 text-xs text-gray-500">+</button>
+        <ul className="divide-y divide-light-gray rounded-lg bg-white shadow-sm">
+          {lines.map(({ line, index, product, variant }) => {
+            if (!product || !variant) {
+              return (
+                <li key={`${index}:${line.variantId}`} className="flex items-center justify-between gap-4 p-4">
+                  <div>
+                    <p className="text-sm font-medium text-brand-primary">This item is no longer available</p>
+                    <p className="mt-0.5 text-xs text-gray-500">It was removed from the catalog or its options changed. It will not be ordered.</p>
                   </div>
-                  <p className="font-display text-base text-brand-primary">
-                    {formatKES(product!.price * c.qty)}
-                  </p>
+                  <button type="button" onClick={() => removeFromCart(index)} className="shrink-0 rounded-sm border border-error/40 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-error hover:bg-error hover:text-white">
+                    Remove
+                  </button>
+                </li>
+              );
+            }
+            const price = catalog.priceOfVariant(product, variant);
+            const stock = Math.max(0, variant.stock);
+            const options = describeVariant(variant);
+            return (
+              <li key={`${index}:${line.variantId}`} className="flex gap-4 p-4">
+                <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-md bg-warm-beige">
+                  <ProductImage product={product} />
                 </div>
-              </div>
-            </div>
-          ))}
-        </div>
+                <div className="flex flex-1 flex-col">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <Link to={`/product/${encodeURIComponent(product.id)}`} className="text-sm font-medium text-brand-primary hover:text-brand-secondary">
+                        {product.name}
+                      </Link>
+                      {product.isDemo && <DemoBadge className="ml-2 align-middle" />}
+                    </div>
+                    <button type="button" aria-label={`Remove ${product.name} from cart`} onClick={() => removeFromCart(index)} className="text-gray-400 hover:text-error">
+                      <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-4 w-4"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+                    </button>
+                  </div>
+                  {options && <p className="mt-0.5 text-[11px] text-gray-500">{options}</p>}
+                  {stock === 0 ? (
+                    <p className="mt-1 text-[11px] font-semibold text-error">Out of stock: this item cannot currently be ordered.</p>
+                  ) : line.quantity > stock ? (
+                    <p className="mt-1 text-[11px] font-semibold text-warning">Only {stock} available. Reduce the quantity to continue.</p>
+                  ) : null}
+                  <div className="mt-auto flex items-end justify-between pt-2">
+                    <div className="flex items-center rounded-sm border border-light-gray">
+                      <button type="button" aria-label={`Decrease quantity of ${product.name}`} disabled={line.quantity <= 1} onClick={() => setQuantity(index, line.quantity - 1)} className="px-2.5 py-1 text-xs text-gray-500 disabled:opacity-40">−</button>
+                      <span aria-live="polite" className="w-7 text-center text-xs">{line.quantity}</span>
+                      <button type="button" aria-label={`Increase quantity of ${product.name}`} disabled={line.quantity >= stock} onClick={() => setQuantity(index, line.quantity + 1)} className="px-2.5 py-1 text-xs text-gray-500 disabled:opacity-40">+</button>
+                    </div>
+                    <p className="text-right">
+                      {price.comparePrice !== null && (
+                        <span className="mr-2 text-xs text-gray-500 line-through">{formatKES(price.comparePrice * line.quantity)}</span>
+                      )}
+                      <span className="font-display text-base text-brand-primary">{formatKES(price.price * line.quantity)}</span>
+                    </p>
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
 
         <div className="h-fit rounded-lg bg-white p-6 shadow-sm">
           <h2 className="text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Cart Summary</h2>
-          <div className="mt-4 space-y-2.5 text-sm">
-            <div className="flex justify-between"><span className="text-gray-500">Subtotal</span><span>{formatKES(subtotal)}</span></div>
-            {discount > 0 && (
-              <div className="flex justify-between text-success"><span>Discount</span><span>−{formatKES(discount)}</span></div>
-            )}
-            <div className="flex justify-between"><span className="text-gray-500">Shipping</span><span className="text-success text-xs font-semibold">FREE</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">Tax (16%)</span><span>{formatKES(tax)}</span></div>
-            <div className="flex justify-between border-t border-light-gray pt-3 font-display text-xl text-brand-primary">
-              <span>Total</span><span>{formatKES(total)}</span>
-            </div>
-          </div>
-
-          <div className="mt-5">
-            <div className="flex">
-              <input
-                value={promo}
-                onChange={(e) => setPromo(e.target.value)}
-                placeholder="Promo Code (try IKOKITU)"
-                className="w-full rounded-l-sm border border-light-gray bg-off-white px-3 py-2.5 text-xs outline-none"
-              />
-              <button onClick={applyPromo} className="rounded-r-sm bg-brand-primary px-4 text-xs font-bold text-white">Apply</button>
-            </div>
-            {promoMsg && <p className={`mt-1.5 text-[11px] ${applied ? "text-success" : "text-error"}`}>{promoMsg}</p>}
-          </div>
+          <dl className="mt-4 space-y-2.5 text-sm">
+            <div className="flex justify-between"><dt className="text-gray-500">Items subtotal</dt><dd>{formatKES(subtotal)}</dd></div>
+            <div className="flex justify-between"><dt className="text-gray-500">Delivery and taxes</dt><dd className="text-xs font-semibold">Not yet calculated</dd></div>
+          </dl>
+          <p className="mt-3 text-xs text-gray-500">
+            Item prices include current catalog promotions. The final total is confirmed when checkout is available.
+          </p>
+          {unavailableCount > 0 && (
+            <p className="mt-3 text-xs font-semibold text-error">
+              {unavailableCount} unavailable {unavailableCount === 1 ? "item is" : "items are"} excluded from the subtotal.
+            </p>
+          )}
 
           <button
             type="button"
@@ -148,7 +163,7 @@ export default function Cart() {
           <p id="checkout-unavailable" className="mt-2 text-center text-xs text-charcoal">
             Checkout is paused until verified payment processing is available. Your cart is unchanged.
           </p>
-          <Link to="/shop" className="mt-3 block text-center text-[11px] text-gray-400 underline-offset-4 hover:text-brand-primary hover:underline">
+          <Link to="/shop" className="mt-3 block text-center text-[11px] text-gray-500 underline-offset-4 hover:text-brand-primary hover:underline">
             Continue Shopping
           </Link>
         </div>

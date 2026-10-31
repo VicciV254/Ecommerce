@@ -11,7 +11,7 @@ import {
   deleteUser,
   importLocalOrders,
 } from '../controllers/adminController.js';
-import { authenticateAdmin } from '../middleware/adminAuth.js';
+import { authenticateAdmin, authorize } from '../middleware/adminAuth.js';
 import { authLimiter } from '../config/rateLimiter.js';
 
 const router = express.Router();
@@ -23,10 +23,10 @@ router.use(authenticateAdmin);
 router.get('/me', getAdminMe);
 router.get('/activity', getActivityLogs);
 router.get('/users', getUsers);
-router.post('/users/verify', sendVerificationToUsers);
-router.post('/users/:id/verify', sendVerificationToUser);
-router.put('/users/:id/disabled', setUserDisabled);
-router.delete('/users/:id', deleteUser);
+router.post('/users/verify', authorize('SUPER_ADMIN', 'ADMIN'), sendVerificationToUsers);
+router.post('/users/:id/verify', authorize('SUPER_ADMIN', 'ADMIN'), sendVerificationToUser);
+router.put('/users/:id/disabled', authorize('SUPER_ADMIN', 'ADMIN'), setUserDisabled);
+router.delete('/users/:id', authorize('SUPER_ADMIN', 'ADMIN'), deleteUser);
 router.post('/orders/import-local', importLocalOrders);
 
 export default router;

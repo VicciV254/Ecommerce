@@ -16,10 +16,10 @@ router.use(authenticateAdmin);
 
 router.get('/', authorize('SUPER_ADMIN', 'ADMIN', 'VIEWER'), getAllStock);
 router.get('/low', authorize('SUPER_ADMIN', 'ADMIN', 'VIEWER'), getLowStock);
-router.get('/:productId', authorize('SUPER_ADMIN', 'ADMIN', 'VIEWER'), getProductStock);
-router.get('/:productId/history', authorize('SUPER_ADMIN', 'ADMIN', 'VIEWER'), getStockHistory);
-router.put('/:productId', authorize('SUPER_ADMIN', 'ADMIN'), updateStock);
+router.get('/:variantId', authorize('SUPER_ADMIN', 'ADMIN', 'VIEWER'), getProductStock);
+router.get('/:variantId/history', authorize('SUPER_ADMIN', 'ADMIN', 'VIEWER'), getStockHistory);
+router.put('/:variantId', authorize('SUPER_ADMIN', 'ADMIN'), updateStock);
 router.post('/bulk', authorize('SUPER_ADMIN', 'ADMIN'), bulkUpdateStock);
-router.post('/:productId/restock', authorize('SUPER_ADMIN', 'ADMIN'), restockProduct);
+router.post('/:variantId/restock', authorize('SUPER_ADMIN', 'ADMIN'), restockProduct);
 
 export default router;

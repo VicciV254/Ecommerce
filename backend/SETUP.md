@@ -17,13 +17,18 @@ The real `.env` is ignored by Git and excluded from container builds.
 | `HOST`, `PORT` | Local example binds `127.0.0.1:5000` |
 | `CORS_ORIGIN` | Comma-separated frontend origins, matching their actual host/port |
 | `BACKGROUND_JOBS_ENABLED` | Explicit opt-in to operational background services; defaults to `false` |
+| `ALLOW_DEMO_CATALOG` | Show labelled demo catalog records outside production; defaults to `false` |
+| `ALLOW_DEMO_INITIALIZATION` | Explicit per-invocation consent for the local demo initializer |
+| `ADMIN_EMAIL`, `ADMIN_USERNAME`, `ADMIN_PASSWORD` | Private initial staff credentials for local initialization |
 
 Keep signing secrets in the local environment or an approved secret store,
 not in source, terminal transcripts or chat. Server startup rejects missing
 required values and placeholder/short signing secrets before connecting.
 
 Access and refresh tokens use HS256 and distinct keys; there is no fallback
-signing secret. Protected customer requests and refreshes re-read the current
+signing secret. They identify issuer `apex-cart-api` and audience
+`apex-cart:v2`; legacy tokens must not authenticate the fresh store.
+Protected customer requests and refreshes re-read the current
 account, reject disabled/deleted customers, and enforce email verification
 when `ENABLE_EMAIL_VERIFICATION=true`. Optional authentication treats those
 customers as guests rather than granting an authenticated identity.
@@ -41,6 +46,12 @@ replaced with trusted pricing and payment verification, not reopened by a
 provider environment flag. The separate database-cart `POST /api/orders`
 path always creates an unpaid, pending order; request payment/status claims
 are not settlement evidence.
+Cancellation restores the saved variant allocation, not every SKU belonging
+to a product. Stock/status/log changes and cancellation share a serializable
+transaction; incomplete allocations are rejected without partial writes.
+Legacy M-Pesa handlers also remain unavailable until payments are linked to
+trusted orders and verified provider outcomes. Demo products cannot enter
+commercial order creation even when their catalog preview is enabled.
 
 External image-host, email and payment settings may remain empty/disabled
 for local checks. Do not pull or replace live Vercel/Neon credentials just
@@ -63,6 +74,11 @@ npm --prefix backend run dev
 intended local database before running it. The example uses
 `apex_development` on loopback port 5432. Existing migrations are checked
 in; do not create another `init` migration to start the app.
+
+The canonical-catalog migration is intentionally for the approved **fresh
+database** strategy: it requires variant IDs for stock/cart records and does
+not reconstruct legacy product data. Do not apply it to the current hosted
+legacy database or guess stock allocations to make old rows fit.
 
 Run `npm run dev` separately for the frontend on port 5173. The development
 Compose stack also maps frontend 5173 and backend 5000 on loopback:
@@ -117,40 +133,80 @@ docker compose -p apex-tests -f compose.test.yml down
 ```
 
 The harness rejects remote hosts and non-test database names. Its role must
-have `CREATEDB` permission, as the provided local service does. Each run
-creates and drops only its randomly named test database, preserving the
-configured base database. Whole-database isolation is intentional: some
-migrations explicitly reference the `public` schema.
+have `CREATEDB` permission, as the provided local service does. Every test
+file gets a fresh, randomly named database; files cannot contaminate each
+other. The configured base database is preserved. Whole-database isolation
+is intentional: some migrations explicitly reference `public`.
+For a focused run, append a known filename, for example
+`npm --prefix backend run test:integration -- catalog.test.js`.
 
-## Legacy destructive seed/reset
+## Guarded local initialization
 
-The current seed deletes records before creating its legacy catalog. It is
-not required for the automated checks and is not the future idempotent
-demo-catalog initializer.
+The destructive legacy seed and unauthenticated HTTP staff bootstrap are
+retired. `seed` and `seed:demo` now run the same idempotent local initializer.
+It creates only missing stable taxonomy/demo/variant/media records and never
+updates an existing record as a side effect of rerunning.
 
-Both raw seed execution and `npm --prefix backend run reset` refuse to run
-unless all of these hold:
+Initialization requires:
 
 - `NODE_ENV` is `development` or `test`.
-- `ALLOW_LOCAL_DATABASE_RESET=true` is explicitly supplied for that invocation.
 - `DATABASE_URL` and `DIRECT_URL` identify the same loopback database/schema.
-- The database name is `apex_development`, `apex_test` or one of their
-  underscore-suffixed local variants.
-
-Seed also requires `ADMIN_PASSWORD` of at least 12 characters. There is no
-hardcoded seeded admin password and passwords are never printed. Reset
-does not automatically seed.
-
-If a developer deliberately needs this operation, run it from the host
-against the example loopback connection, not from inside the application
-container or against a shared database:
+- The name is `apex_development`, `apex_test`, or an underscore-suffixed local variant.
+- `ADMIN_EMAIL` and `ADMIN_USERNAME` are supplied privately. Creating the
+  initial account also requires `ADMIN_PASSWORD` of at least 12 characters.
+- A write invocation explicitly sets `ALLOW_DEMO_INITIALIZATION=true`.
 
 ```bash
-ALLOW_LOCAL_DATABASE_RESET=true npm --prefix backend run seed
-# Or, to reset schema without seeding:
+npm --prefix backend run seed:demo -- --dry-run
+ALLOW_DEMO_INITIALIZATION=true npm --prefix backend run seed:demo
+```
+
+The dry run performs no writes and does not require a password. A real run
+does not reset an existing staff password or add a second administrator
+under a changed initialization email. Output contains counts, never
+credentials. Conflicting identifiers abort rather than overwrite records.
+The seed includes 291 taxonomy nodes, 230 demo products, 231 SKUs and
+independently replaceable, licensed placeholder-media records.
+
+Set `ALLOW_DEMO_CATALOG=true` only for development previews. Production
+always excludes demo records. Demo is a server-owned property, not a
+client-controlled purchase flag. Replacing a sample photo does not silently
+convert its product into commercial inventory.
+
+Destructive resets are separate, still requiring
+`ALLOW_LOCAL_DATABASE_RESET=true` and the local-target guard. They are not
+needed to rerun initialization:
+
+```bash
 ALLOW_LOCAL_DATABASE_RESET=true npm --prefix backend run reset
 ```
 
 The old hosted database being disposable does not authorize these commands
 to contact it. Hosted-resource deletion and production connection changes
 remain separate operations.
+
+## Canonical API surfaces
+
+| Route | Contract |
+|---|---|
+| `GET /api/catalog` | Complete visible catalog snapshot; mode and demo visibility are server-controlled |
+| `GET /api/products` | Bounded pagination and descendant category filtering |
+| `GET /api/admin/catalog` | Staff catalog including inactive/demo records |
+| Product/category/designer CRUD | Validated JSON; stable IDs/slugs, soft retirement and transactional consistency |
+| `/api/admin/stock/:variantId` | Per-SKU inventory, not product-level inferred allocation |
+| `GET /api/settings/storefront` | Safe published configuration and referenced media only |
+| `/api/settings/storefront/draft` | Staff draft with optimistic version checks, referenced media and unavailable media IDs |
+| `POST /api/settings/storefront/publish` | Validate references, then atomically publish the current version |
+| `POST /api/media` | Staff URL/provenance registration; external uploads remain separate |
+
+The old `/settings/admin-data`, `/settings/theme`, `/admin/init` and
+`/admin/orders/import-local` surfaces return HTTP 410. Catalog changes must
+not repopulate those stores. Categories cannot form cycles; hidden ancestors
+hide descendants. Published references must be removed before their
+products/categories/media can be hidden or retired.
+
+Draft reads preserve missing reference IDs and return them in
+`unavailableMediaIds` so staff can repair the draft; they do not substitute
+another asset. Save and publish reject invalid references. Unpublished
+standalone artwork is returned in the authenticated draft's `media` list,
+not leaked into the public snapshot.

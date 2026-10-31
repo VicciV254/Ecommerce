@@ -1,31 +1,19 @@
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Breadcrumb, Container } from "../components/ui";
-import { parseRoute } from "../router";
-import { ordersAPI } from "../api/orders";
-import { findReceiptByOrderNumber, type LocalReceipt } from "../utils/userReceipts";
+import { Link, parseRoute } from "../router";
+import { ordersAPI, type Order, type OrderTracking } from "../api/orders";
+import { apiStatus, describeApiError } from "../api/errors";
 import { useAuth } from "../contexts/AuthContext";
-import { Link } from "../router";
 
-type TrackEvent = {
-  status: string;
-  description: string;
-  location?: string;
-  createdAt: string;
-};
+const ACTIVE_ORDER_LIMIT = 100;
+const COPIED_FEEDBACK_MS = 2000;
 
-type BackendTracking = {
-  orderNumber: string;
-  status: string;
-  trackingHistory: TrackEvent[];
-};
-
-const fallbackTimeline: TrackEvent[] = [
-  { status: "READY_FOR_PICKUP", description: "Ready for Pickup", location: "Mombasa CBD Hub", createdAt: new Date().toISOString() },
-  { status: "SHIPPED", description: "Arrived at Sorting Facility", location: "Mombasa Main Station", createdAt: new Date().toISOString() },
-  { status: "SHIPPED", description: "Order Shipped", location: "Dispatched from warehouse", createdAt: new Date().toISOString() },
-  { status: "PROCESSING", description: "Order Processed", location: "No Maneno Bazaar Warehouse", createdAt: new Date().toISOString() },
-  { status: "PENDING", description: "Order Placed", location: "Payment confirmed", createdAt: new Date().toISOString() },
-];
+type TrackState =
+  | { status: "idle" }
+  | { status: "searching" }
+  | { status: "found"; tracking: OrderTracking }
+  | { status: "not-found" }
+  | { status: "error"; message: string };
 
 function formatStatus(status: string) {
   return status.replace(/_/g, " ");
@@ -34,12 +22,7 @@ function formatStatus(status: string) {
 function formatTrackTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString("en-KE", {
-    day: "numeric",
-    month: "short",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return date.toLocaleString("en-KE", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
 }
 
 export default function TrackOrder({ route }: { route: string }) {
@@ -47,99 +30,75 @@ export default function TrackOrder({ route }: { route: string }) {
   const prefilledOrder = params.get("order") ?? "";
   const { user } = useAuth();
 
-  const [orderId, setOrderId] = useState(prefilledOrder);
-  const [status, setStatus] = useState<null | "searching" | "found" | "not-found">(null);
+  const [orderNumber, setOrderNumber] = useState(prefilledOrder);
+  const [result, setResult] = useState<TrackState>({ status: "idle" });
   const [copied, setCopied] = useState(false);
-  const [receipt, setReceipt] = useState<LocalReceipt | null>(null);
-  const [backendTracking, setBackendTracking] = useState<BackendTracking | null>(null);
-  const [userOrders, setUserOrders] = useState<any[]>([]);
+  const [activeOrders, setActiveOrders] = useState<Order[]>([]);
+  const [activeError, setActiveError] = useState("");
 
-  const runTrack = async (number: string) => {
+  const runTrack = useCallback(async (number: string) => {
     const trimmed = number.trim();
     if (!trimmed) return;
-    setStatus("searching");
-    setReceipt(null);
-    setBackendTracking(null);
-
+    setResult({ status: "searching" });
     try {
-      const response = (await ordersAPI.track(trimmed)) as { data: BackendTracking };
-      setBackendTracking(response.data);
-      setStatus("found");
-      return;
-    } catch {
-      const localReceipt = findReceiptByOrderNumber(trimmed);
-      setReceipt(localReceipt);
-      setStatus(localReceipt ? "found" : "not-found");
+      const { data } = await ordersAPI.track(trimmed);
+      setResult({ status: "found", tracking: data });
+    } catch (error) {
+      setResult(apiStatus(error) === 404
+        ? { status: "not-found" }
+        : { status: "error", message: describeApiError(error, "Tracking is unavailable right now.") });
     }
-  };
+  }, []);
 
   useEffect(() => {
-    if (prefilledOrder) {
-      setOrderId(prefilledOrder);
-      runTrack(prefilledOrder);
-    }
-  }, [prefilledOrder]);
+    if (prefilledOrder) void runTrack(prefilledOrder);
+  }, [prefilledOrder, runTrack]);
 
   useEffect(() => {
-    if (user) {
-      loadUserOrders();
-    }
+    if (!user) return;
+    ordersAPI.getMyOrders({ limit: ACTIVE_ORDER_LIMIT })
+      .then(({ data }) => {
+        setActiveError("");
+        setActiveOrders(data.orders.filter((order) => !["DELIVERED", "CANCELLED", "RETURNED"].includes(order.status)));
+      })
+      .catch((error: unknown) => setActiveError(describeApiError(error, "Your active orders could not be loaded.")));
   }, [user]);
 
-  const loadUserOrders = async () => {
-    try {
-      const response = await ordersAPI.getMyOrders() as { data: { orders: any[] } };
-      const activeOrders = (response.data.orders || []).filter((order: any) => 
-        !['DELIVERED', 'CANCELLED', 'RETURNED'].includes(order.status)
-      );
-      setUserOrders(activeOrders);
-    } catch (error) {
-      console.error('Failed to load user orders:', error);
-    }
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(false), COPIED_FEEDBACK_MS);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
+
+  const handleTrack = (event: FormEvent) => {
+    event.preventDefault();
+    void runTrack(orderNumber);
   };
 
-  const handleTrack = (e: React.FormEvent) => {
-    e.preventDefault();
-    runTrack(orderId);
+  const copyOrderNumber = (number: string) => {
+    navigator.clipboard.writeText(number).then(() => setCopied(true)).catch(() => undefined);
   };
-
-  const copyOrderId = () => {
-    navigator.clipboard.writeText(orderId).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  };
-
-  const timeline = backendTracking?.trackingHistory?.length
-    ? backendTracking.trackingHistory
-    : receipt
-      ? [
-          { status: receipt.status, description: formatStatus(receipt.status), location: "No Maneno Bazaar", createdAt: receipt.updatedAt },
-          { status: "PENDING", description: "Order Placed", location: "Payment confirmed", createdAt: receipt.createdAt },
-        ]
-      : fallbackTimeline;
-
-  const currentStatus = backendTracking?.status || receipt?.status || "IN_TRANSIT";
 
   return (
     <Container className="py-8">
       <div className="flex items-center justify-between">
         <Breadcrumb items={[{ label: "Track Order" }]} />
-        <button onClick={() => window.history.back()} className="text-[11px] font-bold uppercase tracking-wider text-brand-primary hover:text-brand-secondary">
+        <button type="button" onClick={() => window.history.back()} className="text-[11px] font-bold uppercase tracking-wider text-brand-primary hover:text-brand-secondary">
           Back
         </button>
       </div>
 
-      <div className="mx-auto mt-10 max-w-xl rounded-lg bg-light-pink p-8 shadow-sm">
+      <div className="mx-auto mt-10 max-w-xl rounded-lg bg-white p-8 shadow-sm">
         <h1 className="font-display text-2xl uppercase tracking-wider text-brand-primary">Track Your Order</h1>
-        <p className="mt-2 text-sm text-gray-400">Enter your order number to see current status and location.</p>
+        <p className="mt-2 text-sm text-gray-500">Enter your order number to see its current status.</p>
 
         <form onSubmit={handleTrack} className="mt-8 flex flex-col gap-3 sm:flex-row">
           <input
             required
-            value={orderId}
-            onChange={(e) => { setOrderId(e.target.value); setStatus(null); }}
-            placeholder="Order Number (e.g. NM-2026-123456)"
+            aria-label="Order number"
+            value={orderNumber}
+            onChange={(event) => { setOrderNumber(event.target.value); setResult({ status: "idle" }); }}
+            placeholder="Order number"
             className="flex-1 rounded-sm border border-light-gray bg-off-white px-4 py-3 text-sm outline-none focus:border-brand-secondary"
           />
           <button type="submit" className="rounded-sm bg-brand-primary px-8 py-3 text-xs font-bold uppercase tracking-wider text-white hover:bg-brand-secondary hover:text-brand-primary">
@@ -147,32 +106,38 @@ export default function TrackOrder({ route }: { route: string }) {
           </button>
         </form>
 
-        {status === "searching" && (
-          <div className="mt-10 text-center">
+        {result.status === "searching" && (
+          <div role="status" className="mt-10 text-center">
             <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-brand-secondary border-t-transparent" />
-            <p className="mt-3 text-xs text-gray-400">Searching...</p>
+            <p className="mt-3 text-xs text-gray-500">Searching...</p>
           </div>
         )}
 
-        {status === "not-found" && (
-          <div className="mt-8 rounded-md border border-error/20 bg-error/10 p-4 text-sm text-error">
+        {result.status === "not-found" && (
+          <div role="alert" className="mt-8 rounded-md border border-error/20 bg-error/10 p-4 text-sm text-error">
             We could not find that order number. Check the number on your receipt and try again.
           </div>
         )}
 
-        {status === "found" && (
+        {result.status === "error" && (
+          <div role="alert" className="mt-8 flex flex-wrap items-center justify-between gap-3 rounded-md border border-error/20 bg-error/10 p-4 text-sm text-error">
+            <span>{result.message}</span>
+            <button type="button" onClick={() => void runTrack(orderNumber)} className="font-bold underline">Try again</button>
+          </div>
+        )}
+
+        {result.status === "found" && (
           <div className="mt-10 animate-fade-in space-y-6">
             <div className="flex items-center justify-between rounded-md bg-off-white p-4">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Order Number</p>
-                <p className="mt-0.5 font-mono text-sm font-bold text-brand-primary">{orderId}</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Order Number</p>
+                <p className="mt-0.5 font-mono text-sm font-bold text-brand-primary">{result.tracking.orderNumber}</p>
               </div>
               <button
-                onClick={copyOrderId}
+                type="button"
+                onClick={() => copyOrderNumber(result.tracking.orderNumber)}
                 className={`rounded-sm border px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-all ${
-                  copied
-                    ? "border-success bg-success/5 text-success"
-                    : "border-light-gray text-gray-400 hover:border-brand-primary hover:text-brand-primary"
+                  copied ? "border-success bg-success/5 text-success" : "border-light-gray text-gray-500 hover:border-brand-primary hover:text-brand-primary"
                 }`}
               >
                 {copied ? "Copied" : "Copy"}
@@ -181,85 +146,62 @@ export default function TrackOrder({ route }: { route: string }) {
 
             <div className="flex items-center justify-between border-b border-light-gray pb-4">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Status</p>
-                <p className="text-sm font-bold uppercase tracking-wide text-success">
-                  {formatStatus(currentStatus)}
-                </p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Status</p>
+                <p className="text-sm font-bold uppercase tracking-wide text-success">{formatStatus(result.tracking.status)}</p>
               </div>
               <div className="text-right">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Last Update</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Last Update</p>
                 <p className="text-sm font-semibold text-brand-primary">
-                  {timeline[0] ? formatTrackTime(timeline[0].createdAt) : "Pending"}
+                  {result.tracking.trackingHistory[0] ? formatTrackTime(result.tracking.trackingHistory[0].createdAt) : "No updates yet"}
                 </p>
               </div>
             </div>
 
-            {receipt && (
-              <div className="rounded-md bg-off-white p-4 text-sm">
-                <div className="flex justify-between gap-4">
-                  <span className="text-gray-500">Total</span>
-                  <span className="font-bold text-brand-primary">KES {receipt.total.toLocaleString("en-KE")}</span>
-                </div>
-                <p className="mt-2 text-xs text-gray-500">
-                  Delivering to {receipt.address.address}, {receipt.address.city}, {receipt.address.county}
-                </p>
-              </div>
+            {result.tracking.trackingHistory.length ? (
+              <ol className="relative space-y-0 pl-6">
+                {result.tracking.trackingHistory.map((step, index, steps) => (
+                  <li key={step.id} className="relative flex gap-4 pb-8 last:pb-0">
+                    {index < steps.length - 1 && <div className="absolute -left-[18.5px] top-5 h-full w-px bg-light-gray" />}
+                    <div className={`absolute -left-6 top-1 z-10 h-3.5 w-3.5 rounded-full border-2 ${
+                      index === 0 ? "border-success bg-success shadow-[0_0_0_3px_rgba(35,122,75,0.15)]" : "border-brand-secondary bg-brand-secondary"
+                    }`} />
+                    <div className="ml-1">
+                      <p className={`text-sm font-semibold ${index === 0 ? "text-success" : "text-brand-primary"}`}>{step.description || formatStatus(step.status)}</p>
+                      <p className="text-xs text-gray-500">{step.location || formatStatus(step.status)}</p>
+                      <p className="mt-0.5 text-[10px] text-gray-500">{formatTrackTime(step.createdAt)}</p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="text-sm text-gray-500">No tracking events have been recorded for this order yet.</p>
             )}
-
-            <div className="relative space-y-0 pl-6">
-              {timeline.map((step, i, arr) => (
-                <div key={`${step.status}-${step.createdAt}-${i}`} className="relative flex gap-4 pb-8 last:pb-0">
-                  {i < arr.length - 1 && (
-                    <div className="absolute -left-[18.5px] top-5 h-full w-px bg-light-gray" />
-                  )}
-                  <div className={`absolute -left-6 top-1 z-10 h-3.5 w-3.5 rounded-full border-2 ${
-                    i === 0
-                      ? "border-success bg-success shadow-[0_0_0_3px_rgba(39,174,96,0.15)]"
-                      : "border-brand-secondary bg-brand-secondary"
-                  }`} />
-                  <div className="ml-1">
-                    <p className={`text-sm font-semibold ${i === 0 ? "text-success" : "text-brand-primary"}`}>{step.description || formatStatus(step.status)}</p>
-                    <p className="text-xs text-gray-400">{step.location || formatStatus(step.status)}</p>
-                    <p className="mt-0.5 text-[10px] text-gray-300">{formatTrackTime(step.createdAt)}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
           </div>
         )}
 
-        {user && userOrders.length > 0 && (
+        {user && activeError && <p role="status" className="mt-8 text-xs text-error">{activeError}</p>}
+        {user && activeOrders.length > 0 && (
           <div className="mt-10 animate-fade-in">
-            <h2 className="font-display text-lg uppercase tracking-wider text-brand-primary mb-4">Your Active Orders</h2>
+            <h2 className="mb-4 font-display text-lg uppercase tracking-wider text-brand-primary">Your Active Orders</h2>
             <div className="space-y-3">
-              {userOrders.map((order) => (
+              {activeOrders.map((order) => (
                 <div key={order.id} className="rounded-md border border-light-gray bg-white p-4">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="font-mono text-sm font-bold text-brand-primary">{order.orderNumber}</p>
                       <p className="text-xs text-gray-500">{new Date(order.createdAt).toLocaleDateString()}</p>
                     </div>
-                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                      order.status === 'PENDING' ? 'bg-warning/15 text-warning' :
-                      order.status === 'PROCESSING' ? 'bg-ocean-blue/10 text-ocean-blue' :
-                      order.status === 'SHIPPED' ? 'bg-brand-secondary/20 text-brand-accent' :
-                      order.status === 'READY_FOR_PICKUP' ? 'bg-coral/10 text-coral' :
-                      'bg-gray-100 text-gray-600'
-                    }`}>
-                      {formatStatus(order.status)}
-                    </span>
+                    <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-charcoal">{formatStatus(order.status)}</span>
                   </div>
                   <div className="mt-3 flex gap-2">
                     <button
-                      onClick={() => { setOrderId(order.orderNumber); runTrack(order.orderNumber); }}
+                      type="button"
+                      onClick={() => { setOrderNumber(order.orderNumber); void runTrack(order.orderNumber); }}
                       className="text-xs font-semibold text-brand-primary hover:text-brand-secondary"
                     >
                       Track
                     </button>
-                    <Link
-                      to="/account/orders"
-                      className="text-xs font-semibold text-gray-500 hover:text-brand-primary"
-                    >
+                    <Link to="/account/orders" className="text-xs font-semibold text-gray-500 hover:text-brand-primary">
                       View Details
                     </Link>
                   </div>

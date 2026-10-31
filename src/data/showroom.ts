@@ -1,5 +1,3 @@
-import { PRODUCTS, getProduct, type Product } from "./products";
-
 const PX = (id: number) =>
   `https://images.pexels.com/photos/${id}/pexels-photo-${id}.jpeg?auto=compress&cs=tinysrgb&w=900`;
 
@@ -57,48 +55,6 @@ export const EVENTS: FashionEvent[] = [
   { id: "fw-preview", date: "2026-04-05", time: "6:00 PM", title: "Fall/Winter Collection Preview", location: "Fashion Showroom, 3rd Floor", details: "An exclusive first look at the FW26 line.", features: ["Live Music", "Canapés", "Designer Meet & Greet"], dressCode: "Cocktail", tickets: [{ type: "By Invitation", price: null }], cta: "Request Invitation" },
 ];
 
-/* ---------- Designers (each assigned 6 products per category via designerId) ---------- */
-export type Designer = {
-  id: string;
-  name: string;
-  specialty: string;
-  location: string;
-  image: string;
-  spotlightTitle: string;
-  spotlightText: string;
-};
-
-export const DESIGNERS: Designer[] = [
-  {
-    id: "amina", name: "Amina Designs", specialty: "Kitenge Couture & Resort", location: "Mombasa",
-    image: "https://my-image-host.victor-f6f.workers.dev/api/img/vicciv254/ecormerce/1782863797948-pasted-1782863794772.png",
-    spotlightTitle: "Amina Designs: Blending Tradition with Modernity",
-    spotlightText: "Amina Mohamed fuses heritage Ankara and kitenge craft with contemporary silhouettes, leading our Resort 2026 line with vibrant, coast-ready pieces for the whole family.",
-  },
-  {
-    id: "kamau", name: "Kamau Studio", specialty: "Modern Tailoring & Summer", location: "Nairobi",
-    image: "https://my-image-host.victor-f6f.workers.dev/api/img/vicciv254/ecormerce/1782863651902-pasted-1782863648177.png",
-    spotlightTitle: "Kamau Studio: The Art of Effortless Tailoring",
-    spotlightText: "Known for clean lines and breathable fabrics, Kamau Studio defines our Summer 2026 essentials — relaxed tailoring that moves from boardroom to beach.",
-  },
-  {
-    id: "fatma", name: "Fatma Collective", specialty: "Luxe Evening & Outerwear", location: "Mombasa",
-    image: "https://my-image-host.victor-f6f.workers.dev/api/img/vicciv254/ecormerce/1782863924527-pasted-1782863922363.png",
-    spotlightTitle: "Fatma Collective: Drama After Dark",
-    spotlightText: "Fatma Collective brings structured outerwear and statement evening looks to our Fall/Winter 2026 collection — rich textures, bold confidence.",
-  },
-  {
-    id: "omar", name: "Omar Fashion", specialty: "Street Style & Denim", location: "Mombasa",
-    image: "https://my-image-host.victor-f6f.workers.dev/api/img/vicciv254/ecormerce/1782862623421-pasted-1782862527863.png",
-    spotlightTitle: "Omar Fashion: Streetwear with Soul",
-    spotlightText: "Omar's edit champions everyday street style — denim, graphic tees and easy layering that keeps Mombasa's youth looking sharp season-round.",
-  },
-];
-
-export function designerProducts(designerId: string, catalog: Product[] = PRODUCTS) {
-  return catalog.filter((p) => p.designerId === designerId);
-}
-
 /* ---------- Stylists & services ---------- */
 export const STYLISTS = [
   { id: "mariam", name: "Mariam K.", experience: "10 years", specialty: "Women's Fashion", image: "https://my-image-host.victor-f6f.workers.dev/api/img/vicciv254/ecormerce/1782862626064-pasted-1782862570187.png" },
@@ -133,58 +89,11 @@ export const BLOG_POSTS = [
   { id: "b3", title: "Q&A with Our Featured Designer", excerpt: "Behind the vision of Amina Designs.", date: "Feb 20, 2026", readTime: "6 min", image: "https://my-image-host.victor-f6f.workers.dev/api/img/vicciv254/ecormerce/1782863797948-pasted-1782863794772.png" },
 ];
 
-
-
-/* ---------- Lookbook outfits: 8 men + 8 women ---------- */
-export type Outfit = {
-  id: string;
-  name: string;
-  vibe: string;
-  gender: "Men" | "Women";
-  productIds: string[];
-};
-
-export const OUTFITS: Outfit[] = [
-  // MEN (8)
-  { id: "m1", name: "The Executive", vibe: "Boardroom Power", gender: "Men", productIds: ["mens-fashion-5", "mens-fashion-16", "footwear-12"] },
-  { id: "m2", name: "Summer Ease", vibe: "Coastal Casual", gender: "Men", productIds: ["mens-fashion-1", "mens-fashion-7", "footwear-1"] },
-  { id: "m3", name: "Smart Layers", vibe: "Office to Drinks", gender: "Men", productIds: ["mens-fashion-9", "mens-fashion-3", "footwear-14"] },
-  { id: "m4", name: "Denim Edit", vibe: "Weekend Cool", gender: "Men", productIds: ["mens-fashion-10", "mens-fashion-4", "footwear-20"] },
-  { id: "m5", name: "Winter Warmth", vibe: "Cold Weather Layering", gender: "Men", productIds: ["mens-fashion-11", "mens-fashion-12", "footwear-9"] },
-  { id: "m6", name: "Resort Ready", vibe: "Vacation Mode", gender: "Men", productIds: ["mens-fashion-18", "mens-fashion-19", "footwear-6"] },
-  { id: "m7", name: "Heritage Pride", vibe: "Traditional Elegance", gender: "Men", productIds: ["mens-fashion-17", "mens-fashion-20", "footwear-17"] },
-  { id: "m8", name: "Weekend Polo", vibe: "Relaxed Smart", gender: "Men", productIds: ["mens-fashion-2", "mens-fashion-3", "footwear-24"] },
-  // WOMEN (8)
-  { id: "w1", name: "Coastal Elegance", vibe: "Breezy & Bright", gender: "Women", productIds: ["womens-fashion-1", "womens-fashion-19", "footwear-2"] },
-  { id: "w2", name: "Sundress Day", vibe: "Effortless Summer", gender: "Women", productIds: ["womens-fashion-2", "womens-fashion-20", "footwear-3"] },
-  { id: "w3", name: "Office Power", vibe: "Boss Mode", gender: "Women", productIds: ["womens-fashion-9", "womens-fashion-12", "footwear-16"] },
-  { id: "w4", name: "Ankara Statement", vibe: "Heritage Glam", gender: "Women", productIds: ["womens-fashion-17", "womens-fashion-21", "footwear-18"] },
-  { id: "w5", name: "Cozy Layers", vibe: "Autumn Warmth", gender: "Women", productIds: ["womens-fashion-11", "womens-fashion-10", "footwear-10"] },
-  { id: "w6", name: "Resort Glow", vibe: "Beach Club", gender: "Women", productIds: ["womens-fashion-18", "womens-fashion-22", "footwear-21"] },
-  { id: "w7", name: "Evening Glamour", vibe: "Red Carpet", gender: "Women", productIds: ["womens-fashion-24", "womens-fashion-21", "footwear-22"] },
-  { id: "w8", name: "Casual Chic", vibe: "Day Out", gender: "Women", productIds: ["womens-fashion-3", "womens-fashion-7", "footwear-5"] },
-];
-
-export function outfitProducts(o: Outfit, catalog: Product[] = PRODUCTS) {
-  return o.productIds.map((id) => getProduct(id, catalog)).filter(Boolean) as Product[];
-}
-
-export function outfitTotal(o: Outfit, catalog: Product[] = PRODUCTS) {
-  return outfitProducts(o, catalog).reduce((s, p) => s + p.price, 0);
-}
-
-/* outfit hero image = first product's image */
-export function outfitImage(o: Outfit, catalog: Product[] = PRODUCTS) {
-  const first = outfitProducts(o, catalog)[0];
-  return first ? first.image : "";
-}
-
 export const SECTIONS = [
   { id: "collections", label: "Collections" },
   { id: "runway", label: "Runway" },
   { id: "events", label: "Events" },
   { id: "designers", label: "Designers" },
-  { id: "lookbook", label: "Lookbook" },
   { id: "stylists", label: "Stylists" },
   { id: "workshops", label: "Workshops" },
   { id: "community", label: "Community" },

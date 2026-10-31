@@ -1,6 +1,9 @@
 import './environment.js';
 import jwt from 'jsonwebtoken';
 
+export const AUTH_ISSUER = 'apex-cart-api';
+export const AUTH_AUDIENCE = 'apex-cart:v2';
+
 export function assertAuthConfigured() {
   for (const key of ['JWT_SECRET', 'JWT_REFRESH_SECRET']) {
     const value = process.env[key];
@@ -26,7 +29,7 @@ function verify(token, key) {
   const secret = signingKey(key);
   if (typeof token !== 'string' || !token) return null;
   try {
-    return jwt.verify(token, secret, { algorithms: ['HS256'] });
+    return jwt.verify(token, secret, { algorithms: ['HS256'], issuer: AUTH_ISSUER, audience: AUTH_AUDIENCE });
   } catch (error) {
     if (error instanceof jwt.JsonWebTokenError || error instanceof jwt.TokenExpiredError || error instanceof jwt.NotBeforeError) {
       return null;
@@ -36,10 +39,10 @@ function verify(token, key) {
 }
 
 export const generateToken = (payload) =>
-  jwt.sign(payload, signingKey('JWT_SECRET'), { algorithm: 'HS256', expiresIn: process.env.JWT_EXPIRE || '7d' });
+  jwt.sign(payload, signingKey('JWT_SECRET'), { algorithm: 'HS256', issuer: AUTH_ISSUER, audience: AUTH_AUDIENCE, expiresIn: process.env.JWT_EXPIRE || '7d' });
 
 export const generateRefreshToken = (payload) =>
-  jwt.sign(payload, signingKey('JWT_REFRESH_SECRET'), { algorithm: 'HS256', expiresIn: process.env.JWT_REFRESH_EXPIRE || '30d' });
+  jwt.sign(payload, signingKey('JWT_REFRESH_SECRET'), { algorithm: 'HS256', issuer: AUTH_ISSUER, audience: AUTH_AUDIENCE, expiresIn: process.env.JWT_REFRESH_EXPIRE || '30d' });
 
 export const verifyToken = (token) => verify(token, 'JWT_SECRET');
 export const verifyRefreshToken = (token) => verify(token, 'JWT_REFRESH_SECRET');

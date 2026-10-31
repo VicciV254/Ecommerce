@@ -1,4 +1,22 @@
 import prisma from '../config/database.js';
+import { httpError, loadCategories, productWhere } from '../services/catalogService.js';
+
+async function inventory() {
+  return prisma.$transaction(async (db) => ({
+    context: await loadCategories(db),
+    products: await db.product.findMany({
+      where: { isDemo: false, deletedAt: null },
+      include: { variants: { where: { isActive: true }, include: { stock: true } }, _count: { select: { reviews: true } } },
+    }),
+  }), { isolationLevel: 'RepeatableRead' });
+}
+
+function inventoryVariants(products) {
+  return products.flatMap((product) => product.variants.map((variant) => {
+    if (!variant.stock) throw httpError(503, 'Variant stock data is incomplete');
+    return { ...variant, price: variant.price ?? product.price };
+  }));
+}
 
 function periodRange(period = 'month') {
   const now = new Date();
@@ -25,10 +43,12 @@ export const getDashboardMetrics = async (req, res, next) => {
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const categories = await loadCategories();
 
     // Total sales
     const totalSales = await prisma.order.aggregate({
       where: {
+        isDemo: false,
         status: { notIn: ['CANCELLED', 'RETURNED'] },
       },
       _sum: { total: true },
@@ -37,6 +57,7 @@ export const getDashboardMetrics = async (req, res, next) => {
     // This month's sales
     const thisMonthSales = await prisma.order.aggregate({
       where: {
+        isDemo: false,
         status: { notIn: ['CANCELLED', 'RETURNED'] },
         createdAt: { gte: startOfMonth },
       },
@@ -47,6 +68,7 @@ export const getDashboardMetrics = async (req, res, next) => {
     // Last month's sales
     const lastMonthSales = await prisma.order.aggregate({
       where: {
+        isDemo: false,
         status: { notIn: ['CANCELLED', 'RETURNED'] },
         createdAt: {
           gte: startOfLastMonth,
@@ -58,9 +80,10 @@ export const getDashboardMetrics = async (req, res, next) => {
     });
 
     // Total orders
-    const totalOrders = await prisma.order.count();
+    const totalOrders = await prisma.order.count({ where: { isDemo: false } });
     const statusGroups = await prisma.order.groupBy({
       by: ['status'],
+      where: { isDemo: false },
       _count: { status: true },
       _sum: { total: true },
     });
@@ -68,19 +91,19 @@ export const getDashboardMetrics = async (req, res, next) => {
     const cancelledOrders = orderStatus.CANCELLED || 0;
     const returnedOrders = orderStatus.RETURNED || 0;
     const refundedPayments = await prisma.order.aggregate({
-      where: { paymentStatus: 'REFUNDED' },
+      where: { paymentStatus: 'REFUNDED', isDemo: false },
       _count: true,
       _sum: { total: true },
     });
 
     // Total products
-    const totalProducts = await prisma.product.count();
-    const activeProducts = await prisma.product.count({ where: { isActive: true } });
+    const totalProducts = await prisma.product.count({ where: { isDemo: false, deletedAt: null } });
+    const activeProducts = await prisma.product.count({ where: { ...productWhere(categories), isDemo: false } });
     const lowStockProducts = await prisma.stock.count({
-      where: { status: 'LOW_STOCK' },
+      where: { status: 'LOW_STOCK', variant: { is: { isActive: true, product: { is: { isDemo: false, deletedAt: null } } } } },
     });
     const outOfStockProducts = await prisma.stock.count({
-      where: { status: 'OUT_OF_STOCK' },
+      where: { status: 'OUT_OF_STOCK', variant: { is: { isActive: true, product: { is: { isDemo: false, deletedAt: null } } } } },
     });
 
     // Total customers
@@ -88,6 +111,7 @@ export const getDashboardMetrics = async (req, res, next) => {
 
     // Recent orders
     const recentOrders = await prisma.order.findMany({
+      where: { isDemo: false },
       take: 10,
       orderBy: { createdAt: 'desc' },
       include: {
@@ -145,35 +169,16 @@ export const getDashboardMetrics = async (req, res, next) => {
 
 export const getInventoryBreakdown = async (req, res, next) => {
   try {
-    const categories = await prisma.category.findMany({
-      include: {
-        products: {
-          include: {
-            stock: true,
-          },
-        },
-      },
-    });
-
-    const breakdown = categories.map((category) => {
-      const totalProducts = category.products.length;
-      const totalValue = category.products.reduce(
-        (sum, p) => sum + p.price * p.stock.quantity,
-        0
-      );
-      const lowStock = category.products.filter(
-        (p) => p.stock.status === 'LOW_STOCK'
-      ).length;
-      const outOfStock = category.products.filter(
-        (p) => p.stock.status === 'OUT_OF_STOCK'
-      ).length;
-
+    const { context, products } = await inventory();
+    const breakdown = context.categories.filter((category) => !category.parentId && !category.deletedAt).map((category) => {
+      const members = products.filter((product) => context.paths.get(product.categoryId).some((item) => item.id === category.id));
+      const variants = inventoryVariants(members);
       return {
-        category: category.name,
-        totalProducts,
-        totalValue,
-        lowStock,
-        outOfStock,
+        category: category.name, totalProducts: members.length,
+        totalValue: variants.reduce((sum, variant) => sum + variant.price * variant.stock.quantity, 0),
+        lowStock: variants.filter((variant) => variant.stock.quantity > 0 && variant.stock.quantity <= variant.stock.minThreshold).length,
+        outOfStock: variants.filter((variant) => variant.stock.quantity === 0).length,
+        stockUnit: 'variant',
       };
     });
 
@@ -187,7 +192,7 @@ export const getSalesReport = async (req, res, next) => {
   try {
     const { startDate, endDate, period = 'month' } = req.query;
     
-    const where = {};
+    const where = { isDemo: false };
 
     if (startDate) {
       where.createdAt = { ...where.createdAt, gte: new Date(startDate) };
@@ -268,40 +273,15 @@ export const getSalesReport = async (req, res, next) => {
 
 export const getCategoryPerformance = async (req, res, next) => {
   try {
-    const categories = await prisma.category.findMany({
-      include: {
-        products: {
-          include: {
-            stock: true,
-            _count: {
-              select: { reviews: true },
-            },
-          },
-        },
-      },
-    });
-
-    const performance = categories.map((category) => {
-      const totalProducts = category.products.length;
-      const totalStock = category.products.reduce(
-        (sum, p) => sum + p.stock.quantity,
-        0
-      );
-      const totalReviews = category.products.reduce(
-        (sum, p) => sum + p._count.reviews,
-        0
-      );
-      const avgRating = category.products.reduce(
-        (sum, p) => sum + p.rating,
-        0
-      ) / (totalProducts || 1);
-
+    const { context, products } = await inventory();
+    const performance = context.categories.filter((category) => !category.parentId && !category.deletedAt).map((category) => {
+      const members = products.filter((product) => context.paths.get(product.categoryId).some((item) => item.id === category.id));
+      const variants = inventoryVariants(members);
       return {
-        category: category.name,
-        totalProducts,
-        totalStock,
-        totalReviews,
-        avgRating: avgRating.toFixed(1),
+        category: category.name, totalProducts: members.length,
+        totalStock: variants.reduce((sum, variant) => sum + variant.stock.quantity, 0),
+        totalReviews: members.reduce((sum, product) => sum + product._count.reviews, 0),
+        avgRating: (members.reduce((sum, product) => sum + product.rating, 0) / (members.length || 1)).toFixed(1),
       };
     });
 
@@ -319,6 +299,7 @@ export const getCustomerInsights = async (req, res, next) => {
       include: {
         orders: {
           where: {
+            isDemo: false,
             status: { notIn: ['CANCELLED', 'RETURNED'] },
           },
         },

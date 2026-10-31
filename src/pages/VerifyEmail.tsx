@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { authAPI } from "../api/auth";
+import { describeApiError } from "../api/errors";
 import { Link, navigate, parseRoute, useRoute } from "../router";
 
 export default function VerifyEmail() {
@@ -52,8 +53,8 @@ export default function VerifyEmail() {
       await authAPI.verifyOtp(email, code);
       setMessage("Email verified. You can now sign in.");
       window.setTimeout(() => navigate(`/login?verified=1&email=${encodeURIComponent(email)}`), 800);
-    } catch (err: any) {
-      setError(err?.response?.data?.error || "Could not verify that OTP.");
+    } catch (err) {
+      setError(describeApiError(err, "Could not verify that OTP."));
     } finally {
       setLoading(false);
     }
@@ -72,8 +73,8 @@ export default function VerifyEmail() {
       setDigits(["", "", "", "", "", ""]);
       setMessage("A fresh OTP has been sent. The previous code is now void.");
       inputs.current[0]?.focus();
-    } catch (err: any) {
-      setError(err?.response?.data?.error || "Could not resend OTP.");
+    } catch (err) {
+      setError(describeApiError(err, "Could not resend OTP."));
     } finally {
       setResending(false);
     }

@@ -1,17 +1,19 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Link, navigate } from "../router";
-import { formatKES, useStore } from "../store/StoreContext";
+import { useCatalog } from "../store/CatalogContext";
+import { primaryImage } from "../store/catalogModel";
+import { formatKES } from "../utils/format";
 import { searchSuggestions } from "../utils/search";
 
 export function ProductSearch({ onNavigate }: { onNavigate?: () => void }) {
-  const { catalog, productWithStock } = useStore();
+  const { products, priceOf, status } = useCatalog();
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
   const [active, setActive] = useState(-1);
   const listId = useId();
   const activeOption = useRef<HTMLButtonElement>(null);
   const term = query.trim();
-  const suggestions = term ? searchSuggestions(term, catalog, 6).map(productWithStock) : [];
+  const suggestions = term ? searchSuggestions(term, products, 6) : [];
   const expanded = focused && Boolean(term);
   const activeIndex = Math.min(active, suggestions.length - 1);
 
@@ -86,7 +88,10 @@ export function ProductSearch({ onNavigate }: { onNavigate?: () => void }) {
       {expanded && (
         <div className="absolute inset-x-0 top-full z-50 mt-1 overflow-hidden rounded-sm border border-light-gray bg-white shadow-xl">
           <div id={listId} role="listbox" aria-label="Product suggestions" className="max-h-[50dvh] overflow-y-auto overscroll-contain">
-            {suggestions.map((product, index) => (
+            {suggestions.map((product, index) => {
+              const image = primaryImage(product);
+              const price = priceOf(product);
+              return (
               <button
                 key={product.id}
                 ref={index === activeIndex ? activeOption : undefined}
@@ -99,16 +104,27 @@ export function ProductSearch({ onNavigate }: { onNavigate?: () => void }) {
                 onClick={() => select(product.id)}
                 className={`flex w-full items-center gap-2 border-b border-light-gray/60 px-3 py-2 text-left last:border-0 hover:bg-warm-beige ${index === activeIndex ? "bg-warm-beige" : ""}`}
               >
-                <img src={product.image} alt="" width={40} height={40} className="h-10 w-10 shrink-0 rounded-sm object-cover" />
+                {image ? (
+                  <img src={image.url} alt="" width={40} height={40} className="h-10 w-10 shrink-0 rounded-sm object-cover" />
+                ) : (
+                  <span aria-hidden="true" className="h-10 w-10 shrink-0 rounded-sm bg-warm-beige" />
+                )}
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm text-brand-primary">{product.name}</span>
-                  <span className="block text-xs text-gray-500">{product.category}</span>
+                  <span className="block text-xs text-gray-500">{product.isDemo ? `Demo · ${product.categoryName}` : product.categoryName}</span>
                 </span>
-                <span className="shrink-0 text-xs font-bold text-brand-primary">{formatKES(product.price)}</span>
+                <span className="shrink-0 text-xs font-bold text-brand-primary">
+                  {price.isFromPrice ? "From " : ""}{formatKES(price.price)}
+                </span>
               </button>
-            ))}
+              );
+            })}
           </div>
-          {!suggestions.length && <p role="status" className="px-3 py-4 text-sm text-gray-500">No matches. Press Enter to search.</p>}
+          {!suggestions.length && (
+            <p role="status" className="px-3 py-4 text-sm text-gray-500">
+              {status === "ready" ? "No matches. Press Enter to search." : status === "loading" ? "Loading the catalog…" : "Suggestions are unavailable. Press Enter to search."}
+            </p>
+          )}
           <Link to={`/shop?q=${encodeURIComponent(term)}`} onClick={() => { close(); onNavigate?.(); }} className="block bg-brand-primary px-3 py-2.5 text-center text-xs font-semibold text-white hover:bg-brand-secondary hover:text-brand-primary">
             See all results for &quot;{term}&quot;
           </Link>

@@ -7,38 +7,22 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import api from '../api/client';
 import { isAxiosError, isCancel } from 'axios';
 import {
+  authAPI,
+  isUser,
   type Address,
+  type LoginErrorBody,
   type RegisterData,
   type User,
 } from '../api/auth';
-
-// Recreate authAPI locally to ensure all functions are available
-const authAPI = {
-  login: (data: any) => api.post('/auth/login', data),
-  register: (data: any) => api.post('/auth/register', data),
-  logout: () => api.post('/auth/logout'),
-  getMe: () => api.get<User>('/auth/me'),
-  refreshToken: (refreshToken: string) =>
-    api.post('/auth/refresh', { refreshToken }),
-  updateProfile: (data: Partial<User>) => api.put<User>('/auth/profile', data),
-  changePassword: (data: { currentPassword: string; newPassword: string }) =>
-    api.put('/auth/password', data),
-  verifyEmail: (token: string) => api.post('/auth/verify-email', { token }),
-  verifyOtp: (email: string, code: string) =>
-    api.post('/auth/verify-otp', { email, code }),
-  resendVerification: (email: string) =>
-    api.post('/auth/resend-verification', { email }),
-  addAddress: (address: Omit<Address, 'id'>) =>
-    api.post<Address>('/auth/addresses', address),
-  updateAddress: (id: string, address: Partial<Address>) =>
-    api.put<Address>(`/auth/addresses/${id}`, address),
-  deleteAddress: (id: string) => api.delete(`/auth/addresses/${id}`),
-  setDefaultAddress: (id: string) =>
-    api.put(`/auth/addresses/${id}/default`),
-};
+import {
+  CUSTOMER_SESSION_KEYS,
+  STORAGE_KEYS,
+  readStoredJson,
+  removeStoredKeys,
+  writeStoredJson,
+} from '../utils/storage';
 
 interface AuthContextValue {
   user: User | null;
@@ -56,27 +40,31 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 function persistSession(user: User, token: string, refreshToken: string) {
-  localStorage.setItem('user', JSON.stringify(user));
-  localStorage.setItem('token', token);
-  localStorage.setItem('refreshToken', refreshToken);
+  writeStoredJson(STORAGE_KEYS.customerUser, user);
+  localStorage.setItem(STORAGE_KEYS.customerToken, token);
+  localStorage.setItem(STORAGE_KEYS.customerRefreshToken, refreshToken);
+}
+
+function persistUser(user: User) {
+  writeStoredJson(STORAGE_KEYS.customerUser, user);
 }
 
 function clearSession() {
-  localStorage.removeItem('user');
-  localStorage.removeItem('token');
-  localStorage.removeItem('refreshToken');
+  removeStoredKeys(CUSTOMER_SESSION_KEYS);
+}
+
+function readStoredUser(): User | null {
+  if (!localStorage.getItem(STORAGE_KEYS.customerToken)) return null;
+  const stored = readStoredJson(STORAGE_KEYS.customerUser);
+  return isUser(stored) ? stored : null;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(() => {
-    const stored = localStorage.getItem('user');
-    return stored ? (JSON.parse(stored) as User) : null;
-  });
+  const [user, setUser] = useState<User | null>(readStoredUser);
   const [loading, setLoading] = useState(true);
 
   const refreshUser = useCallback(async () => {
-    const token = localStorage.getItem('token');
-    if (!token) {
+    if (!localStorage.getItem(STORAGE_KEYS.customerToken)) {
       setUser(null);
       return;
     }
@@ -84,7 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const { data } = await authAPI.getMe();
       setUser(data);
-      localStorage.setItem('user', JSON.stringify(data));
+      persistUser(data);
     } catch (error) {
       if (isCancel(error)) return;
       if (isAxiosError(error) && [401, 403].includes(error.response?.status ?? 0)) {
@@ -109,12 +97,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       persistSession(data.user, data.token, data.refreshToken);
       setUser(data.user);
       return { ok: true };
-    } catch (error: any) {
+    } catch (error) {
+      const body: LoginErrorBody | undefined = isAxiosError<LoginErrorBody>(error) ? error.response?.data : undefined;
       return {
         ok: false,
-        error: error?.response?.data?.error || 'Could not sign in. Please check your details.',
-        requiresOtp: Boolean(error?.response?.data?.requiresOtp),
-        email: error?.response?.data?.email,
+        error: body?.error || 'Could not sign in. Please check your details.',
+        requiresOtp: Boolean(body?.requiresOtp),
+        email: body?.email,
       };
     }
   }, []);
@@ -142,7 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: updated } = await authAPI.updateProfile(data);
     setUser((prev) => {
       const next = prev ? { ...prev, ...updated } : updated;
-      localStorage.setItem('user', JSON.stringify(next));
+      persistUser(next);
       return next;
     });
   }, []);
@@ -151,9 +140,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data } = await authAPI.addAddress(address);
     setUser((prev) => {
       if (!prev) return prev;
-      const addresses = [...(prev.addresses ?? []), data];
-      const next = { ...prev, addresses };
-      localStorage.setItem('user', JSON.stringify(next));
+      const next = { ...prev, addresses: [...(prev.addresses ?? []), data] };
+      persistUser(next);
       return next;
     });
   }, []);
@@ -162,11 +150,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data } = await authAPI.updateAddress(id, address);
     setUser((prev) => {
       if (!prev) return prev;
-      const addresses = (prev.addresses ?? []).map((item) =>
-        item.id === id ? data : item
-      );
-      const next = { ...prev, addresses };
-      localStorage.setItem('user', JSON.stringify(next));
+      const next = { ...prev, addresses: (prev.addresses ?? []).map((item) => (item.id === id ? data : item)) };
+      persistUser(next);
       return next;
     });
   }, []);
@@ -175,9 +160,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await authAPI.deleteAddress(id);
     setUser((prev) => {
       if (!prev) return prev;
-      const addresses = (prev.addresses ?? []).filter((item) => item.id !== id);
-      const next = { ...prev, addresses };
-      localStorage.setItem('user', JSON.stringify(next));
+      const next = { ...prev, addresses: (prev.addresses ?? []).filter((item) => item.id !== id) };
+      persistUser(next);
       return next;
     });
   }, []);
@@ -186,7 +170,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: updated } = await authAPI.updateProfile({ promotionalEmails: enabled });
     setUser((prev) => {
       const next = prev ? { ...prev, ...updated } : updated;
-      localStorage.setItem('user', JSON.stringify(next));
+      persistUser(next);
       return next;
     });
   }, []);

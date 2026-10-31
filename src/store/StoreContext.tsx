@@ -1,272 +1,79 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
   useReducer,
   type ReactNode,
 } from "react";
-import { PRODUCTS, CATEGORIES, type Product, type Category } from "../data/products";
-import { settingsAPI } from "../api/settings";
 import { useAuth } from "../contexts/AuthContext";
+import { isRecord, readStoredJson, shopperStateKey, writeStoredJson } from "../utils/storage";
 
-/**
- * Legacy image-host migration fix.
- *
- * The image host moved from flat URLs (`/api/img/<file>`) to namespaced
- * URLs (`/api/img/vicciv254/ecormerce/<file>`). Any admin override / custom
- * product / custom designer saved *before* the migration still has the old,
- * now-404ing URL baked in — and overrides always win over the corrected
- * base data in `data/products.ts` / `data/showroom.ts`, so the broken links
- * kept showing even after the base files were fixed.
- *
- * `fixLegacyImageUrl` rewrites any old-format URL to the new namespaced
- * path. It's a no-op for URLs that are already correct or that don't point
- * at our image host at all (e.g. stock photos used as designer defaults).
- */
-const LEGACY_IMG_HOST_RE =
-  /^(https:\/\/my-image-host\.victor-f6f\.workers\.dev\/api\/img\/)(\d{13}-)/;
-const NAMESPACE = "vicciv254/ecormerce/";
-
-function fixLegacyImageUrl(url: string | undefined | null): string | undefined | null {
-  if (!url) return url;
-  if (!LEGACY_IMG_HOST_RE.test(url)) return url; // already fixed, or unrelated host
-  return url.replace(LEGACY_IMG_HOST_RE, `$1${NAMESPACE}$2`);
-}
-
-/** Deep-fixes every image-bearing field on an AdminData blob (overrides + custom entries). */
-function sanitizeAdminData(data: AdminData): AdminData {
-  const fixProduct = <T extends Partial<Product>>(p: T): T => ({
-    ...p,
-    ...(p.image !== undefined ? { image: fixLegacyImageUrl(p.image) as string } : {}),
-    ...(p.main_image !== undefined ? { main_image: fixLegacyImageUrl(p.main_image) as string } : {}),
-    ...(p.gallery_images !== undefined
-      ? { gallery_images: p.gallery_images.map((g) => fixLegacyImageUrl(g) as string) }
-      : {}),
-  });
-
-  const fixEntry = <T extends { image?: string }>(d: T): T => ({
-    ...d,
-    ...(d.image !== undefined ? { image: fixLegacyImageUrl(d.image) as string } : {}),
-  });
-
-  return {
-    ...data,
-    productOverrides: Object.fromEntries(
-      Object.entries(data.productOverrides ?? {}).map(([id, ov]) => [id, fixProduct(ov)])
-    ),
-    customProducts: (data.customProducts ?? []).map(fixProduct),
-    designerOverrides: Object.fromEntries(
-      Object.entries(data.designerOverrides ?? {}).map(([id, ov]) => [id, fixEntry(ov)])
-    ),
-    customDesigners: (data.customDesigners ?? []).map(fixEntry),
-    categoryOverrides: Object.fromEntries(
-      Object.entries(data.categoryOverrides ?? {}).map(([slug, ov]) => [slug, fixEntry(ov)])
-    ),
-    customCategories: (data.customCategories ?? []).map(fixEntry),
-  };
-}
-
-export const BASE_DESIGNERS = [
-  {
-    id: "amina",
-    name: "Amina Designs",
-    specialty: "Kitenge Couture & Resort",
-    location: "Mombasa",
-    image: "https://my-image-host.victor-f6f.workers.dev/api/img/vicciv254/ecormerce/1782863797948-pasted-1782863794772.png",
-    spotlightTitle: "Amina Designs: Blending Tradition with Modernity",
-    spotlightText: "Amina Mohamed fuses heritage Ankara and kitenge craft with contemporary silhouettes, leading our Resort 2026 line with vibrant, coast-ready pieces for the whole family.",
-  },
-  {
-    id: "kamau",
-    name: "Kamau Studio",
-    specialty: "Modern Tailoring & Summer",
-    location: "Nairobi",
-    image: "https://my-image-host.victor-f6f.workers.dev/api/img/vicciv254/ecormerce/1782863651902-pasted-1782863648177.png",
-    spotlightTitle: "Kamau Studio: The Art of Effortless Tailoring",
-    spotlightText: "Known for clean lines and breathable fabrics, Kamau Studio defines our Summer 2026 essentials — relaxed tailoring that moves from boardroom to beach.",
-  },
-  {
-    id: "fatma",
-    name: "Fatma Collective",
-    specialty: "Luxe Evening & Outerwear",
-    location: "Mombasa",
-    image: "https://my-image-host.victor-f6f.workers.dev/api/img/vicciv254/ecormerce/1782863924527-pasted-1782863922363.png",
-    spotlightTitle: "Fatma Collective: Drama After Dark",
-    spotlightText: "Fatma Collective brings structured outerwear and statement evening looks to our Fall/Winter 2026 collection — rich textures, bold confidence.",
-  },
-  {
-    id: "omar",
-    name: "Omar Fashion",
-    specialty: "Street Style & Denim",
-    location: "Mombasa",
-    image: "https://my-image-host.victor-f6f.workers.dev/api/img/vicciv254/ecormerce/1782862623421-pasted-1782862527863.png",
-    spotlightTitle: "Omar Fashion: Streetwear with Soul",
-    spotlightText: "Omar's edit champions everyday street style — denim, graphic tees and easy layering that keeps Mombasa's youth looking sharp season-round.",
-  },
-];
-
-export type CartItem = {
+/** A cart line names one sellable SKU; labels and prices always come from the catalog API. */
+export type CartLine = {
   productId: string;
-  qty: number;
-  size?: string;
-  color?: string;
+  variantId: string;
+  quantity: number;
 };
 
-export type Discount = {
-  id: string;
-  name: string;
-  scope: "all" | "category" | "products";
-  categorySlug?: string;
-  productIds: string[];
-  percent: number;
-  startDate: string; // ISO date
-  endDate: string; // ISO date
-};
-
-/** Admin-editable data (stock + discounts + products/tags). This is what gets "saved". */
-export type AdminData = {
-  stock: Record<string, number>;
-  discounts: Discount[];
-  /** Per-product tag overrides (replaces the base tags when present). */
-  tagOverrides: Record<string, string[]>;
-  /** Admin-added products. */
-  customProducts: Product[];
-  /** Full-product overrides for base products (name, price, designer, etc.). */
-  productOverrides: Record<string, Partial<Product>>;
-  /** Admin-added categories (slug → name). */
-  customCategories: { name: string; slug: string; image: string }[];
-  /** Category overrides for base or custom categories. */
-  categoryOverrides: Record<string, Partial<Category>>;
-  /** Admin-added designers (id, name + showroom spotlight info). */
-  customDesigners: CustomDesigner[];
-  /** Designer overrides for base or custom designers. */
-  designerOverrides: Record<string, Partial<CustomDesigner>>;
-  /** Hidden product ids. */
-  deletedProductIds: string[];
-  /** Hidden category slugs. */
-  deletedCategorySlugs: string[];
-  /** Hidden designer ids. */
-  deletedDesignerIds: string[];
-};
-
-export type CustomDesigner = {
-  id: string;
-  name: string;
-  specialty?: string;
-  location?: string;
-  image?: string;
-  spotlightTitle?: string;
-  spotlightText?: string;
-};
-
-type State = {
-  cart: CartItem[];
+type PersonalState = {
+  cart: CartLine[];
   wishlist: string[];
+};
+
+type State = PersonalState & {
+  /** Account whose data `cart`/`wishlist` hold; persisted only while it is still current. */
   personalOwner: string | null;
-  /** The persisted/committed admin data — what customers see. */
-  admin: AdminData;
 };
 
 type Action =
-  | { type: "ADD"; item: CartItem }
+  | { type: "ADD"; line: CartLine }
   | { type: "REMOVE"; index: number }
-  | { type: "QTY"; index: number; qty: number }
+  | { type: "QUANTITY"; index: number; quantity: number }
   | { type: "CLEAR_CART" }
-  | { type: "TOGGLE_WISH"; id: string }
-  | { type: "SET_PERSONAL"; owner: string | null; cart: CartItem[]; wishlist: string[] }
-  | { type: "COMMIT_ADMIN"; data: AdminData };
+  | { type: "TOGGLE_WISH"; productId: string }
+  | { type: "SET_PERSONAL"; owner: string | null; personal: PersonalState };
 
-const initialStock: Record<string, number> = Object.fromEntries(
-  PRODUCTS.map((p) => [p.id, p.stock])
-);
-
-const initialAdmin: AdminData = {
-  stock: initialStock,
-  discounts: [],
-  tagOverrides: {},
-  customProducts: [],
-  productOverrides: {},
-  customCategories: [],
-  categoryOverrides: {},
-  customDesigners: [],
-  designerOverrides: {},
-  deletedProductIds: [],
-  deletedCategorySlugs: [],
-  deletedDesignerIds: [],
-};
-
-function personalKey(userId?: string | null) {
-  return userId ? `nmb-store:${userId}` : "nmb-store:guest";
+function isCartLine(value: unknown): value is CartLine {
+  return isRecord(value) && typeof value.productId === "string" && value.productId !== "" &&
+    typeof value.variantId === "string" && value.variantId !== "" &&
+    Number.isInteger(value.quantity) && Number(value.quantity) > 0;
 }
 
-function loadPersonal(userId?: string | null): Pick<State, "cart" | "wishlist"> {
-  try {
-    const raw = localStorage.getItem(personalKey(userId));
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      return {
-        cart: parsed.cart ?? [],
-        wishlist: parsed.wishlist ?? [],
-      };
-    }
-  } catch {
-    /* ignore */
-  }
-  return { cart: [], wishlist: [] };
+function loadPersonal(owner: string | null): PersonalState {
+  const stored = readStoredJson(shopperStateKey(owner));
+  if (!isRecord(stored)) return { cart: [], wishlist: [] };
+  return {
+    cart: Array.isArray(stored.cart) ? stored.cart.filter(isCartLine) : [],
+    wishlist: Array.isArray(stored.wishlist)
+      ? [...new Set(stored.wishlist.filter((id): id is string => typeof id === "string" && id !== ""))]
+      : [],
+  };
 }
 
-function load(): State {
-  try {
-    const raw = localStorage.getItem("nmb-admin-store") ?? localStorage.getItem("nmb-store");
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      return {
-        ...loadPersonal(null),
-        personalOwner: null,
-        admin: sanitizeAdminData({
-          stock: { ...initialStock, ...(parsed.admin?.stock ?? {}) },
-          discounts: parsed.admin?.discounts ?? [],
-          tagOverrides: parsed.admin?.tagOverrides ?? {},
-          customProducts: parsed.admin?.customProducts ?? [],
-          productOverrides: parsed.admin?.productOverrides ?? {},
-          customCategories: parsed.admin?.customCategories ?? [],
-          categoryOverrides: parsed.admin?.categoryOverrides ?? {},
-          customDesigners: parsed.admin?.customDesigners ?? [],
-          designerOverrides: parsed.admin?.designerOverrides ?? {},
-          deletedProductIds: parsed.admin?.deletedProductIds ?? [],
-          deletedCategorySlugs: parsed.admin?.deletedCategorySlugs ?? [],
-          deletedDesignerIds: parsed.admin?.deletedDesignerIds ?? [],
-        }),
-      };
-    }
-  } catch {
-    /* ignore */
-  }
-  return { cart: [], wishlist: [], personalOwner: null, admin: initialAdmin };
+function wholeQuantity(quantity: number) {
+  return Number.isFinite(quantity) ? Math.max(1, Math.floor(quantity)) : 1;
 }
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
     case "ADD": {
-      const idx = state.cart.findIndex(
-        (c) =>
-          c.productId === action.item.productId &&
-          c.size === action.item.size &&
-          c.color === action.item.color
+      const quantity = wholeQuantity(action.line.quantity);
+      const index = state.cart.findIndex(
+        (line) => line.productId === action.line.productId && line.variantId === action.line.variantId,
       );
-      if (idx >= 0) {
-        const cart = [...state.cart];
-        cart[idx] = { ...cart[idx], qty: cart[idx].qty + action.item.qty };
-        return { ...state, cart };
-      }
-      return { ...state, cart: [...state.cart, action.item] };
+      if (index < 0) return { ...state, cart: [...state.cart, { ...action.line, quantity }] };
+      const cart = [...state.cart];
+      cart[index] = { ...cart[index], quantity: cart[index].quantity + quantity };
+      return { ...state, cart };
     }
     case "REMOVE":
-      return { ...state, cart: state.cart.filter((_, i) => i !== action.index) };
-    case "QTY": {
+      return { ...state, cart: state.cart.filter((_, index) => index !== action.index) };
+    case "QUANTITY": {
+      if (!state.cart[action.index]) return state;
       const cart = [...state.cart];
-      cart[action.index] = { ...cart[action.index], qty: Math.max(1, action.qty) };
+      cart[action.index] = { ...cart[action.index], quantity: wholeQuantity(action.quantity) };
       return { ...state, cart };
     }
     case "CLEAR_CART":
@@ -274,172 +81,68 @@ function reducer(state: State, action: Action): State {
     case "TOGGLE_WISH":
       return {
         ...state,
-        wishlist: state.wishlist.includes(action.id)
-          ? state.wishlist.filter((w) => w !== action.id)
-          : [...state.wishlist, action.id],
+        wishlist: state.wishlist.includes(action.productId)
+          ? state.wishlist.filter((id) => id !== action.productId)
+          : [...state.wishlist, action.productId],
       };
     case "SET_PERSONAL":
-      return { ...state, personalOwner: action.owner, cart: action.cart, wishlist: action.wishlist };
-    case "COMMIT_ADMIN":
-      return { ...state, admin: sanitizeAdminData(action.data) };
+      return { personalOwner: action.owner, ...action.personal };
     default:
       return state;
   }
 }
 
-/* ---------- Discount helpers ---------- */
-export function isDiscountActive(d: Discount, now = new Date()): boolean {
-  const start = new Date(d.startDate);
-  const end = new Date(d.endDate);
-  end.setHours(23, 59, 59, 999);
-  return now >= start && now <= end;
-}
-
-export function discountAppliesTo(d: Discount, p: Product): boolean {
-  if (d.scope === "all") return true;
-  if (d.scope === "category") return p.categorySlug === d.categorySlug;
-  return d.productIds.includes(p.id);
-}
-
-/** Returns best active discount percent for a product. */
-export function bestDiscountPercent(p: Product, discounts: Discount[]): number {
-  let best = 0;
-  for (const d of discounts) {
-    if (isDiscountActive(d) && discountAppliesTo(d, p)) {
-      best = Math.max(best, d.percent);
-    }
-  }
-  return best;
-}
-
-type Ctx = {
+type StoreValue = {
   state: State;
-  addToCart: (item: CartItem) => void;
+  addToCart: (line: CartLine) => void;
   removeFromCart: (index: number) => void;
-  setQty: (index: number, qty: number) => void;
+  setQuantity: (index: number, quantity: number) => void;
   clearCart: () => void;
-  toggleWish: (id: string) => void;
-  commitAdmin: (data: AdminData) => void;
-  publishAdmin: (data: AdminData) => Promise<void>;
+  toggleWish: (productId: string) => void;
   cartCount: number;
-  /** Returns product with current stock AND active discount applied. */
-  productWithStock: (p: Product) => Product;
-  /** Full catalog: base products + custom products, with tag overrides applied. */
-  catalog: Product[];
-  /** Base + custom categories. */
-  allCategories: { name: string; slug: string; image: string }[];
-  /** Base (4) + admin-added designers. */
-  allDesigners: CustomDesigner[];
 };
 
-const StoreCtx = createContext<Ctx | null>(null);
+const StoreContext = createContext<StoreValue | null>(null);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const [state, dispatch] = useReducer(reducer, undefined, load);
+  const owner = user?.id ?? null;
+  const [state, dispatch] = useReducer(reducer, owner, (initialOwner): State => ({
+    personalOwner: initialOwner,
+    ...loadPersonal(initialOwner),
+  }));
 
   useEffect(() => {
-    localStorage.setItem("nmb-admin-store", JSON.stringify({ admin: state.admin }));
-  }, [state.admin]);
+    dispatch({ type: "SET_PERSONAL", owner, personal: loadPersonal(owner) });
+  }, [owner]);
 
   useEffect(() => {
-    dispatch({ type: "SET_PERSONAL", owner: user?.id ?? null, ...loadPersonal(user?.id) });
-  }, [user?.id]);
+    // An account switch renders once with the previous owner's data; never save it under the new key.
+    if (state.personalOwner !== owner) return;
+    writeStoredJson(shopperStateKey(owner), { cart: state.cart, wishlist: state.wishlist });
+  }, [state.cart, state.wishlist, state.personalOwner, owner]);
 
-  useEffect(() => {
-    if (state.personalOwner !== (user?.id ?? null)) return;
-    localStorage.setItem(personalKey(user?.id), JSON.stringify({ cart: state.cart, wishlist: state.wishlist }));
-  }, [state.cart, state.wishlist, state.personalOwner, user?.id]);
+  const addToCart = useCallback((line: CartLine) => dispatch({ type: "ADD", line }), []);
+  const removeFromCart = useCallback((index: number) => dispatch({ type: "REMOVE", index }), []);
+  const setQuantity = useCallback((index: number, quantity: number) => dispatch({ type: "QUANTITY", index, quantity }), []);
+  const clearCart = useCallback(() => dispatch({ type: "CLEAR_CART" }), []);
+  const toggleWish = useCallback((productId: string) => dispatch({ type: "TOGGLE_WISH", productId }), []);
 
-  useEffect(() => {
-    settingsAPI.getAdminData()
-      .then(({ data }) => {
-        if (!data) return;
-        const fixed = sanitizeAdminData(data);
-        dispatch({ type: "COMMIT_ADMIN", data: fixed });
+  const value = useMemo<StoreValue>(() => ({
+    state,
+    addToCart,
+    removeFromCart,
+    setQuantity,
+    clearCart,
+    toggleWish,
+    cartCount: state.cart.reduce((sum, line) => sum + line.quantity, 0),
+  }), [state, addToCart, removeFromCart, setQuantity, clearCart, toggleWish]);
 
-        // If this session is an admin and the sync fix actually changed something,
-        // publish the corrected data back so the source of truth is repaired too
-        // (otherwise every visitor keeps re-downloading the stale URLs).
-        const isAdmin = Boolean(localStorage.getItem("adminToken"));
-        if (isAdmin && JSON.stringify(fixed) !== JSON.stringify(data)) {
-          settingsAPI.publishAdminData(fixed).catch(() => undefined);
-        }
-      })
-      .catch(() => undefined);
-  }, []);
-
-  const catalog = useMemo<Product[]>(() => {
-    const deletedProductIds = new Set(state.admin.deletedProductIds);
-    const deletedCategorySlugs = new Set(state.admin.deletedCategorySlugs);
-    const base = [...PRODUCTS, ...state.admin.customProducts]
-      .filter((p) => !deletedProductIds.has(p.id) && !deletedCategorySlugs.has(p.categorySlug));
-
-    return base.map((p) => {
-      const tagOv = state.admin.tagOverrides[p.id];
-      const fullOv = state.admin.productOverrides[p.id];
-      let next = p;
-      if (fullOv) next = { ...next, ...fullOv };
-      if (tagOv) next = { ...next, tags: tagOv };
-      return next;
-    });
-  }, [state.admin.customProducts, state.admin.tagOverrides, state.admin.productOverrides, state.admin.deletedProductIds, state.admin.deletedCategorySlugs]);
-
-  const value = useMemo<Ctx>(
-    () => ({
-      state,
-      addToCart: (item) => dispatch({ type: "ADD", item }),
-      removeFromCart: (index) => dispatch({ type: "REMOVE", index }),
-      setQty: (index, qty) => dispatch({ type: "QTY", index, qty }),
-      clearCart: () => dispatch({ type: "CLEAR_CART" }),
-      toggleWish: (id) => dispatch({ type: "TOGGLE_WISH", id }),
-      commitAdmin: (data) => dispatch({ type: "COMMIT_ADMIN", data }),
-      publishAdmin: async (data) => {
-        const response = await settingsAPI.publishAdminData(data);
-        dispatch({ type: "COMMIT_ADMIN", data: response.data });
-      },
-      cartCount: state.cart.reduce((s, c) => s + c.qty, 0),
-      productWithStock: (p) => {
-        const stock = state.admin.stock[p.id] ?? p.stock;
-        const pct = bestDiscountPercent(p, state.admin.discounts);
-        if (pct > 0) {
-          const discountedPrice = Math.round((p.price * (1 - pct / 100)) / 10) * 10;
-          return {
-            ...p,
-            stock,
-            comparePrice: p.price,
-            price: discountedPrice,
-            discountPercent: pct,
-          };
-        }
-        return { ...p, stock };
-      },
-      catalog,
-      allCategories: [...CATEGORIES, ...state.admin.customCategories]
-        .filter((c) => !state.admin.deletedCategorySlugs.includes(c.slug))
-        .map((c) => {
-          const override = state.admin.categoryOverrides[c.slug];
-          return override ? { ...c, ...override } : c;
-        }),
-      allDesigners: [...BASE_DESIGNERS, ...state.admin.customDesigners]
-        .filter((d) => !state.admin.deletedDesignerIds.includes(d.id))
-        .map((d) => {
-          const override = state.admin.designerOverrides[d.id];
-          return override ? { ...d, ...override } : d;
-        }),
-    }),
-    [state, catalog]
-  );
-
-  return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>;
+  return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
 
 export function useStore() {
-  const ctx = useContext(StoreCtx);
-  if (!ctx) throw new Error("useStore must be used within StoreProvider");
-  return ctx;
-}
-
-export function formatKES(n: number) {
-  return "KES " + n.toLocaleString("en-KE");
+  const context = useContext(StoreContext);
+  if (!context) throw new Error("useStore must be used within StoreProvider");
+  return context;
 }

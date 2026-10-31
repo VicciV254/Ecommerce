@@ -5,14 +5,19 @@ import { test } from 'node:test';
 
 const cwd = fileURLToPath(new URL('../../', import.meta.url));
 
-for (const script of ['scripts/reset-database.js', 'prisma/seed.js']) {
-  test(`${script} refuses to run without explicit local-reset consent`, () => {
+for (const [script, refusal] of [
+  ['scripts/reset-database.js', /explicit ALLOW_LOCAL_DATABASE_RESET=true/],
+  ['prisma/seed.js', /destructive legacy seed is retired/],
+  ['scripts/init-demo.js', /explicit ALLOW_DEMO_INITIALIZATION=true/],
+]) {
+  test(`${script} refuses an unauthorized local write`, () => {
     const result = spawnSync(process.execPath, [script], {
       cwd,
       env: {
         ...process.env,
         NODE_ENV: 'test',
         ALLOW_LOCAL_DATABASE_RESET: 'false',
+        ALLOW_DEMO_INITIALIZATION: 'false',
         DATABASE_URL: 'postgresql://test:local_only@127.0.0.1:1/apex_test',
         DIRECT_URL: 'postgresql://test:local_only@127.0.0.1:1/apex_test',
       },
@@ -21,6 +26,6 @@ for (const script of ['scripts/reset-database.js', 'prisma/seed.js']) {
     });
     assert.ifError(result.error);
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /explicit ALLOW_LOCAL_DATABASE_RESET=true/);
+    assert.match(result.stderr, refusal);
   });
 }

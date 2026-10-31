@@ -1,8 +1,22 @@
-import type { Route } from "@playwright/test";
-import { customer, expect, order, signInCustomer, test } from "./fixtures";
+import type { Request, Route } from "@playwright/test";
+import {
+  ORIGIN,
+  adminSnapshot,
+  customer,
+  expect,
+  linenCartLine,
+  order,
+  publishedStorefront,
+  shopperState,
+  signInCustomer,
+  signInStaff,
+  storefrontDraft,
+  test,
+} from "./fixtures";
 
 test("search supports arrow selection and Escape before dismissing its mobile drawer", async ({ page, isMobile }) => {
   await page.goto("/#/shop");
+  await expect(page.getByRole("heading", { name: "All Products", exact: true })).toBeVisible();
   const menu = page.getByRole("button", { name: "Menu", exact: true });
   if (isMobile) {
     await menu.focus();
@@ -13,13 +27,14 @@ test("search supports arrow selection and Escape before dismissing its mobile dr
   await input.press("ArrowDown");
   const first = page.getByRole("option").first();
   await expect(first).toContainText("Linen Short-Sleeve Shirt");
+  await expect(first).toContainText("KES 900");
   await expect(input).toHaveAttribute("aria-activedescendant", (await first.getAttribute("id"))!);
   await input.press("Escape");
   await expect(page.getByRole("listbox")).toHaveCount(0);
   if (isMobile) await expect(page.getByRole("dialog", { name: "Navigation menu" })).toBeVisible();
   await input.press("ArrowDown");
   await input.press("Enter");
-  await expect(page).toHaveURL(/#\/product\/mens-fashion-1$/);
+  await expect(page).toHaveURL(/#\/product\/prod-linen-shirt$/);
   await expect(page.getByRole("heading", { name: "Linen Short-Sleeve Shirt", exact: true })).toBeVisible();
   if (isMobile) await expect(menu).toBeFocused();
 });
@@ -47,6 +62,7 @@ test("icon links have names and desktop modifier-click opens a separate tab", as
 test("mobile drawers contain focus, restore it, and adapt from narrow phones to desktop", async ({ page, isMobile }) => {
   test.skip(!isMobile, "The mobile project covers drawer widths and the desktop transition.");
   await page.goto("/#/shop");
+  await expect(page.getByRole("heading", { name: "All Products", exact: true })).toBeVisible();
   const menu = page.getByRole("button", { name: "Menu", exact: true });
   await menu.focus();
   await page.keyboard.press("Enter");
@@ -99,7 +115,7 @@ test("mobile drawers contain focus, restore it, and adapt from narrow phones to 
 
 test("receipt and cancellation dialogs preserve nested focus and expose a failed operation", async ({ page, context }) => {
   await signInCustomer(page);
-  await context.route("**/api/orders?*", (route) => route.fulfill({ json: { orders: [order] } }));
+  await context.route("**/api/orders?*", (route) => route.fulfill({ json: { orders: [order], pagination: { page: 1, limit: 100, total: 1, pages: 1 } } }));
   let capture!: (route: Route) => void;
   const pending = new Promise<Route>((resolve) => { capture = resolve; });
   await context.route("**/api/orders/browser-order/cancel", capture);
@@ -109,6 +125,7 @@ test("receipt and cancellation dialogs preserve nested focus and expose a failed
   await page.keyboard.press("Enter");
   const receipt = page.getByRole("dialog", { name: "Receipt Details" });
   await expect(receipt.getByRole("button", { name: "Close", exact: true })).toBeFocused();
+  await expect(receipt).toContainText("Payment: M-Pesa (pending)");
   const cancel = receipt.getByRole("button", { name: "Cancel & Refund" });
   await cancel.focus();
   await page.keyboard.press("Enter");
@@ -131,22 +148,32 @@ test("receipt and cancellation dialogs preserve nested focus and expose a failed
   await expect(details).toBeFocused();
 });
 
+test("an unavailable order history is reported instead of shown as empty", async ({ page }) => {
+  await signInCustomer(page);
+  await page.goto("/#/account/orders");
+  await expect(page.getByRole("heading", { name: "Orders are unavailable" })).toBeVisible();
+  await expect(page.getByText("No orders yet.")).toHaveCount(0);
+});
+
 test("product editor controls remain reachable and save errors are announced inside the modal", async ({ page, context }) => {
-  await context.addInitScript(() => {
-    localStorage.setItem("adminToken", "browser-only-staff-token");
-    localStorage.setItem("adminUser", JSON.stringify({ id: "browser-admin", email: "admin@example.test", username: "Browser staff", role: "ADMIN" }));
+  await signInStaff(page);
+  const saves: { method: string; body: unknown }[] = [];
+  await context.route("**/api/products/prod-linen-shirt", async (route) => {
+    if (route.request().method() === "GET") return route.fallback();
+    saves.push({ method: route.request().method(), body: route.request().postDataJSON() });
+    return route.fulfill({ status: 400, json: { error: "Invalid request", details: [{ path: "price", message: "Number must be greater than 0" }] } });
   });
   await page.goto("/#/admin");
   await page.getByRole("button", { name: "Catalog", exact: true }).click();
-  const product = page.getByRole("button", { name: /Linen Short-Sleeve Shirt/ });
+  await expect(page.getByRole("button", { name: `Edit ${adminSnapshot.products.at(-1)!.name}` })).toBeVisible();
+  const product = page.getByRole("button", { name: "Edit Linen Short-Sleeve Shirt" });
   await product.focus();
   await page.keyboard.press("Enter");
   const editor = page.getByRole("dialog", { name: "Edit product", exact: true });
   const close = editor.getByRole("button", { name: "Close product editor" });
   await expect(close).toBeInViewport();
   await expect(editor.getByRole("textbox", { name: "Name", exact: true })).toHaveValue("Linen Short-Sleeve Shirt");
-  await editor.getByRole("spinbutton", { name: "Price (KES)" }).fill("1000");
-  await editor.getByRole("button", { name: "Apply", exact: true }).click();
+  await editor.getByRole("spinbutton", { name: "Price (KES)" }).fill("1200");
   const createCategory = editor.getByRole("button", { name: "Create category" });
   await createCategory.focus();
   await page.keyboard.press("Enter");
@@ -157,31 +184,79 @@ test("product editor controls remain reachable and save errors are announced ins
   await page.keyboard.press("Escape");
   await expect(category).toHaveCount(0);
   await expect(createCategory).toBeFocused();
+
+  await editor.getByRole("button", { name: "Save Product" }).click();
+  await expect(editor.getByRole("alert")).toHaveText("Invalid request: price: Number must be greater than 0");
+  expect(saves).toHaveLength(1);
+  expect(saves[0].method).toBe("PUT");
+  expect(saves[0].body).toMatchObject({ name: "Linen Short-Sleeve Shirt", price: 1200, categoryId: "cat-shirts" });
+  expect(saves[0].body).not.toHaveProperty("variants");
+  expect(saves[0].body).not.toHaveProperty("images");
   await page.keyboard.press("Escape");
   await expect(editor).toHaveCount(0);
   await expect(product).toBeFocused();
-  const save = page.getByRole("button", { name: "Save Changes", exact: true });
-  await save.click();
-  const confirmation = page.getByRole("dialog", { name: "Save Changes?" });
-  await confirmation.getByRole("button", { name: "Yes, Save" }).click();
-  await expect(confirmation.getByRole("status")).toContainText("Could not publish changes");
-  await page.keyboard.press("Escape");
-  await expect(confirmation).toHaveCount(0);
-  await expect(save).toBeFocused();
 });
 
-test("paused checkout creates no orders or receipts and preserves the cart", async ({ page, context }) => {
-  await signInCustomer(page, true);
-  const receiptsKey = `nmb-receipts-${customer.id}`;
-  const history = JSON.stringify([{
-    ...order,
-    updatedAt: order.createdAt,
-    address: {
-      name: "Browser Customer", email: customer.email, phone: customer.phone,
-      address: "Test street", city: "Mombasa", county: "Mombasa",
-    },
-  }]);
-  await context.addInitScript(({ key, value }) => localStorage.setItem(key, value), { key: receiptsKey, value: history });
+test("storefront drafts save and publish with versions without leaking to shoppers", async ({ page, context }) => {
+  await signInStaff(page);
+  const writes: { path: string; body: { version: number; settings?: { brand: { name: string } } } }[] = [];
+  let publishedName = publishedStorefront.settings.brand.name;
+  let draftVersion = storefrontDraft.version;
+  let draftSettings = storefrontDraft.settings;
+  await context.route("**/api/settings/storefront/draft", async (route) => {
+    const request = route.request();
+    if (request.method() === "PUT") {
+      const body = request.postDataJSON();
+      writes.push({ path: "draft", body });
+      if (body.version !== draftVersion) return route.fulfill({ status: 409, json: { error: "The storefront changed. Reload before saving your draft." } });
+      draftVersion += 1;
+      draftSettings = body.settings;
+    }
+    return route.fulfill({ json: { ...storefrontDraft, version: draftVersion, settings: draftSettings } });
+  });
+  await context.route("**/api/settings/storefront/publish", async (route) => {
+    const body = route.request().postDataJSON();
+    writes.push({ path: "publish", body });
+    publishedName = draftSettings.brand.name;
+    draftVersion += 1;
+    return route.fulfill({ json: { ...publishedStorefront, version: draftVersion, settings: draftSettings } });
+  });
+  await context.route("**/api/settings/storefront", (route) =>
+    route.fulfill({ json: { ...publishedStorefront, settings: { ...publishedStorefront.settings, brand: { ...publishedStorefront.settings.brand, name: publishedName } } } }));
+
+  await page.goto("/#/admin");
+  await page.getByRole("button", { name: "Storefront", exact: true }).click();
+  const storeName = page.getByRole("textbox", { name: "Store name" });
+  await storeName.fill("Apex Cart Draft");
+  await page.getByRole("button", { name: "Preview Draft" }).click();
+  await expect(page.getByRole("region", { name: "Draft preview" })).toContainText("Apex Cart Draft");
+  await expect(page.getByRole("button", { name: "Publish" })).toBeDisabled();
+  await page.getByRole("button", { name: "Save Draft" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Draft saved" })).toBeVisible();
+  expect(writes).toEqual([{ path: "draft", body: expect.objectContaining({ version: 5 }) }]);
+  expect(writes[0].body.settings?.brand.name).toBe("Apex Cart Draft");
+
+  const shopper = await context.newPage();
+  await shopper.goto("/");
+  await expect(shopper.getByRole("link", { name: "Apex Cart home" }).first()).toBeVisible();
+  await expect(shopper.getByText("Apex Cart Draft")).toHaveCount(0);
+
+  const reloads: Request[] = [];
+  page.on("request", (request) => { if (new URL(request.url()).pathname === "/api/settings/storefront") reloads.push(request); });
+  await page.getByRole("button", { name: "Publish" }).click();
+  await expect.poll(() => writes.at(-1)).toEqual({ path: "publish", body: { version: 6 } });
+  await expect.poll(() => reloads.length).toBeGreaterThan(0);
+  await shopper.reload();
+  await expect(shopper.getByRole("link", { name: "Apex Cart Draft home" }).first()).toBeVisible();
+  await shopper.close();
+});
+
+test("paused checkout creates no orders and preserves the variant cart", async ({ page, context }) => {
+  await signInCustomer(page, [linenCartLine]);
+  const legacyReceipts = JSON.stringify([{ orderNumber: "NM-LEGACY", status: "DELIVERED", paymentStatus: "PAID" }]);
+  await context.addInitScript(({ key, value, origin }) => {
+    if (location.origin === origin) localStorage.setItem(key, value);
+  }, { key: `nmb-receipts-${customer.id}`, value: legacyReceipts, origin: ORIGIN });
   const writes: string[] = [];
   page.on("request", (request) => { if (request.method() !== "GET") writes.push(request.url()); });
   await page.goto("/#/checkout");
@@ -189,22 +264,25 @@ test("paused checkout creates no orders or receipts and preserves the cart", asy
   await expect(page.getByRole("status")).toContainText("Your cart is unchanged");
   await expect(page.locator("main input")).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Place Order|Confirm Payment/ })).toHaveCount(0);
-  expect(await page.evaluate((key) => localStorage.getItem(key), receiptsKey)).toBe(history);
   await page.getByRole("link", { name: "Back to Cart", exact: true }).click();
   await expect(page.getByRole("link", { name: "Linen Short-Sleeve Shirt", exact: true })).toBeVisible();
-  const cart = await page.evaluate((id) => JSON.parse(localStorage.getItem(`nmb-store:${id}`)!).cart, customer.id);
-  expect(cart).toEqual([{ productId: "mens-fashion-1", qty: 1 }]);
+  await expect(page.getByText("Size: M · Color: White")).toBeVisible();
+  expect((await shopperState(page)).cart).toEqual([linenCartLine]);
+  expect(await page.evaluate((key) => localStorage.getItem(key), `nmb-receipts-${customer.id}`)).toBe(legacyReceipts);
   expect(writes).toEqual([]);
 });
 
 test("cart editing remains available while the checkout action is disabled", async ({ page }) => {
-  await signInCustomer(page, true);
+  await signInCustomer(page, [linenCartLine]);
   await page.goto("/#/cart");
   const checkout = page.getByRole("button", { name: "Checkout temporarily unavailable" });
   await expect(checkout).toBeDisabled();
   await expect(checkout).toHaveAccessibleDescription(/verified payment processing/);
-  await page.getByRole("button", { name: "+", exact: true }).click();
-  await expect.poll(() => page.evaluate((id) => JSON.parse(localStorage.getItem(`nmb-store:${id}`)!).cart[0].qty, customer.id)).toBe(2);
+  await expect(page.getByPlaceholder(/Promo Code/)).toHaveCount(0);
+  const increase = page.getByRole("button", { name: "Increase quantity of Linen Short-Sleeve Shirt" });
+  await increase.click();
+  await expect.poll(async () => (await shopperState(page)).cart[0].quantity).toBe(2);
+  await expect(increase).toBeDisabled();
   await page.getByRole("link", { name: "Continue Shopping", exact: true }).click();
   await expect(page).toHaveURL(/#\/shop$/);
 });
@@ -218,7 +296,7 @@ test("empty checkout retains the route back to shopping", async ({ page }) => {
 
 test("return failure feedback stays in the active receipt dialog", async ({ page, context }) => {
   await signInCustomer(page);
-  await context.route("**/api/orders?*", (route) => route.fulfill({ json: { orders: [{ ...order, status: "DELIVERED" }] } }));
+  await context.route("**/api/orders?*", (route) => route.fulfill({ json: { orders: [{ ...order, status: "DELIVERED" }], pagination: { page: 1, limit: 100, total: 1, pages: 1 } } }));
   await context.route("**/api/orders/browser-order/return", (route) => route.fulfill({ status: 503, json: { error: "Return unavailable in this test" } }));
   await page.goto("/#/account/orders");
   await page.getByRole("button", { name: "Details", exact: true }).click();

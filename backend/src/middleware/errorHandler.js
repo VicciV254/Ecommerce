@@ -3,7 +3,11 @@ export const errorHandler = (err, req, res, next) => {
   
   // Prisma errors
   if (err.code === 'P2002') {
-    return res.status(400).json({ error: 'A record with this unique field already exists' });
+    return res.status(409).json({ error: 'A record with this unique field already exists' });
+  }
+
+  if (err.code === 'P2003') {
+    return res.status(409).json({ error: 'The referenced record is unavailable or still in use' });
   }
   
   if (err.code === 'P2025') {
@@ -20,6 +24,11 @@ export const errorHandler = (err, req, res, next) => {
   }
   
   // Validation errors
+  if (err.name === 'ZodError') {
+    const details = err.issues.map(({ path, message }) => ({ path: path.join('.'), message }));
+    return res.status(400).json({ error: details.map((item) => `${item.path || 'Request'}: ${item.message}`).join('; '), details });
+  }
+
   if (err.name === 'ValidationError') {
     return res.status(400).json({ error: err.message });
   }

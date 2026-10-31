@@ -2,8 +2,8 @@ import { useEffect } from "react";
 import AOS from "aos";
 import "aos/dist/aos.css";
 import { StoreProvider } from "./store/StoreContext";
-
-import { CustomizeProvider } from "./store/CustomizeContext";
+import { CatalogProvider } from "./store/CatalogContext";
+import { StorefrontProvider } from "./store/StorefrontContext";
 import { AuthProvider } from "./contexts/AuthContext";
 import { useRoute, parseRoute } from "./router";
 import { Header } from "./components/Header";
@@ -153,12 +153,14 @@ export default function App() {
   }, []);
 
   return (
-    <CustomizeProvider>
-      <AuthProvider>
-        <StoreProvider>
-          <Router />
-        </StoreProvider>
-      </AuthProvider>
-    </CustomizeProvider>
+    <StorefrontProvider>
+      <CatalogProvider>
+        <AuthProvider>
+          <StoreProvider>
+            <Router />
+          </StoreProvider>
+        </AuthProvider>
+      </CatalogProvider>
+    </StorefrontProvider>
   );
 }

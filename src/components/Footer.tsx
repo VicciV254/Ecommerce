@@ -1,12 +1,19 @@
 import { useState } from "react";
 import { Link } from "../router";
 import { Container } from "./ui";
-import { useStore } from "../store/StoreContext";
+import { useCatalog } from "../store/CatalogContext";
+import { useStorefront } from "../store/StorefrontContext";
 import { subscriptionsAPI } from "../api/subscriptions";
+import { describeApiError } from "../api/errors";
 import toast from "react-hot-toast";
 
+const FOOTER_DEPARTMENT_LIMIT = 6;
+
 export function Footer() {
-  const { allCategories } = useStore();
+  const { categories } = useCatalog();
+  const { storefront, brandName, mediaById } = useStorefront();
+  const logoId = storefront?.settings.brand.logoMediaId;
+  const logo = logoId ? mediaById.get(logoId) : undefined;
   const [email, setEmail] = useState("");
   const [done, setDone] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -21,8 +28,8 @@ export function Footer() {
       setDone(true);
       setEmail("");
       toast.success("Successfully subscribed!");
-    } catch (error: any) {
-      toast.error(error.response?.data?.error || "Failed to subscribe");
+    } catch (error) {
+      toast.error(describeApiError(error, "Could not subscribe."));
     } finally {
       setLoading(false);
     }
@@ -77,9 +84,9 @@ export function Footer() {
             </ul>
           </div>
           <div>
-            <h4 className="mb-4 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-secondary">Categories</h4>
+            <h4 className="mb-4 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-secondary">Departments</h4>
             <ul className="space-y-2.5 text-xs text-gray-400">
-              {allCategories.slice(0, 6).map((c) => (
+              {categories.roots.slice(0, FOOTER_DEPARTMENT_LIMIT).map((c) => (
                 <li key={c.slug}>
                   <Link to={`/shop?cat=${c.slug}`} className="transition-colors hover:text-white">{c.name}</Link>
                 </li>
@@ -108,14 +115,18 @@ export function Footer() {
         </div>
 
         <div className="mt-10 flex flex-col items-center justify-between gap-4 border-t border-white/10 pt-6 md:flex-row">
-          <Link to="/" className="flex items-center gap-2">
-            <div className="rounded-sm bg-white p-1.5">
-              <img src="/images/logo.png" alt="No Maneno Bazaar" className="h-8 w-auto" />
-            </div>
+          <Link to="/" aria-label={`${brandName} home`} className="flex items-center gap-2">
+            {logo ? (
+              <span className="rounded-sm bg-white p-1.5">
+                <img src={logo.url} alt="" className="h-8 w-auto" />
+              </span>
+            ) : (
+              <span className="font-display text-lg uppercase tracking-[0.12em] text-white">{brandName}</span>
+            )}
           </Link>
           <div className="text-center">
             <p className="text-[10px] tracking-wider text-gray-500">
-              © 2026 No Maneno Bazaar. All rights reserved. &nbsp;·&nbsp; Privacy Policy &nbsp;·&nbsp; Terms
+              © 2026 {brandName}. All rights reserved. &nbsp;·&nbsp; Privacy Policy &nbsp;·&nbsp; Terms
             </p>
             <Link to="/admin" className="mt-1 inline-block text-[9px] tracking-wider text-gray-600 transition-colors hover:text-brand-secondary">
               Staff Portal

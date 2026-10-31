@@ -1,6 +1,7 @@
 import axios, { AxiosError, AxiosHeaders, type AxiosResponse, type InternalAxiosRequestConfig } from "axios";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import api from "./client";
+import { STORAGE_KEYS } from "../utils/storage";
 
 const originalAdapter = api.defaults.adapter;
 
@@ -13,8 +14,8 @@ function unauthorized(config: InternalAxiosRequestConfig, status = 401) {
 }
 
 function session(token: string) {
-  localStorage.setItem("token", token);
-  localStorage.setItem("refreshToken", `${token}-refresh`);
+  localStorage.setItem(STORAGE_KEYS.customerToken, token);
+  localStorage.setItem(STORAGE_KEYS.customerRefreshToken, `${token}-refresh`);
 }
 
 beforeEach(() => session("old-access"));
@@ -33,8 +34,8 @@ describe("customer authentication transport", () => {
     const results = await Promise.all([api.get("/auth/me"), api.get("/orders")]);
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(results.every((result) => result.config.headers.get("Authorization") === "Bearer new-access")).toBe(true);
-    localStorage.removeItem("token");
-    localStorage.removeItem("refreshToken");
+    localStorage.removeItem(STORAGE_KEYS.customerToken);
+    localStorage.removeItem(STORAGE_KEYS.customerRefreshToken);
     const guest = await api.get("/products");
     expect(guest.config.headers.has("Authorization")).toBe(false);
   });
@@ -46,7 +47,7 @@ describe("customer authentication transport", () => {
     await expect(api.post("/auth/login", { email: "test@example.test", password: "invalid" })).rejects.toBeInstanceOf(AxiosError);
     await expect(api.get("/products", { headers: { Authorization: "Bearer other-actor" } })).rejects.toBeInstanceOf(AxiosError);
     expect(refresh).not.toHaveBeenCalled();
-    expect(localStorage.getItem("token")).toBe("old-access");
+    expect(localStorage.getItem(STORAGE_KEYS.customerToken)).toBe("old-access");
   });
 
   it("does not overwrite a newly signed-in account or replay the old request after refresh", async () => {
@@ -60,7 +61,7 @@ describe("customer authentication transport", () => {
     session("other-account");
     finish({ data: { token: "stale-account", refreshToken: "stale-refresh" } });
     await rejected;
-    expect(localStorage.getItem("token")).toBe("other-account");
+    expect(localStorage.getItem(STORAGE_KEYS.customerToken)).toBe("other-account");
     expect(adapter).toHaveBeenCalledTimes(1);
   });
 
@@ -87,7 +88,7 @@ describe("customer authentication transport", () => {
       status: 403, statusText: "Forbidden", data: {}, headers: new AxiosHeaders(), config: { headers: new AxiosHeaders() },
     }));
     await rejected;
-    expect(localStorage.getItem("token")).toBe("new-account");
+    expect(localStorage.getItem(STORAGE_KEYS.customerToken)).toBe("new-account");
   });
 
   it("does not restore a logged-out account when its pending refresh succeeds", async () => {
@@ -100,7 +101,7 @@ describe("customer authentication transport", () => {
     localStorage.clear();
     finish({ data: { token: "revived-account", refreshToken: "revived-refresh" } });
     await rejected;
-    expect(localStorage.getItem("token")).toBeNull();
+    expect(localStorage.getItem(STORAGE_KEYS.customerToken)).toBeNull();
   });
 
   it("surfaces an invalid refresh response without storing malformed tokens", async () => {
@@ -112,7 +113,7 @@ describe("customer authentication transport", () => {
       { refreshToken: "old-access-refresh" },
       expect.objectContaining({ timeout: 30_000 }),
     );
-    expect(localStorage.getItem("token")).toBe("old-access");
+    expect(localStorage.getItem(STORAGE_KEYS.customerToken)).toBe("old-access");
   });
 
   it("retries a request only once if the refreshed token is rejected too", async () => {
@@ -144,22 +145,54 @@ describe("customer authentication transport", () => {
   it("clears only the rejected customer session when refresh is denied", async () => {
     const location = { href: "" };
     vi.stubGlobal("window", { location });
-    localStorage.setItem("adminToken", "staff-token");
+    localStorage.setItem(STORAGE_KEYS.adminToken, "staff-token");
     api.defaults.adapter = async (config) => { throw unauthorized(config); };
     vi.spyOn(axios, "post").mockRejectedValue(new AxiosError(
       "Disabled account", "ERR_BAD_REQUEST", undefined, undefined,
       { status: 403, statusText: "Forbidden", data: {}, headers: new AxiosHeaders(), config: { headers: new AxiosHeaders() } },
     ));
     await expect(api.get("/auth/me")).rejects.toMatchObject({ response: { status: 403 } });
-    expect(localStorage.getItem("token")).toBeNull();
-    expect(localStorage.getItem("adminToken")).toBe("staff-token");
+    expect(localStorage.getItem(STORAGE_KEYS.customerToken)).toBeNull();
+    expect(localStorage.getItem(STORAGE_KEYS.customerRefreshToken)).toBeNull();
+    expect(localStorage.getItem(STORAGE_KEYS.adminToken)).toBe("staff-token");
     expect(location.href).toBe("/#/login");
+  });
+
+  it("ignores unscoped legacy credentials without migrating or clearing them", async () => {
+    localStorage.removeItem(STORAGE_KEYS.customerToken);
+    localStorage.removeItem(STORAGE_KEYS.customerRefreshToken);
+    localStorage.setItem("token", "legacy-access");
+    localStorage.setItem("refreshToken", "legacy-refresh");
+    localStorage.setItem("nmb-store:legacy-user", "{\"cart\":[]}");
+    const refresh = vi.spyOn(axios, "post");
+    api.defaults.adapter = async (config) => {
+      if (config.headers.has("Authorization")) throw new Error("Legacy credentials were sent");
+      throw unauthorized(config);
+    };
+    await expect(api.get("/orders")).rejects.toMatchObject({ response: { status: 401 } });
+    expect(refresh).not.toHaveBeenCalled();
+    expect(localStorage.getItem(STORAGE_KEYS.customerToken)).toBeNull();
+    expect(localStorage.getItem("token")).toBe("legacy-access");
+    expect(localStorage.getItem("refreshToken")).toBe("legacy-refresh");
+    expect(localStorage.getItem("nmb-store:legacy-user")).toBe("{\"cart\":[]}");
+  });
+
+  it("never attaches customer credentials to the public catalog snapshot", async () => {
+    const seen: boolean[] = [];
+    api.defaults.adapter = async (config) => {
+      seen.push(config.headers.has("Authorization"));
+      return response(config);
+    };
+    await api.get("/catalog");
+    await api.get("/settings/storefront");
+    await api.get("/products/catalog-test-product");
+    expect(seen).toEqual([false, false, true]);
   });
 
   it("does not log out a customer just because refresh is temporarily unavailable", async () => {
     api.defaults.adapter = async (config) => { throw unauthorized(config); };
     vi.spyOn(axios, "post").mockRejectedValue(new AxiosError("Offline", "ERR_NETWORK"));
     await expect(api.get("/auth/me")).rejects.toMatchObject({ code: "ERR_NETWORK" });
-    expect(localStorage.getItem("token")).toBe("old-access");
+    expect(localStorage.getItem(STORAGE_KEYS.customerToken)).toBe("old-access");
   });
 });

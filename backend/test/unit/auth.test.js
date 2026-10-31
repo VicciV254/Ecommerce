@@ -4,10 +4,12 @@ import jwt from 'jsonwebtoken';
 import {
   assertAuthConfigured, generateToken, generateRefreshToken, verifyToken, verifyRefreshToken,
   isCustomerToken, isAdminToken,
+  AUTH_AUDIENCE, AUTH_ISSUER,
 } from '../../src/config/auth.js';
 
 const accessSecret = process.env.JWT_SECRET;
 const refreshSecret = process.env.JWT_REFRESH_SECRET;
+const claims = { issuer: AUTH_ISSUER, audience: AUTH_AUDIENCE };
 afterEach(() => {
   process.env.JWT_SECRET = accessSecret;
   process.env.JWT_REFRESH_SECRET = refreshSecret;
@@ -25,10 +27,16 @@ test('access and refresh tokens are not interchangeable', () => {
 test('malformed, expired, premature and unsupported-algorithm tokens are rejected', () => {
   for (const token of [
     undefined, '', 'not-a-token',
-    jwt.sign({ userId: 'customer' }, accessSecret, { expiresIn: -1 }),
-    jwt.sign({ userId: 'customer' }, accessSecret, { notBefore: '1h' }),
-    jwt.sign({ userId: 'customer' }, accessSecret, { algorithm: 'HS384' }),
+    jwt.sign({ userId: 'customer' }, accessSecret, { ...claims, expiresIn: -1 }),
+    jwt.sign({ userId: 'customer' }, accessSecret, { ...claims, notBefore: '1h' }),
+    jwt.sign({ userId: 'customer' }, accessSecret, { ...claims, algorithm: 'HS384' }),
   ]) assert.equal(verifyToken(token), null);
+});
+
+test('legacy or wrong-store tokens cannot authenticate the fresh storefront', () => {
+  assert.equal(verifyToken(jwt.sign({ userId: 'customer' }, accessSecret)), null);
+  assert.equal(verifyRefreshToken(jwt.sign({ userId: 'customer' }, refreshSecret)), null);
+  assert.equal(verifyToken(jwt.sign({ userId: 'customer' }, accessSecret, { ...claims, audience: 'another-store' })), null);
 });
 
 test('missing, placeholder, short and reused signing secrets fail as configuration errors', () => {

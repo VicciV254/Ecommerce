@@ -3,6 +3,7 @@ import { generateOrderNumber } from "../utils/helpers.js";
 import emailService from "../services/emailService.js";
 import autoStageService from "../services/autoStageService.js";
 import { userSummarySelect } from "../utils/account.js";
+import { httpError, loadCategories, serializable, stockStatus } from "../services/catalogService.js";
 
 export const createOrder = async (req, res, next) => {
   try {
@@ -15,8 +16,9 @@ export const createOrder = async (req, res, next) => {
         items: {
           include: {
             product: {
-              include: { stock: true, images: true },
+              include: { images: { where: { deletedAt: null } }, designer: true },
             },
+            variant: { include: { stock: true } },
           },
         },
       },
@@ -26,9 +28,20 @@ export const createOrder = async (req, res, next) => {
       return res.status(400).json({ error: "Cart is empty" });
     }
 
-    // Check stock availability
+    const categories = await loadCategories();
     for (const item of cart.items) {
-      if (!item.product.stock || item.product.stock.quantity < item.quantity) {
+      if (item.product.isDemo) {
+        return res.status(409).json({ error: "Demo products cannot create commercial orders" });
+      }
+      if (!item.product.isActive || item.product.deletedAt || !categories.visible.has(item.product.categoryId) ||
+        !item.variant.isActive || item.variant.productId !== item.productId ||
+        (item.product.designer && (!item.product.designer.isActive || item.product.designer.deletedAt))) {
+        return res.status(409).json({ error: "A cart variant is no longer available" });
+      }
+      if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
+        return res.status(400).json({ error: "Cart quantities must be positive integers" });
+      }
+      if (!item.variant.stock || item.variant.stock.quantity < item.quantity) {
         return res.status(400).json({
           error: `Insufficient stock for ${item.product.name}`,
         });
@@ -66,11 +79,15 @@ export const createOrder = async (req, res, next) => {
         paymentMethod,
         paymentStatus: "PENDING",
         status: "PENDING",
+        isDemo: false,
         deliveryMethod,
         notes,
         items: {
           create: cart.items.map((item) => ({
             productId: item.productId,
+            variantId: item.variantId,
+            sku: item.variant.sku,
+            variantAttributes: item.variant.attributes,
             productName: item.product.name,
             productPrice: item.price,
             quantity: item.quantity,
@@ -95,20 +112,21 @@ export const createOrder = async (req, res, next) => {
     // Update stock
     for (const item of cart.items) {
       await prisma.stock.update({
-        where: { productId: item.productId },
+        where: { variantId: item.variantId },
         data: {
           quantity: {
             decrement: item.quantity,
           },
+          status: stockStatus(item.variant.stock.quantity - item.quantity, item.variant.stock.minThreshold),
         },
       });
 
       // Log stock change
       await prisma.stockLog.create({
         data: {
-          stockId: item.product.stock.id,
-          previousStock: item.product.stock.quantity,
-          newStock: item.product.stock.quantity - item.quantity,
+          stockId: item.variant.stock.id,
+          previousStock: item.variant.stock.quantity,
+          newStock: item.variant.stock.quantity - item.quantity,
           action: "auto-decrement",
         },
       });
@@ -149,7 +167,7 @@ export const getUserOrders = async (req, res, next) => {
 
     const [orders, total] = await Promise.all([
       prisma.order.findMany({
-        where: { userId: req.user.id },
+        where: { userId: req.user.id, isDemo: false },
         skip,
         take: limitNum,
         include: {
@@ -161,7 +179,7 @@ export const getUserOrders = async (req, res, next) => {
         },
         orderBy: { createdAt: "desc" },
       }),
-      prisma.order.count({ where: { userId: req.user.id } }),
+      prisma.order.count({ where: { userId: req.user.id, isDemo: false } }),
     ]);
 
     res.json({
@@ -183,7 +201,7 @@ export const getOrderById = async (req, res, next) => {
     const { id } = req.params;
 
     const order = await prisma.order.findUnique({
-      where: { id },
+      where: { id, isDemo: false },
       include: {
         items: true,
         address: true,
@@ -212,68 +230,69 @@ export const cancelOrder = async (req, res, next) => {
     const { id } = req.params;
     const { reason } = req.body;
 
-    const order = await prisma.order.findUnique({
-      where: { id },
-      include: { items: true },
-    });
-
-    if (!order) {
-      return res.status(404).json({ error: "Order not found" });
-    }
-
-    if (order.userId !== req.user.id) {
-      return res.status(403).json({ error: "Not authorized" });
-    }
-
-    if (!["PENDING", "PROCESSING"].includes(order.status)) {
-      return res
-        .status(400)
-        .json({
-          error:
-            "Order cannot be cancelled at this stage. Please request a return instead.",
-        });
-    }
-
-    // Restore stock
-    for (const item of order.items) {
-      await prisma.stock.updateMany({
-        where: { productId: item.productId },
-        data: {
-          quantity: {
-            increment: item.quantity,
-          },
-        },
+    const updatedOrder = await serializable(async (db) => {
+      const order = await db.order.findUnique({
+        where: { id, isDemo: false },
+        include: { items: true },
       });
-    }
 
-    // If payment was made, set status to AWAITING_REFUND, otherwise CANCELLED
-    const newStatus =
-      order.paymentStatus === "PAID" ? "AWAITING_REFUND" : "CANCELLED";
+      if (!order) throw httpError(404, "Order not found");
+      if (order.userId !== req.user.id) throw httpError(403, "Not authorized");
+      if (!["PENDING", "PROCESSING"].includes(order.status)) {
+        throw httpError(400, "Order cannot be cancelled at this stage. Please request a return instead.");
+      }
 
-    // Update order status
-    const updatedOrder = await prisma.order.update({
-      where: { id },
-      data: {
-        status: newStatus,
-        cancellationReason: reason || null,
-        refundApproved: false,
-        trackingHistory: {
-          create: [
-            {
+      for (const item of order.items) {
+        if (!item.variantId || !Number.isInteger(item.quantity) || item.quantity <= 0) {
+          throw httpError(409, "An order item has no valid variant allocation. Stock restoration requires review.");
+        }
+        const stock = await db.stock.findUnique({
+          where: { variantId: item.variantId },
+          include: { variant: { select: { productId: true } } },
+        });
+        if (!stock || stock.variant.productId !== item.productId) {
+          throw httpError(409, "An order item's variant stock is unavailable. Stock restoration requires review.");
+        }
+        const quantity = stock.quantity + item.quantity;
+        if (quantity > 1_000_000) {
+          throw httpError(409, "Restored variant stock exceeds the supported range.");
+        }
+        await db.stock.update({
+          where: { id: stock.id },
+          data: {
+            quantity: { increment: item.quantity },
+            status: stockStatus(quantity, stock.minThreshold),
+          },
+        });
+        await db.stockLog.create({
+          data: {
+            stockId: stock.id, previousStock: stock.quantity,
+            newStock: quantity, action: "order-cancel",
+          },
+        });
+      }
+
+      const newStatus = order.paymentStatus === "PAID" ? "AWAITING_REFUND" : "CANCELLED";
+      return db.order.update({
+        where: { id },
+        data: {
+          status: newStatus,
+          cancellationReason: reason || null,
+          refundApproved: false,
+          trackingHistory: {
+            create: {
               status: newStatus,
-              description: reason
-                ? `Order cancelled - ${reason}`
-                : "Order cancelled by customer",
+              description: reason ? `Order cancelled - ${reason}` : "Order cancelled by customer",
               location: "Customer self-service",
             },
-          ],
+          },
         },
-      },
-      include: {
-        items: true,
-        address: true,
-        trackingHistory: { orderBy: { createdAt: "desc" } },
-      },
+        include: {
+          items: true,
+          address: true,
+          trackingHistory: { orderBy: { createdAt: "desc" } },
+        },
+      });
     });
 
     // Send cancellation email
@@ -292,7 +311,7 @@ export const pickupOrder = async (req, res, next) => {
     const { id } = req.params;
 
     const order = await prisma.order.findUnique({
-      where: { id },
+      where: { id, isDemo: false },
       include: { items: true, address: true },
     });
 
@@ -351,7 +370,7 @@ export const returnOrder = async (req, res, next) => {
       req.body;
 
     const order = await prisma.order.findUnique({
-      where: { id },
+      where: { id, isDemo: false },
       include: { items: true, address: true },
     });
 
@@ -449,7 +468,7 @@ export const trackOrder = async (req, res, next) => {
     const { number } = req.params;
 
     const order = await prisma.order.findUnique({
-      where: { orderNumber: number },
+      where: { orderNumber: number, isDemo: false },
       include: {
         trackingHistory: {
           orderBy: { createdAt: "desc" },
@@ -479,7 +498,7 @@ export const getAllOrders = async (req, res, next) => {
     const limitNum = parseInt(limit) || 20;
     const skip = (pageNum - 1) * limitNum;
 
-    const where = {};
+    const where = { isDemo: false };
     if (status) where.status = status;
     if (deliveryMethod) where.deliveryMethod = deliveryMethod;
     const createdAt = dayRange(orderedDay);
@@ -531,7 +550,7 @@ export const updateOrderStatus = async (req, res, next) => {
     const { status, description, location } = req.body;
 
     const existingOrder = await prisma.order.findUnique({
-      where: { id },
+      where: { id, isDemo: false },
     });
 
     if (!existingOrder) {
@@ -600,7 +619,7 @@ export const approveRefund = async (req, res, next) => {
     const { id } = req.params;
     
     const order = await prisma.order.findUnique({
-      where: { id },
+      where: { id, isDemo: false },
       include: { items: true, address: true },
     });
     
@@ -673,7 +692,7 @@ export const toggleAutoStage = async (req, res, next) => {
     const { enabled } = req.body;
 
     const order = await prisma.order.findUnique({
-      where: { id },
+      where: { id, isDemo: false },
     });
 
     if (!order) {

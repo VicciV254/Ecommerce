@@ -1,4 +1,5 @@
 import { defineConfig } from "@playwright/test";
+import { E2E_ORIGIN, E2E_PORT } from "./tests/browser-config";
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -8,7 +9,7 @@ export default defineConfig({
   workers: 1,
   reporter: "list",
   use: {
-    baseURL: "http://127.0.0.1:4173",
+    baseURL: E2E_ORIGIN,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
@@ -17,10 +18,10 @@ export default defineConfig({
     { name: "desktop", use: { viewport: { width: 1280, height: 900 } } },
   ],
   webServer: {
-    command: "npm run dev -- --host 127.0.0.1 --port 4173 --strictPort --mode test",
-    url: "http://127.0.0.1:4173",
+    command: `npm run dev -- --host 127.0.0.1 --port ${E2E_PORT} --strictPort --mode test`,
+    url: E2E_ORIGIN,
     reuseExistingServer: false,
     timeout: 30_000,
-    env: { NODE_ENV: "test", VITE_API_URL: "http://127.0.0.1:4173/api" },
+    env: { NODE_ENV: "test", VITE_API_URL: `${E2E_ORIGIN}/api` },
   },
 });

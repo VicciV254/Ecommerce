@@ -1,6 +1,7 @@
 import { ReactNode, useState, useEffect } from 'react';
 import { Link, navigate, useLocation } from '../router';
 import { useAuth } from '../contexts/AuthContext';
+import { STORAGE_KEYS } from '../utils/storage';
 
 interface AccountProps {
   children: ReactNode;
@@ -15,12 +16,12 @@ export default function Account({ children }: AccountProps) {
   useEffect(() => {
     // Store the previous path when entering account pages
     const handleBeforeUnload = () => {
-      sessionStorage.setItem('lastPathBeforeAccount', currentPath);
+      sessionStorage.setItem(STORAGE_KEYS.accountReturnPath, currentPath);
     };
     handleBeforeUnload();
     
     // Get the last path from session storage
-    const lastPath = sessionStorage.getItem('lastPathBeforeAccount');
+    const lastPath = sessionStorage.getItem(STORAGE_KEYS.accountReturnPath);
     if (lastPath && lastPath !== currentPath) {
       setPreviousPath(lastPath);
     }

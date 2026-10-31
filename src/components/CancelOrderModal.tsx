@@ -1,5 +1,6 @@
 import { useId, useState } from 'react';
 import { ordersAPI } from '../api/orders';
+import { describeApiError } from '../api/errors';
 import toast from 'react-hot-toast';
 import { ModalDialog } from './Modal';
 
@@ -32,8 +33,8 @@ export default function CancelOrderModal({ isOpen, onClose, orderId, onOrderCanc
       onOrderCancelled();
       onClose();
       setReason('');
-    } catch (error: any) {
-      setErrorMessage(error.response?.data?.error || 'Failed to cancel order');
+    } catch (error) {
+      setErrorMessage(describeApiError(error, 'Failed to cancel order'));
     } finally {
       setIsSubmitting(false);
     }

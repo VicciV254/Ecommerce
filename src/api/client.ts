@@ -1,4 +1,5 @@
 import axios, { CanceledError, type InternalAxiosRequestConfig } from "axios";
+import { CUSTOMER_SESSION_KEYS, STORAGE_KEYS, removeStoredKeys } from "../utils/storage";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 type CustomerSession = { token: string; refreshToken: string | null };
@@ -22,8 +23,8 @@ const api = axios.create({
 let refreshAttempt: RefreshAttempt | undefined;
 
 function readSession(): CustomerSession | null {
-  const token = localStorage.getItem("token");
-  return token ? { token, refreshToken: localStorage.getItem("refreshToken") } : null;
+  const token = localStorage.getItem(STORAGE_KEYS.customerToken);
+  return token ? { token, refreshToken: localStorage.getItem(STORAGE_KEYS.customerRefreshToken) } : null;
 }
 
 function sameSession(a: CustomerSession | null | undefined, b: CustomerSession | null | undefined) {
@@ -45,7 +46,8 @@ function sessionForRequest(token: string): CustomerSession | null {
 
 function usesSeparateAuthentication(url = "") {
   const path = url.split(/[?#]/)[0];
-  return /(^|\/)(admin|settings)(\/|$)/.test(path) ||
+  // Staff and settings calls carry their own credentials; the public catalog snapshot needs none.
+  return /(^|\/)(admin|settings|catalog)(\/|$)/.test(path) ||
     /(^|\/)auth\/(login|register|refresh|logout|verify-email|verify-otp|resend-verification|forgot-password|reset-password)\/?$/.test(path);
 }
 
@@ -75,8 +77,8 @@ function refreshSession(session: CustomerSession): Promise<string> {
       ) throw new Error("Invalid token refresh response");
 
       attempt.to = { token: data.token, refreshToken: data.refreshToken };
-      localStorage.setItem("token", data.token);
-      localStorage.setItem("refreshToken", data.refreshToken);
+      localStorage.setItem(STORAGE_KEYS.customerToken, data.token);
+      localStorage.setItem(STORAGE_KEYS.customerRefreshToken, data.refreshToken);
       return data.token;
     }),
   };
@@ -134,9 +136,7 @@ api.interceptors.response.use(
         sameSession(session, readSession()) &&
         (!session.refreshToken || status === 400 || status === 401 || status === 403)
       ) {
-        localStorage.removeItem("token");
-        localStorage.removeItem("refreshToken");
-        localStorage.removeItem("user");
+        removeStoredKeys(CUSTOMER_SESSION_KEYS);
         window.location.href = "/#/login";
       }
       return Promise.reject(refreshError);

@@ -11,6 +11,7 @@ export const refundNotificationService = {
       
       const orders = await prisma.order.findMany({
         where: {
+          isDemo: false,
           status: 'AWAITING_REFUND',
           awaitingRefundAt: {
             lte: fiveMinutesAgo,

@@ -1,16 +1,17 @@
-# No Maneno Bazaar — E-Commerce Website
+# Apex Cart
 
-> **"IKO KITU!"** — There's always something for everyone.
-
-No Maneno Bazaar is a full-featured e-commerce web application for a department store. Built with React, Vite, TypeScript, and Tailwind CSS.
-
-![No Maneno Bazaar](public/images/logo.png)
+Apex Cart is a React/Vite storefront and Express/Prisma administration
+application under an incremental overhaul. Catalog data is database-backed;
+checkout remains deliberately paused until trusted quotes and verified
+payment processing are implemented.
 
 ---
 
 ## Overview
 
-A modern e-commerce platform with both customer-facing store and admin dashboard. Features include product browsing, shopping cart, checkout, order tracking, and comprehensive inventory management.
+A customer-facing catalog and staff workspace with hierarchical departments,
+sellable variants, per-SKU stock, scoped customer state, and versioned
+storefront presentation settings.
 
 ## Getting Started
 
@@ -94,6 +95,10 @@ feedback inside active dialogs. Native dialog behavior is checked in the
 browser, not simulated by jsdom. If Chromium is missing, install the project's
 browser revision with `npx --no-install playwright install chromium`.
 
+On a shared workstation, select a free loopback port without reusing or
+stopping another preview: `E2E_PORT=4274 npm run test:e2e`. The default is
+4173; the test server, browser origin and API fixtures use the same setting.
+
 To run the PostgreSQL/API integration checks:
 
 ```bash
@@ -107,8 +112,9 @@ The test service binds only to loopback and uses temporary storage. Use a
 unique Compose project name on a shared workstation; do not reuse or stop
 another task's service. The runner requires a local `apex_test` database and
 a role allowed to create/drop test databases. It creates a random
-`apex_test_<id>` database, applies the real migrations and deletes only that
-database in cleanup. Tests do not load `backend/.env` or send real email,
+`apex_test_<id>` database for each integration test file, applies the real
+migrations and deletes only that database in cleanup. Tests do not load
+`backend/.env` or send real email,
 payments or image uploads.
 
 The existing migrations include explicit `public` references, so integration
@@ -118,6 +124,36 @@ runner at Neon or another shared/production database.
 `npm run typecheck`, `npm run lint`, `npm run test:unit` and their backend
 counterparts can also be run separately. Fix failing checks rather than
 replacing type checking with the Vite build.
+
+## Fresh catalog and demo data
+
+The canonical catalog contains categories with parent/order/visibility
+metadata, products, variants with unique SKUs, per-variant stock, and stable
+media records. Public visibility includes ancestor visibility and
+server-owned demo/live rules. There is no static product catalog or JSON
+`adminData` catalog to fall back to.
+
+The guarded local initializer provides **14 departments, 47 groups and 230
+leaf categories**, with one labelled demo product per leaf and a focused
+multi-variant example. Placeholder URLs are fixed selections with stored
+source/license metadata. They are not claims of actual product photography,
+commercial prices or inventory.
+
+After configuring an **empty local** development database and private staff
+credentials, run migrations and inspect the initializer first:
+
+```bash
+npm --prefix backend run migrate:deploy
+npm --prefix backend run seed:demo -- --dry-run
+ALLOW_DEMO_INITIALIZATION=true npm --prefix backend run seed:demo
+```
+
+Set `ALLOW_DEMO_CATALOG=true` in the local backend environment to include
+demo products in the development storefront. It has no effect in production
+and never enables purchases. Initialization creates only missing stable
+records; repeat runs preserve edits, hidden/deleted fixtures, additional
+products, users, orders and existing staff credentials. See
+[Backend setup](backend/SETUP.md) for the exact guards and required keys.
 
 ## Development contracts
 
@@ -130,6 +166,18 @@ replacing type checking with the Vite build.
   retries at most once. Staff headers and public sign-in failures do not use
   customer refresh credentials. Superseded-session responses are cancelled;
   transient transport errors do not automatically sign out the customer.
+- Browser state uses an `apex-cart:v2` namespace; old tokens, `nmb-*` catalog,
+  theme, cart and receipt data are not imported. Backend JWT issuer/audience
+  checks also reject legacy tokens. Browser receipts and the former staff
+  receipt-import endpoint are not order sources.
+- Public settings come only from the published storefront snapshot. Draft
+  saves and publication are separate, version-checked operations. Disabled
+  sections and unused campaigns are omitted from public responses; invalid
+  catalog/media references cannot be published.
+- Staff drafts include their referenced media and explicit unavailable IDs,
+  so unpublished artwork remains previewable after reload. Campaigns share
+  copy and CTA across screens; without separate mobile artwork, phones use
+  the desktop asset with the campaign's mobile focal point.
 - Use the shared `Link` for hash routes. It forwards anchor attributes and
   refs, respects a caller's `preventDefault`, and leaves modified clicks,
   alternate targets and downloads to the browser.
@@ -145,12 +193,18 @@ flow. Its cart action is disabled, and `POST /api/orders/checkout` returns
 HTTP 503 before creating an address, order, item or tracking event. The
 database-cart order API always creates pending orders, ignoring any
 customer-supplied payment or fulfilment status.
+Cancellation restores only the saved order-item variants; stock, its audit
+log and the cancellation commit together. Incomplete allocations require
+review rather than guessing a replacement SKU.
 
 Browsing, cart editing and existing order history remain available. The
 checkout pause is deliberate and is not controlled by `ENABLE_MPESA`:
 enabling a provider alone cannot make the old client-trusted flow safe.
 Reintroduce checkout only with the planned trusted quote/order and verified
-payment lifecycle. This checkpoint does not implement real M-Pesa payments.
+payment lifecycle. Legacy amount-only M-Pesa endpoints are also unavailable
+until that lifecycle is implemented. Demo products cannot create commercial
+orders, and demo records are excluded from live inventory/sales metrics and
+operational order processing.
 
 ## Tech Stack
 

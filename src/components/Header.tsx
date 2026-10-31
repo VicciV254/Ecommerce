@@ -1,13 +1,17 @@
 import { useEffect, useState } from "react";
 import { Link, useRoute } from "../router";
 import { useStore } from "../store/StoreContext";
+import { useCatalog } from "../store/CatalogContext";
+import { useStorefront } from "../store/StorefrontContext";
 import { useAuth } from "../contexts/AuthContext";
 import { Container } from "./ui";
 import { ModalDialog } from "./Modal";
 import { ProductSearch } from "./ProductSearch";
 
 export function Header() {
-  const { cartCount, state, allCategories } = useStore();
+  const { cartCount, state } = useStore();
+  const { categories } = useCatalog();
+  const departments = categories.roots;
   const { user } = useAuth();
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
@@ -50,14 +54,7 @@ export function Header() {
 
       {/* Main bar */}
       <Container className="flex items-center justify-between gap-4 py-3">
-        {/* Logo */}
-        <Link to="/" className="flex shrink-0 items-center gap-3">
-          <img
-            src="/images/logo.png"
-            alt="No Maneno Bazaar"
-            className="h-12 w-auto sm:h-14"
-          />
-        </Link>
+        <BrandMark />
 
         {/* Search (desktop) */}
         <div className="relative hidden flex-1 max-w-lg md:block">
@@ -148,7 +145,7 @@ export function Header() {
       {/* Category strip — only on the Shop tab */}
       <div className={`border-t border-light-gray/60 ${path === "/shop" ? "hidden lg:block" : "hidden"}`}>
         <Container className="no-scrollbar flex items-center gap-0.5 overflow-x-auto py-0">
-          {allCategories.map((c) => {
+          {departments.map((c) => {
             const active = path === "/shop" && activeCat === c.slug;
             return (
               <Link
@@ -203,9 +200,9 @@ export function Header() {
               {user ? "My Account" : "Sign In / Register"}
             </Link>
             <div className="mt-3 border-t border-light-gray pt-3">
-              <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.15em] text-brand-accent">Categories</p>
+              <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.15em] text-brand-accent">Departments</p>
               <div className="grid grid-cols-2 gap-0.5">
-                {allCategories.map((c) => (
+                {departments.map((c) => (
                   <Link
                     key={c.slug}
                     to={`/shop?cat=${c.slug}`}
@@ -226,5 +223,21 @@ export function Header() {
         </ModalDialog>
       )}
     </header>
+  );
+}
+
+/** Published logo when one is configured; otherwise the brand name as text. */
+function BrandMark() {
+  const { storefront, brandName, mediaById } = useStorefront();
+  const logoId = storefront?.settings.brand.logoMediaId;
+  const logo = logoId ? mediaById.get(logoId) : undefined;
+  return (
+    <Link to="/" aria-label={`${brandName} home`} className="flex shrink-0 items-center gap-3">
+      {logo ? (
+        <img src={logo.url} alt="" className="h-12 w-auto sm:h-14" />
+      ) : (
+        <span className="font-display text-xl uppercase tracking-[0.12em] text-brand-primary sm:text-2xl">{brandName}</span>
+      )}
+    </Link>
   );
 }

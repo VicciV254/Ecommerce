@@ -1,0 +1,2042 @@
+{
+  "version": 1,
+  "categories": [
+    {
+      "id": "apex-category-phones-tablets",
+      "name": "Phones & Tablets",
+      "slug": "phones-tablets",
+      "parentId": null,
+      "order": 0
+    },
+    {
+      "id": "apex-category-mobile-phones",
+      "name": "Mobile Phones",
+      "slug": "mobile-phones",
+      "parentId": "apex-category-phones-tablets",
+      "order": 0
+    },
+    {
+      "id": "apex-category-smartphones",
+      "name": "Smartphones",
+      "slug": "smartphones",
+      "parentId": "apex-category-mobile-phones",
+      "order": 0
+    },
+    {
+      "id": "apex-category-ios-phones",
+      "name": "iOS Phones",
+      "slug": "ios-phones",
+      "parentId": "apex-category-mobile-phones",
+      "order": 1
+    },
+    {
+      "id": "apex-category-feature-phones",
+      "name": "Feature Phones",
+      "slug": "feature-phones",
+      "parentId": "apex-category-mobile-phones",
+      "order": 2
+    },
+    {
+      "id": "apex-category-phones-tablets-accessories",
+      "name": "Accessories",
+      "slug": "phones-tablets-accessories",
+      "parentId": "apex-category-phones-tablets",
+      "order": 1
+    },
+    {
+      "id": "apex-category-bluetooth-headsets",
+      "name": "Bluetooth Headsets",
+      "slug": "bluetooth-headsets",
+      "parentId": "apex-category-phones-tablets-accessories",
+      "order": 0
+    },
+    {
+      "id": "apex-category-smart-watches",
+      "name": "Smart Watches",
+      "slug": "smart-watches",
+      "parentId": "apex-category-phones-tablets-accessories",
+      "order": 1
+    },
+    {
+      "id": "apex-category-cases-sleeves",
+      "name": "Cases & Sleeves",
+      "slug": "cases-sleeves",
+      "parentId": "apex-category-phones-tablets-accessories",
+      "order": 2
+    },
+    {
+      "id": "apex-category-portable-powerbanks",
+      "name": "Portable Powerbanks",
+      "slug": "portable-powerbanks",
+      "parentId": "apex-category-phones-tablets-accessories",
+      "order": 3
+    },
+    {
+      "id": "apex-category-batteries-battery-packs",
+      "name": "Batteries & Battery Packs",
+      "slug": "batteries-battery-packs",
+      "parentId": "apex-category-phones-tablets-accessories",
+      "order": 4
+    },
+    {
+      "id": "apex-category-wall-chargers",
+      "name": "Wall Chargers",
+      "slug": "wall-chargers",
+      "parentId": "apex-category-phones-tablets-accessories",
+      "order": 5
+    },
+    {
+      "id": "apex-category-headphones",
+      "name": "Headphones",
+      "slug": "headphones",
+      "parentId": "apex-category-phones-tablets-accessories",
+      "order": 6
+    },
+    {
+      "id": "apex-category-tripods",
+      "name": "Tripods",
+      "slug": "tripods",
+      "parentId": "apex-category-phones-tablets-accessories",
+      "order": 7
+    },
+    {
+      "id": "apex-category-stands",
+      "name": "Stands",
+      "slug": "stands",
+      "parentId": "apex-category-phones-tablets-accessories",
+      "order": 8
+    },
+    {
+      "id": "apex-category-virtual-reality-headsets",
+      "name": "Virtual Reality Headsets",
+      "slug": "virtual-reality-headsets",
+      "parentId": "apex-category-phones-tablets-accessories",
+      "order": 9
+    },
+    {
+      "id": "apex-category-phones-tablets-tablets",
+      "name": "Tablets",
+      "slug": "phones-tablets-tablets",
+      "parentId": "apex-category-phones-tablets",
+      "order": 2
+    },
+    {
+      "id": "apex-category-tablets",
+      "name": "Tablets",
+      "slug": "tablets",
+      "parentId": "apex-category-phones-tablets-tablets",
+      "order": 0
+    },
+    {
+      "id": "apex-category-tablet-accessories",
+      "name": "Tablet Accessories",
+      "slug": "tablet-accessories",
+      "parentId": "apex-category-phones-tablets-tablets",
+      "order": 1
+    },
+    {
+      "id": "apex-category-tablet-bags-covers",
+      "name": "Tablet Bags & Covers",
+      "slug": "tablet-bags-covers",
+      "parentId": "apex-category-phones-tablets-tablets",
+      "order": 2
+    },
+    {
+      "id": "apex-category-tvs-audio",
+      "name": "TVs & Audio",
+      "slug": "tvs-audio",
+      "parentId": null,
+      "order": 1
+    },
+    {
+      "id": "apex-category-televisions",
+      "name": "Televisions",
+      "slug": "televisions",
+      "parentId": "apex-category-tvs-audio",
+      "order": 0
+    },
+    {
+      "id": "apex-category-smart-tvs",
+      "name": "Smart TVs",
+      "slug": "smart-tvs",
+      "parentId": "apex-category-televisions",
+      "order": 0
+    },
+    {
+      "id": "apex-category-digital-tvs",
+      "name": "Digital TVs",
+      "slug": "digital-tvs",
+      "parentId": "apex-category-televisions",
+      "order": 1
+    },
+    {
+      "id": "apex-category-data-projectors",
+      "name": "Data Projectors",
+      "slug": "data-projectors",
+      "parentId": "apex-category-televisions",
+      "order": 2
+    },
+    {
+      "id": "apex-category-home-audio",
+      "name": "Home Audio",
+      "slug": "home-audio",
+      "parentId": "apex-category-tvs-audio",
+      "order": 1
+    },
+    {
+      "id": "apex-category-home-theatre-systems",
+      "name": "Home Theatre Systems",
+      "slug": "home-theatre-systems",
+      "parentId": "apex-category-home-audio",
+      "order": 0
+    },
+    {
+      "id": "apex-category-sound-bars",
+      "name": "Sound Bars",
+      "slug": "sound-bars",
+      "parentId": "apex-category-home-audio",
+      "order": 1
+    },
+    {
+      "id": "apex-category-bluetooth-speakers",
+      "name": "Bluetooth Speakers",
+      "slug": "bluetooth-speakers",
+      "parentId": "apex-category-home-audio",
+      "order": 2
+    },
+    {
+      "id": "apex-category-woofers",
+      "name": "Woofers",
+      "slug": "woofers",
+      "parentId": "apex-category-home-audio",
+      "order": 3
+    },
+    {
+      "id": "apex-category-accessories-supplies",
+      "name": "Accessories & Supplies",
+      "slug": "accessories-supplies",
+      "parentId": "apex-category-tvs-audio",
+      "order": 2
+    },
+    {
+      "id": "apex-category-tv-stands",
+      "name": "TV Stands",
+      "slug": "tv-stands",
+      "parentId": "apex-category-accessories-supplies",
+      "order": 0
+    },
+    {
+      "id": "apex-category-power-protection",
+      "name": "Power Protection",
+      "slug": "power-protection",
+      "parentId": "apex-category-accessories-supplies",
+      "order": 1
+    },
+    {
+      "id": "apex-category-cables",
+      "name": "Cables",
+      "slug": "cables",
+      "parentId": "apex-category-accessories-supplies",
+      "order": 2
+    },
+    {
+      "id": "apex-category-camera-photo-accessories",
+      "name": "Camera & Photo Accessories",
+      "slug": "camera-photo-accessories",
+      "parentId": "apex-category-accessories-supplies",
+      "order": 3
+    },
+    {
+      "id": "apex-category-television-accessories",
+      "name": "Television Accessories",
+      "slug": "television-accessories",
+      "parentId": "apex-category-accessories-supplies",
+      "order": 4
+    },
+    {
+      "id": "apex-category-tv-receivers",
+      "name": "TV Receivers",
+      "slug": "tv-receivers",
+      "parentId": "apex-category-accessories-supplies",
+      "order": 5
+    },
+    {
+      "id": "apex-category-cameras",
+      "name": "Cameras",
+      "slug": "cameras",
+      "parentId": "apex-category-tvs-audio",
+      "order": 3
+    },
+    {
+      "id": "apex-category-digital-slr-cameras",
+      "name": "Digital SLR Cameras",
+      "slug": "digital-slr-cameras",
+      "parentId": "apex-category-cameras",
+      "order": 0
+    },
+    {
+      "id": "apex-category-surveillance-cameras",
+      "name": "Surveillance Cameras",
+      "slug": "surveillance-cameras",
+      "parentId": "apex-category-cameras",
+      "order": 1
+    },
+    {
+      "id": "apex-category-compact-cameras",
+      "name": "Compact Cameras",
+      "slug": "compact-cameras",
+      "parentId": "apex-category-cameras",
+      "order": 2
+    },
+    {
+      "id": "apex-category-appliances",
+      "name": "Appliances",
+      "slug": "appliances",
+      "parentId": null,
+      "order": 2
+    },
+    {
+      "id": "apex-category-large-appliances",
+      "name": "Large Appliances",
+      "slug": "large-appliances",
+      "parentId": "apex-category-appliances",
+      "order": 0
+    },
+    {
+      "id": "apex-category-refrigerators",
+      "name": "Refrigerators",
+      "slug": "refrigerators",
+      "parentId": "apex-category-large-appliances",
+      "order": 0
+    },
+    {
+      "id": "apex-category-freezers",
+      "name": "Freezers",
+      "slug": "freezers",
+      "parentId": "apex-category-large-appliances",
+      "order": 1
+    },
+    {
+      "id": "apex-category-water-dispensers-coolers",
+      "name": "Water Dispensers & Coolers",
+      "slug": "water-dispensers-coolers",
+      "parentId": "apex-category-large-appliances",
+      "order": 2
+    },
+    {
+      "id": "apex-category-washers-dryers",
+      "name": "Washers & Dryers",
+      "slug": "washers-dryers",
+      "parentId": "apex-category-large-appliances",
+      "order": 3
+    },
+    {
+      "id": "apex-category-small-appliances",
+      "name": "Small Appliances",
+      "slug": "small-appliances",
+      "parentId": "apex-category-appliances",
+      "order": 1
+    },
+    {
+      "id": "apex-category-blenders",
+      "name": "Blenders",
+      "slug": "blenders",
+      "parentId": "apex-category-small-appliances",
+      "order": 0
+    },
+    {
+      "id": "apex-category-toasters",
+      "name": "Toasters",
+      "slug": "toasters",
+      "parentId": "apex-category-small-appliances",
+      "order": 1
+    },
+    {
+      "id": "apex-category-kettles",
+      "name": "Kettles",
+      "slug": "kettles",
+      "parentId": "apex-category-small-appliances",
+      "order": 2
+    },
+    {
+      "id": "apex-category-ironing-laundry",
+      "name": "Ironing & Laundry",
+      "slug": "ironing-laundry",
+      "parentId": "apex-category-small-appliances",
+      "order": 3
+    },
+    {
+      "id": "apex-category-cooking-appliances",
+      "name": "Cooking Appliances",
+      "slug": "cooking-appliances",
+      "parentId": "apex-category-appliances",
+      "order": 2
+    },
+    {
+      "id": "apex-category-cooktops",
+      "name": "Cooktops",
+      "slug": "cooktops",
+      "parentId": "apex-category-cooking-appliances",
+      "order": 0
+    },
+    {
+      "id": "apex-category-microwaves-ovens",
+      "name": "Microwaves & Ovens",
+      "slug": "microwaves-ovens",
+      "parentId": "apex-category-cooking-appliances",
+      "order": 1
+    },
+    {
+      "id": "apex-category-cookers",
+      "name": "Cookers",
+      "slug": "cookers",
+      "parentId": "apex-category-cooking-appliances",
+      "order": 2
+    },
+    {
+      "id": "apex-category-cooking-appliance-accessories",
+      "name": "Cooking Appliance Accessories",
+      "slug": "cooking-appliance-accessories",
+      "parentId": "apex-category-cooking-appliances",
+      "order": 3
+    },
+    {
+      "id": "apex-category-health-beauty",
+      "name": "Health & Beauty",
+      "slug": "health-beauty",
+      "parentId": null,
+      "order": 3
+    },
+    {
+      "id": "apex-category-facial-skincare",
+      "name": "Facial Skincare",
+      "slug": "facial-skincare",
+      "parentId": "apex-category-health-beauty",
+      "order": 0
+    },
+    {
+      "id": "apex-category-moisturizers",
+      "name": "Moisturizers",
+      "slug": "moisturizers",
+      "parentId": "apex-category-facial-skincare",
+      "order": 0
+    },
+    {
+      "id": "apex-category-cleansers",
+      "name": "Cleansers",
+      "slug": "cleansers",
+      "parentId": "apex-category-facial-skincare",
+      "order": 1
+    },
+    {
+      "id": "apex-category-masks",
+      "name": "Masks",
+      "slug": "masks",
+      "parentId": "apex-category-facial-skincare",
+      "order": 2
+    },
+    {
+      "id": "apex-category-toners",
+      "name": "Toners",
+      "slug": "toners",
+      "parentId": "apex-category-facial-skincare",
+      "order": 3
+    },
+    {
+      "id": "apex-category-sun-care",
+      "name": "Sun Care",
+      "slug": "sun-care",
+      "parentId": "apex-category-facial-skincare",
+      "order": 4
+    },
+    {
+      "id": "apex-category-hair-care",
+      "name": "Hair Care",
+      "slug": "hair-care",
+      "parentId": "apex-category-health-beauty",
+      "order": 1
+    },
+    {
+      "id": "apex-category-shampoos",
+      "name": "Shampoos",
+      "slug": "shampoos",
+      "parentId": "apex-category-hair-care",
+      "order": 0
+    },
+    {
+      "id": "apex-category-conditioners",
+      "name": "Conditioners",
+      "slug": "conditioners",
+      "parentId": "apex-category-hair-care",
+      "order": 1
+    },
+    {
+      "id": "apex-category-extensions-wigs-accessories",
+      "name": "Extensions Wigs & Accessories",
+      "slug": "extensions-wigs-accessories",
+      "parentId": "apex-category-hair-care",
+      "order": 2
+    },
+    {
+      "id": "apex-category-hair-tools",
+      "name": "Hair Tools",
+      "slug": "hair-tools",
+      "parentId": "apex-category-hair-care",
+      "order": 3
+    },
+    {
+      "id": "apex-category-hair-loss-products",
+      "name": "Hair Loss Products",
+      "slug": "hair-loss-products",
+      "parentId": "apex-category-hair-care",
+      "order": 4
+    },
+    {
+      "id": "apex-category-hair-styling-products",
+      "name": "Hair Styling Products",
+      "slug": "hair-styling-products",
+      "parentId": "apex-category-hair-care",
+      "order": 5
+    },
+    {
+      "id": "apex-category-makeup",
+      "name": "Makeup",
+      "slug": "makeup",
+      "parentId": "apex-category-health-beauty",
+      "order": 2
+    },
+    {
+      "id": "apex-category-face",
+      "name": "Face",
+      "slug": "face",
+      "parentId": "apex-category-makeup",
+      "order": 0
+    },
+    {
+      "id": "apex-category-eyes",
+      "name": "Eyes",
+      "slug": "eyes",
+      "parentId": "apex-category-makeup",
+      "order": 1
+    },
+    {
+      "id": "apex-category-lips",
+      "name": "Lips",
+      "slug": "lips",
+      "parentId": "apex-category-makeup",
+      "order": 2
+    },
+    {
+      "id": "apex-category-tools-brushes",
+      "name": "Tools & Brushes",
+      "slug": "tools-brushes",
+      "parentId": "apex-category-makeup",
+      "order": 3
+    },
+    {
+      "id": "apex-category-makeup-kits-combos",
+      "name": "Makeup Kits & Combos",
+      "slug": "makeup-kits-combos",
+      "parentId": "apex-category-makeup",
+      "order": 4
+    },
+    {
+      "id": "apex-category-health-wellness",
+      "name": "Health & Wellness",
+      "slug": "health-wellness",
+      "parentId": "apex-category-health-beauty",
+      "order": 3
+    },
+    {
+      "id": "apex-category-health-supplements",
+      "name": "Health Supplements",
+      "slug": "health-supplements",
+      "parentId": "apex-category-health-wellness",
+      "order": 0
+    },
+    {
+      "id": "apex-category-health-wellness-sports-nutrition",
+      "name": "Sports Nutrition",
+      "slug": "health-wellness-sports-nutrition",
+      "parentId": "apex-category-health-wellness",
+      "order": 1
+    },
+    {
+      "id": "apex-category-feminine-care",
+      "name": "Feminine Care",
+      "slug": "feminine-care",
+      "parentId": "apex-category-health-wellness",
+      "order": 2
+    },
+    {
+      "id": "apex-category-sexual-wellness",
+      "name": "Sexual Wellness",
+      "slug": "sexual-wellness",
+      "parentId": "apex-category-health-wellness",
+      "order": 3
+    },
+    {
+      "id": "apex-category-dermacosmetics",
+      "name": "Dermacosmetics",
+      "slug": "dermacosmetics",
+      "parentId": "apex-category-health-beauty",
+      "order": 4
+    },
+    {
+      "id": "apex-category-skin-care",
+      "name": "Skin Care",
+      "slug": "skin-care",
+      "parentId": "apex-category-dermacosmetics",
+      "order": 0
+    },
+    {
+      "id": "apex-category-hair-treatment",
+      "name": "Hair Treatment",
+      "slug": "hair-treatment",
+      "parentId": "apex-category-dermacosmetics",
+      "order": 1
+    },
+    {
+      "id": "apex-category-personal-care",
+      "name": "Personal Care",
+      "slug": "personal-care",
+      "parentId": "apex-category-health-beauty",
+      "order": 5
+    },
+    {
+      "id": "apex-category-body-lotions",
+      "name": "Body Lotions",
+      "slug": "body-lotions",
+      "parentId": "apex-category-personal-care",
+      "order": 0
+    },
+    {
+      "id": "apex-category-roll-ons-deodorants",
+      "name": "Roll-ons & Deodorants",
+      "slug": "roll-ons-deodorants",
+      "parentId": "apex-category-personal-care",
+      "order": 1
+    },
+    {
+      "id": "apex-category-shower-gels",
+      "name": "Shower Gels",
+      "slug": "shower-gels",
+      "parentId": "apex-category-personal-care",
+      "order": 2
+    },
+    {
+      "id": "apex-category-shave-hair-removal",
+      "name": "Shave & Hair Removal",
+      "slug": "shave-hair-removal",
+      "parentId": "apex-category-personal-care",
+      "order": 3
+    },
+    {
+      "id": "apex-category-fragrances",
+      "name": "Fragrances",
+      "slug": "fragrances",
+      "parentId": "apex-category-health-beauty",
+      "order": 6
+    },
+    {
+      "id": "apex-category-fragrances-mens",
+      "name": "Men's",
+      "slug": "fragrances-mens",
+      "parentId": "apex-category-fragrances",
+      "order": 0
+    },
+    {
+      "id": "apex-category-fragrances-womens",
+      "name": "Women's",
+      "slug": "fragrances-womens",
+      "parentId": "apex-category-fragrances",
+      "order": 1
+    },
+    {
+      "id": "apex-category-gift-sets-combos",
+      "name": "Gift Sets & Combos",
+      "slug": "gift-sets-combos",
+      "parentId": "apex-category-fragrances",
+      "order": 2
+    },
+    {
+      "id": "apex-category-aromatherapy",
+      "name": "Aromatherapy",
+      "slug": "aromatherapy",
+      "parentId": "apex-category-fragrances",
+      "order": 3
+    },
+    {
+      "id": "apex-category-luxury-beauty",
+      "name": "Luxury Beauty",
+      "slug": "luxury-beauty",
+      "parentId": "apex-category-health-beauty",
+      "order": 7
+    },
+    {
+      "id": "apex-category-luxury-beauty-fragrances",
+      "name": "Fragrances",
+      "slug": "luxury-beauty-fragrances",
+      "parentId": "apex-category-luxury-beauty",
+      "order": 0
+    },
+    {
+      "id": "apex-category-luxury-beauty-skincare",
+      "name": "Skincare",
+      "slug": "luxury-beauty-skincare",
+      "parentId": "apex-category-luxury-beauty",
+      "order": 1
+    },
+    {
+      "id": "apex-category-luxury-beauty-makeup",
+      "name": "Makeup",
+      "slug": "luxury-beauty-makeup",
+      "parentId": "apex-category-luxury-beauty",
+      "order": 2
+    },
+    {
+      "id": "apex-category-home-office",
+      "name": "Home & Office",
+      "slug": "home-office",
+      "parentId": null,
+      "order": 4
+    },
+    {
+      "id": "apex-category-kitchen-dining",
+      "name": "Kitchen & Dining",
+      "slug": "kitchen-dining",
+      "parentId": "apex-category-home-office",
+      "order": 0
+    },
+    {
+      "id": "apex-category-water-dispensers",
+      "name": "Water Dispensers",
+      "slug": "water-dispensers",
+      "parentId": "apex-category-kitchen-dining",
+      "order": 0
+    },
+    {
+      "id": "apex-category-kitchen-utensils",
+      "name": "Kitchen Utensils",
+      "slug": "kitchen-utensils",
+      "parentId": "apex-category-kitchen-dining",
+      "order": 1
+    },
+    {
+      "id": "apex-category-cookware",
+      "name": "Cookware",
+      "slug": "cookware",
+      "parentId": "apex-category-kitchen-dining",
+      "order": 2
+    },
+    {
+      "id": "apex-category-kitchen-storage",
+      "name": "Kitchen Storage",
+      "slug": "kitchen-storage",
+      "parentId": "apex-category-kitchen-dining",
+      "order": 3
+    },
+    {
+      "id": "apex-category-cutlery",
+      "name": "Cutlery",
+      "slug": "cutlery",
+      "parentId": "apex-category-kitchen-dining",
+      "order": 4
+    },
+    {
+      "id": "apex-category-shelves-racks",
+      "name": "Shelves & Racks",
+      "slug": "shelves-racks",
+      "parentId": "apex-category-kitchen-dining",
+      "order": 5
+    },
+    {
+      "id": "apex-category-flasks-bottles",
+      "name": "Flasks & Bottles",
+      "slug": "flasks-bottles",
+      "parentId": "apex-category-kitchen-dining",
+      "order": 6
+    },
+    {
+      "id": "apex-category-bedding",
+      "name": "Bedding",
+      "slug": "bedding",
+      "parentId": "apex-category-home-office",
+      "order": 1
+    },
+    {
+      "id": "apex-category-pillows",
+      "name": "Pillows",
+      "slug": "pillows",
+      "parentId": "apex-category-bedding",
+      "order": 0
+    },
+    {
+      "id": "apex-category-duvets",
+      "name": "Duvets",
+      "slug": "duvets",
+      "parentId": "apex-category-bedding",
+      "order": 1
+    },
+    {
+      "id": "apex-category-mosquito-nets",
+      "name": "Mosquito Nets",
+      "slug": "mosquito-nets",
+      "parentId": "apex-category-bedding",
+      "order": 2
+    },
+    {
+      "id": "apex-category-mattresses",
+      "name": "Mattresses",
+      "slug": "mattresses",
+      "parentId": "apex-category-bedding",
+      "order": 3
+    },
+    {
+      "id": "apex-category-bedding-accessories",
+      "name": "Bedding Accessories",
+      "slug": "bedding-accessories",
+      "parentId": "apex-category-bedding",
+      "order": 4
+    },
+    {
+      "id": "apex-category-sheets-pillow-cases",
+      "name": "Sheets & Pillow Cases",
+      "slug": "sheets-pillow-cases",
+      "parentId": "apex-category-bedding",
+      "order": 5
+    },
+    {
+      "id": "apex-category-decorative-pillows",
+      "name": "Decorative Pillows",
+      "slug": "decorative-pillows",
+      "parentId": "apex-category-bedding",
+      "order": 6
+    },
+    {
+      "id": "apex-category-lighting-outdoor",
+      "name": "Lighting & Outdoor",
+      "slug": "lighting-outdoor",
+      "parentId": "apex-category-home-office",
+      "order": 2
+    },
+    {
+      "id": "apex-category-solar-panels",
+      "name": "Solar Panels",
+      "slug": "solar-panels",
+      "parentId": "apex-category-lighting-outdoor",
+      "order": 0
+    },
+    {
+      "id": "apex-category-portable-power",
+      "name": "Portable Power",
+      "slug": "portable-power",
+      "parentId": "apex-category-lighting-outdoor",
+      "order": 1
+    },
+    {
+      "id": "apex-category-lamps-shades",
+      "name": "Lamps & Shades",
+      "slug": "lamps-shades",
+      "parentId": "apex-category-lighting-outdoor",
+      "order": 2
+    },
+    {
+      "id": "apex-category-decorative-lights",
+      "name": "Decorative Lights",
+      "slug": "decorative-lights",
+      "parentId": "apex-category-lighting-outdoor",
+      "order": 3
+    },
+    {
+      "id": "apex-category-ceiling-lights",
+      "name": "Ceiling Lights",
+      "slug": "ceiling-lights",
+      "parentId": "apex-category-lighting-outdoor",
+      "order": 4
+    },
+    {
+      "id": "apex-category-outdoor-lighting",
+      "name": "Outdoor Lighting",
+      "slug": "outdoor-lighting",
+      "parentId": "apex-category-lighting-outdoor",
+      "order": 5
+    },
+    {
+      "id": "apex-category-home-decor",
+      "name": "Home Decor",
+      "slug": "home-decor",
+      "parentId": "apex-category-home-office",
+      "order": 3
+    },
+    {
+      "id": "apex-category-rugs-carpets",
+      "name": "Rugs & Carpets",
+      "slug": "rugs-carpets",
+      "parentId": "apex-category-home-decor",
+      "order": 0
+    },
+    {
+      "id": "apex-category-wall-art",
+      "name": "Wall Art",
+      "slug": "wall-art",
+      "parentId": "apex-category-home-decor",
+      "order": 1
+    },
+    {
+      "id": "apex-category-door-mats",
+      "name": "Door Mats",
+      "slug": "door-mats",
+      "parentId": "apex-category-home-decor",
+      "order": 2
+    },
+    {
+      "id": "apex-category-artificial-plants",
+      "name": "Artificial Plants",
+      "slug": "artificial-plants",
+      "parentId": "apex-category-home-decor",
+      "order": 3
+    },
+    {
+      "id": "apex-category-clocks",
+      "name": "Clocks",
+      "slug": "clocks",
+      "parentId": "apex-category-home-decor",
+      "order": 4
+    },
+    {
+      "id": "apex-category-mirrors",
+      "name": "Mirrors",
+      "slug": "mirrors",
+      "parentId": "apex-category-home-decor",
+      "order": 5
+    },
+    {
+      "id": "apex-category-furniture",
+      "name": "Furniture",
+      "slug": "furniture",
+      "parentId": "apex-category-home-decor",
+      "order": 6
+    },
+    {
+      "id": "apex-category-home-organization",
+      "name": "Home Organization",
+      "slug": "home-organization",
+      "parentId": "apex-category-home-office",
+      "order": 4
+    },
+    {
+      "id": "apex-category-wardrobes",
+      "name": "Wardrobes",
+      "slug": "wardrobes",
+      "parentId": "apex-category-home-organization",
+      "order": 0
+    },
+    {
+      "id": "apex-category-shoe-racks",
+      "name": "Shoe Racks",
+      "slug": "shoe-racks",
+      "parentId": "apex-category-home-organization",
+      "order": 1
+    },
+    {
+      "id": "apex-category-bathroom-storage",
+      "name": "Bathroom Storage",
+      "slug": "bathroom-storage",
+      "parentId": "apex-category-home-organization",
+      "order": 2
+    },
+    {
+      "id": "apex-category-laundry-storage",
+      "name": "Laundry Storage",
+      "slug": "laundry-storage",
+      "parentId": "apex-category-home-organization",
+      "order": 3
+    },
+    {
+      "id": "apex-category-racks-shelves",
+      "name": "Racks & Shelves",
+      "slug": "racks-shelves",
+      "parentId": "apex-category-home-organization",
+      "order": 4
+    },
+    {
+      "id": "apex-category-baskets-bins-containers",
+      "name": "Baskets Bins & Containers",
+      "slug": "baskets-bins-containers",
+      "parentId": "apex-category-home-organization",
+      "order": 5
+    },
+    {
+      "id": "apex-category-fashion",
+      "name": "Fashion",
+      "slug": "fashion",
+      "parentId": null,
+      "order": 5
+    },
+    {
+      "id": "apex-category-mens-clothing",
+      "name": "Men's Clothing",
+      "slug": "mens-clothing",
+      "parentId": "apex-category-fashion",
+      "order": 0
+    },
+    {
+      "id": "apex-category-shirts",
+      "name": "Shirts",
+      "slug": "shirts",
+      "parentId": "apex-category-mens-clothing",
+      "order": 0
+    },
+    {
+      "id": "apex-category-suits-sports-coats",
+      "name": "Suits & Sports Coats",
+      "slug": "suits-sports-coats",
+      "parentId": "apex-category-mens-clothing",
+      "order": 1
+    },
+    {
+      "id": "apex-category-mens-jeans",
+      "name": "Jeans",
+      "slug": "mens-jeans",
+      "parentId": "apex-category-mens-clothing",
+      "order": 2
+    },
+    {
+      "id": "apex-category-underwear",
+      "name": "Underwear",
+      "slug": "underwear",
+      "parentId": "apex-category-mens-clothing",
+      "order": 3
+    },
+    {
+      "id": "apex-category-t-shirts-tanks",
+      "name": "T-Shirts & Tanks",
+      "slug": "t-shirts-tanks",
+      "parentId": "apex-category-mens-clothing",
+      "order": 4
+    },
+    {
+      "id": "apex-category-pants",
+      "name": "Pants",
+      "slug": "pants",
+      "parentId": "apex-category-mens-clothing",
+      "order": 5
+    },
+    {
+      "id": "apex-category-mens-shorts",
+      "name": "Shorts",
+      "slug": "mens-shorts",
+      "parentId": "apex-category-mens-clothing",
+      "order": 6
+    },
+    {
+      "id": "apex-category-mens-sweaters-hoodies",
+      "name": "Sweaters & Hoodies",
+      "slug": "mens-sweaters-hoodies",
+      "parentId": "apex-category-mens-clothing",
+      "order": 7
+    },
+    {
+      "id": "apex-category-mens-shoes",
+      "name": "Men's Shoes",
+      "slug": "mens-shoes",
+      "parentId": "apex-category-fashion",
+      "order": 1
+    },
+    {
+      "id": "apex-category-fashion-sneakers",
+      "name": "Fashion Sneakers",
+      "slug": "fashion-sneakers",
+      "parentId": "apex-category-mens-shoes",
+      "order": 0
+    },
+    {
+      "id": "apex-category-loafers-slip-ons",
+      "name": "Loafers & Slip-Ons",
+      "slug": "loafers-slip-ons",
+      "parentId": "apex-category-mens-shoes",
+      "order": 1
+    },
+    {
+      "id": "apex-category-mens-accessories",
+      "name": "Men's Accessories",
+      "slug": "mens-accessories",
+      "parentId": "apex-category-fashion",
+      "order": 2
+    },
+    {
+      "id": "apex-category-watches",
+      "name": "Watches",
+      "slug": "watches",
+      "parentId": "apex-category-mens-accessories",
+      "order": 0
+    },
+    {
+      "id": "apex-category-belts",
+      "name": "Belts",
+      "slug": "belts",
+      "parentId": "apex-category-mens-accessories",
+      "order": 1
+    },
+    {
+      "id": "apex-category-womens-clothing",
+      "name": "Women's Clothing",
+      "slug": "womens-clothing",
+      "parentId": "apex-category-fashion",
+      "order": 3
+    },
+    {
+      "id": "apex-category-dresses",
+      "name": "Dresses",
+      "slug": "dresses",
+      "parentId": "apex-category-womens-clothing",
+      "order": 0
+    },
+    {
+      "id": "apex-category-suits-blazers",
+      "name": "Suits & Blazers",
+      "slug": "suits-blazers",
+      "parentId": "apex-category-womens-clothing",
+      "order": 1
+    },
+    {
+      "id": "apex-category-tops-tees",
+      "name": "Tops & Tees",
+      "slug": "tops-tees",
+      "parentId": "apex-category-womens-clothing",
+      "order": 2
+    },
+    {
+      "id": "apex-category-coats-jackets-vests",
+      "name": "Coats Jackets & Vests",
+      "slug": "coats-jackets-vests",
+      "parentId": "apex-category-womens-clothing",
+      "order": 3
+    },
+    {
+      "id": "apex-category-jumpsuits-rompers-overalls",
+      "name": "Jumpsuits Rompers & Overalls",
+      "slug": "jumpsuits-rompers-overalls",
+      "parentId": "apex-category-womens-clothing",
+      "order": 4
+    },
+    {
+      "id": "apex-category-skirts",
+      "name": "Skirts",
+      "slug": "skirts",
+      "parentId": "apex-category-womens-clothing",
+      "order": 5
+    },
+    {
+      "id": "apex-category-lingerie-sleep-lounge",
+      "name": "Lingerie Sleep & Lounge",
+      "slug": "lingerie-sleep-lounge",
+      "parentId": "apex-category-womens-clothing",
+      "order": 6
+    },
+    {
+      "id": "apex-category-womens-jeans",
+      "name": "Jeans",
+      "slug": "womens-jeans",
+      "parentId": "apex-category-womens-clothing",
+      "order": 7
+    },
+    {
+      "id": "apex-category-womens-shorts",
+      "name": "Shorts",
+      "slug": "womens-shorts",
+      "parentId": "apex-category-womens-clothing",
+      "order": 8
+    },
+    {
+      "id": "apex-category-womens-sweaters-hoodies",
+      "name": "Sweaters & Hoodies",
+      "slug": "womens-sweaters-hoodies",
+      "parentId": "apex-category-womens-clothing",
+      "order": 9
+    },
+    {
+      "id": "apex-category-womens-shoes",
+      "name": "Women's Shoes",
+      "slug": "womens-shoes",
+      "parentId": "apex-category-fashion",
+      "order": 4
+    },
+    {
+      "id": "apex-category-flats",
+      "name": "Flats",
+      "slug": "flats",
+      "parentId": "apex-category-womens-shoes",
+      "order": 0
+    },
+    {
+      "id": "apex-category-sandals",
+      "name": "Sandals",
+      "slug": "sandals",
+      "parentId": "apex-category-womens-shoes",
+      "order": 1
+    },
+    {
+      "id": "apex-category-womens-accessories",
+      "name": "Women's Accessories",
+      "slug": "womens-accessories",
+      "parentId": "apex-category-fashion",
+      "order": 5
+    },
+    {
+      "id": "apex-category-jewellery",
+      "name": "Jewellery",
+      "slug": "jewellery",
+      "parentId": "apex-category-womens-accessories",
+      "order": 0
+    },
+    {
+      "id": "apex-category-handbags-wallets",
+      "name": "Handbags & Wallets",
+      "slug": "handbags-wallets",
+      "parentId": "apex-category-womens-accessories",
+      "order": 1
+    },
+    {
+      "id": "apex-category-kids-fashion",
+      "name": "Kids' Fashion",
+      "slug": "kids-fashion",
+      "parentId": "apex-category-fashion",
+      "order": 6
+    },
+    {
+      "id": "apex-category-boys",
+      "name": "Boys",
+      "slug": "boys",
+      "parentId": "apex-category-kids-fashion",
+      "order": 0
+    },
+    {
+      "id": "apex-category-girls",
+      "name": "Girls",
+      "slug": "girls",
+      "parentId": "apex-category-kids-fashion",
+      "order": 1
+    },
+    {
+      "id": "apex-category-computing",
+      "name": "Computing",
+      "slug": "computing",
+      "parentId": null,
+      "order": 6
+    },
+    {
+      "id": "apex-category-laptops",
+      "name": "Laptops",
+      "slug": "laptops",
+      "parentId": "apex-category-computing",
+      "order": 0
+    },
+    {
+      "id": "apex-category-netbooks",
+      "name": "Netbooks",
+      "slug": "netbooks",
+      "parentId": "apex-category-laptops",
+      "order": 0
+    },
+    {
+      "id": "apex-category-ultrabooks",
+      "name": "Ultrabooks",
+      "slug": "ultrabooks",
+      "parentId": "apex-category-laptops",
+      "order": 1
+    },
+    {
+      "id": "apex-category-notebooks",
+      "name": "Notebooks",
+      "slug": "notebooks",
+      "parentId": "apex-category-laptops",
+      "order": 2
+    },
+    {
+      "id": "apex-category-computers-accessories",
+      "name": "Computers & Accessories",
+      "slug": "computers-accessories",
+      "parentId": "apex-category-computing",
+      "order": 1
+    },
+    {
+      "id": "apex-category-laptop-accessories",
+      "name": "Laptop Accessories",
+      "slug": "laptop-accessories",
+      "parentId": "apex-category-computers-accessories",
+      "order": 0
+    },
+    {
+      "id": "apex-category-desktops",
+      "name": "Desktops",
+      "slug": "desktops",
+      "parentId": "apex-category-computers-accessories",
+      "order": 1
+    },
+    {
+      "id": "apex-category-computer-monitors",
+      "name": "Monitors",
+      "slug": "computer-monitors",
+      "parentId": "apex-category-computers-accessories",
+      "order": 2
+    },
+    {
+      "id": "apex-category-scanners",
+      "name": "Scanners",
+      "slug": "scanners",
+      "parentId": "apex-category-computers-accessories",
+      "order": 3
+    },
+    {
+      "id": "apex-category-printers",
+      "name": "Printers",
+      "slug": "printers",
+      "parentId": "apex-category-computers-accessories",
+      "order": 4
+    },
+    {
+      "id": "apex-category-keyboards-mice-accessories",
+      "name": "Keyboards Mice & Accessories",
+      "slug": "keyboards-mice-accessories",
+      "parentId": "apex-category-computers-accessories",
+      "order": 5
+    },
+    {
+      "id": "apex-category-computer-cables-adapters",
+      "name": "Computer Cables & Adapters",
+      "slug": "computer-cables-adapters",
+      "parentId": "apex-category-computers-accessories",
+      "order": 6
+    },
+    {
+      "id": "apex-category-printer-ink-toner",
+      "name": "Printer Ink & Toner",
+      "slug": "printer-ink-toner",
+      "parentId": "apex-category-computers-accessories",
+      "order": 7
+    },
+    {
+      "id": "apex-category-networking-products",
+      "name": "Networking Products",
+      "slug": "networking-products",
+      "parentId": "apex-category-computers-accessories",
+      "order": 8
+    },
+    {
+      "id": "apex-category-laptop-bags",
+      "name": "Laptop Bags",
+      "slug": "laptop-bags",
+      "parentId": "apex-category-computers-accessories",
+      "order": 9
+    },
+    {
+      "id": "apex-category-computer-data-storage",
+      "name": "Computer Data Storage",
+      "slug": "computer-data-storage",
+      "parentId": "apex-category-computing",
+      "order": 2
+    },
+    {
+      "id": "apex-category-external-hard-drives",
+      "name": "External Hard Drives",
+      "slug": "external-hard-drives",
+      "parentId": "apex-category-computer-data-storage",
+      "order": 0
+    },
+    {
+      "id": "apex-category-usb-flash-drives",
+      "name": "USB Flash Drives",
+      "slug": "usb-flash-drives",
+      "parentId": "apex-category-computer-data-storage",
+      "order": 1
+    },
+    {
+      "id": "apex-category-computer-components",
+      "name": "Computer Components",
+      "slug": "computer-components",
+      "parentId": "apex-category-computing",
+      "order": 3
+    },
+    {
+      "id": "apex-category-internal-hard-drives",
+      "name": "Internal Hard Drives",
+      "slug": "internal-hard-drives",
+      "parentId": "apex-category-computer-components",
+      "order": 0
+    },
+    {
+      "id": "apex-category-graphics-cards",
+      "name": "Graphics Cards",
+      "slug": "graphics-cards",
+      "parentId": "apex-category-computer-components",
+      "order": 1
+    },
+    {
+      "id": "apex-category-fans-cooling",
+      "name": "Fans & Cooling",
+      "slug": "fans-cooling",
+      "parentId": "apex-category-computer-components",
+      "order": 2
+    },
+    {
+      "id": "apex-category-cpu-processors",
+      "name": "CPU Processors",
+      "slug": "cpu-processors",
+      "parentId": "apex-category-computer-components",
+      "order": 3
+    },
+    {
+      "id": "apex-category-gaming",
+      "name": "Gaming",
+      "slug": "gaming",
+      "parentId": null,
+      "order": 7
+    },
+    {
+      "id": "apex-category-playstation",
+      "name": "PlayStation",
+      "slug": "playstation",
+      "parentId": "apex-category-gaming",
+      "order": 0
+    },
+    {
+      "id": "apex-category-playstation-5",
+      "name": "PlayStation 5",
+      "slug": "playstation-5",
+      "parentId": "apex-category-playstation",
+      "order": 0
+    },
+    {
+      "id": "apex-category-playstation-4",
+      "name": "PlayStation 4",
+      "slug": "playstation-4",
+      "parentId": "apex-category-playstation",
+      "order": 1
+    },
+    {
+      "id": "apex-category-xbox",
+      "name": "Xbox",
+      "slug": "xbox",
+      "parentId": "apex-category-gaming",
+      "order": 1
+    },
+    {
+      "id": "apex-category-xbox-series-x-s",
+      "name": "Xbox Series X|S",
+      "slug": "xbox-series-x-s",
+      "parentId": "apex-category-xbox",
+      "order": 0
+    },
+    {
+      "id": "apex-category-xbox-one",
+      "name": "Xbox One",
+      "slug": "xbox-one",
+      "parentId": "apex-category-xbox",
+      "order": 1
+    },
+    {
+      "id": "apex-category-nintendo",
+      "name": "Nintendo",
+      "slug": "nintendo",
+      "parentId": "apex-category-gaming",
+      "order": 2
+    },
+    {
+      "id": "apex-category-nintendo-switch",
+      "name": "Nintendo Switch",
+      "slug": "nintendo-switch",
+      "parentId": "apex-category-nintendo",
+      "order": 0
+    },
+    {
+      "id": "apex-category-pc-gaming",
+      "name": "PC Gaming",
+      "slug": "pc-gaming",
+      "parentId": "apex-category-gaming",
+      "order": 3
+    },
+    {
+      "id": "apex-category-games",
+      "name": "Games",
+      "slug": "games",
+      "parentId": "apex-category-pc-gaming",
+      "order": 0
+    },
+    {
+      "id": "apex-category-pc-gaming-accessories",
+      "name": "Accessories",
+      "slug": "pc-gaming-accessories",
+      "parentId": "apex-category-pc-gaming",
+      "order": 1
+    },
+    {
+      "id": "apex-category-supermarket",
+      "name": "Supermarket",
+      "slug": "supermarket",
+      "parentId": null,
+      "order": 8
+    },
+    {
+      "id": "apex-category-food-cupboard",
+      "name": "Food Cupboard",
+      "slug": "food-cupboard",
+      "parentId": "apex-category-supermarket",
+      "order": 0
+    },
+    {
+      "id": "apex-category-cooking-ingredients",
+      "name": "Cooking Ingredients",
+      "slug": "cooking-ingredients",
+      "parentId": "apex-category-food-cupboard",
+      "order": 0
+    },
+    {
+      "id": "apex-category-snacks-crisps-nuts",
+      "name": "Snacks Crisps & Nuts",
+      "slug": "snacks-crisps-nuts",
+      "parentId": "apex-category-food-cupboard",
+      "order": 1
+    },
+    {
+      "id": "apex-category-grains-rice",
+      "name": "Grains & Rice",
+      "slug": "grains-rice",
+      "parentId": "apex-category-food-cupboard",
+      "order": 2
+    },
+    {
+      "id": "apex-category-sugar-flour",
+      "name": "Sugar & Flour",
+      "slug": "sugar-flour",
+      "parentId": "apex-category-food-cupboard",
+      "order": 3
+    },
+    {
+      "id": "apex-category-breakfast-cereals",
+      "name": "Breakfast Cereals",
+      "slug": "breakfast-cereals",
+      "parentId": "apex-category-food-cupboard",
+      "order": 4
+    },
+    {
+      "id": "apex-category-margarine-jams-honey-spreads",
+      "name": "Margarine Jams Honey & Spreads",
+      "slug": "margarine-jams-honey-spreads",
+      "parentId": "apex-category-food-cupboard",
+      "order": 5
+    },
+    {
+      "id": "apex-category-pasta-noodles",
+      "name": "Pasta & Noodles",
+      "slug": "pasta-noodles",
+      "parentId": "apex-category-food-cupboard",
+      "order": 6
+    },
+    {
+      "id": "apex-category-drinks",
+      "name": "Drinks",
+      "slug": "drinks",
+      "parentId": "apex-category-supermarket",
+      "order": 1
+    },
+    {
+      "id": "apex-category-beer-wine-spirits",
+      "name": "Beer Wine & Spirits",
+      "slug": "beer-wine-spirits",
+      "parentId": "apex-category-drinks",
+      "order": 0
+    },
+    {
+      "id": "apex-category-carbonated-drinks",
+      "name": "Carbonated Drinks",
+      "slug": "carbonated-drinks",
+      "parentId": "apex-category-drinks",
+      "order": 1
+    },
+    {
+      "id": "apex-category-coffee-tea-cocoa",
+      "name": "Coffee Tea & Cocoa",
+      "slug": "coffee-tea-cocoa",
+      "parentId": "apex-category-drinks",
+      "order": 2
+    },
+    {
+      "id": "apex-category-dairy",
+      "name": "Dairy",
+      "slug": "dairy",
+      "parentId": "apex-category-drinks",
+      "order": 3
+    },
+    {
+      "id": "apex-category-juices-non-carbonated-drinks",
+      "name": "Juices & Non-Carbonated Drinks",
+      "slug": "juices-non-carbonated-drinks",
+      "parentId": "apex-category-drinks",
+      "order": 4
+    },
+    {
+      "id": "apex-category-water",
+      "name": "Water",
+      "slug": "water",
+      "parentId": "apex-category-drinks",
+      "order": 5
+    },
+    {
+      "id": "apex-category-household-supplies",
+      "name": "Household Supplies",
+      "slug": "household-supplies",
+      "parentId": "apex-category-supermarket",
+      "order": 2
+    },
+    {
+      "id": "apex-category-air-fresheners",
+      "name": "Air Fresheners",
+      "slug": "air-fresheners",
+      "parentId": "apex-category-household-supplies",
+      "order": 0
+    },
+    {
+      "id": "apex-category-bathroom-cleaners",
+      "name": "Bathroom Cleaners",
+      "slug": "bathroom-cleaners",
+      "parentId": "apex-category-household-supplies",
+      "order": 1
+    },
+    {
+      "id": "apex-category-bulbs-batteries",
+      "name": "Bulbs & Batteries",
+      "slug": "bulbs-batteries",
+      "parentId": "apex-category-household-supplies",
+      "order": 2
+    },
+    {
+      "id": "apex-category-floor-cleaners",
+      "name": "Floor Cleaners",
+      "slug": "floor-cleaners",
+      "parentId": "apex-category-household-supplies",
+      "order": 3
+    },
+    {
+      "id": "apex-category-household-cleaners-sundries",
+      "name": "Household Cleaners & Sundries",
+      "slug": "household-cleaners-sundries",
+      "parentId": "apex-category-household-supplies",
+      "order": 4
+    },
+    {
+      "id": "apex-category-kitchen-cleaners",
+      "name": "Kitchen Cleaners",
+      "slug": "kitchen-cleaners",
+      "parentId": "apex-category-household-supplies",
+      "order": 5
+    },
+    {
+      "id": "apex-category-laundry",
+      "name": "Laundry",
+      "slug": "laundry",
+      "parentId": "apex-category-household-supplies",
+      "order": 6
+    },
+    {
+      "id": "apex-category-papers-rolls",
+      "name": "Papers & Rolls",
+      "slug": "papers-rolls",
+      "parentId": "apex-category-household-supplies",
+      "order": 7
+    },
+    {
+      "id": "apex-category-baby-products",
+      "name": "Baby Products",
+      "slug": "baby-products",
+      "parentId": null,
+      "order": 9
+    },
+    {
+      "id": "apex-category-feeding",
+      "name": "Feeding",
+      "slug": "feeding",
+      "parentId": "apex-category-baby-products",
+      "order": 0
+    },
+    {
+      "id": "apex-category-bibs-burp-cloths",
+      "name": "Bibs & Burp Cloths",
+      "slug": "bibs-burp-cloths",
+      "parentId": "apex-category-feeding",
+      "order": 0
+    },
+    {
+      "id": "apex-category-bottle-feeding",
+      "name": "Bottle-Feeding",
+      "slug": "bottle-feeding",
+      "parentId": "apex-category-feeding",
+      "order": 1
+    },
+    {
+      "id": "apex-category-breastfeeding",
+      "name": "Breastfeeding",
+      "slug": "breastfeeding",
+      "parentId": "apex-category-feeding",
+      "order": 2
+    },
+    {
+      "id": "apex-category-highchairs-booster-seats",
+      "name": "Highchairs & Booster Seats",
+      "slug": "highchairs-booster-seats",
+      "parentId": "apex-category-feeding",
+      "order": 3
+    },
+    {
+      "id": "apex-category-pacifiers-accessories",
+      "name": "Pacifiers & Accessories",
+      "slug": "pacifiers-accessories",
+      "parentId": "apex-category-feeding",
+      "order": 4
+    },
+    {
+      "id": "apex-category-solid-feeding",
+      "name": "Solid Feeding",
+      "slug": "solid-feeding",
+      "parentId": "apex-category-feeding",
+      "order": 5
+    },
+    {
+      "id": "apex-category-diapering",
+      "name": "Diapering",
+      "slug": "diapering",
+      "parentId": "apex-category-baby-products",
+      "order": 1
+    },
+    {
+      "id": "apex-category-diaper-bags",
+      "name": "Diaper Bags",
+      "slug": "diaper-bags",
+      "parentId": "apex-category-diapering",
+      "order": 0
+    },
+    {
+      "id": "apex-category-disposable-diapers",
+      "name": "Disposable Diapers",
+      "slug": "disposable-diapers",
+      "parentId": "apex-category-diapering",
+      "order": 1
+    },
+    {
+      "id": "apex-category-portable-changing-pads",
+      "name": "Portable Changing Pads",
+      "slug": "portable-changing-pads",
+      "parentId": "apex-category-diapering",
+      "order": 2
+    },
+    {
+      "id": "apex-category-cloth-diapers",
+      "name": "Cloth Diapers",
+      "slug": "cloth-diapers",
+      "parentId": "apex-category-diapering",
+      "order": 3
+    },
+    {
+      "id": "apex-category-changing-tables",
+      "name": "Changing Tables",
+      "slug": "changing-tables",
+      "parentId": "apex-category-diapering",
+      "order": 4
+    },
+    {
+      "id": "apex-category-wipes-holders",
+      "name": "Wipes & Holders",
+      "slug": "wipes-holders",
+      "parentId": "apex-category-diapering",
+      "order": 5
+    },
+    {
+      "id": "apex-category-baby-safety",
+      "name": "Baby Safety",
+      "slug": "baby-safety",
+      "parentId": "apex-category-baby-products",
+      "order": 2
+    },
+    {
+      "id": "apex-category-baby-monitors",
+      "name": "Monitors",
+      "slug": "baby-monitors",
+      "parentId": "apex-category-baby-safety",
+      "order": 0
+    },
+    {
+      "id": "apex-category-sleep-positioners",
+      "name": "Sleep Positioners",
+      "slug": "sleep-positioners",
+      "parentId": "apex-category-baby-safety",
+      "order": 1
+    },
+    {
+      "id": "apex-category-edge-corner-guards",
+      "name": "Edge & Corner Guards",
+      "slug": "edge-corner-guards",
+      "parentId": "apex-category-baby-safety",
+      "order": 2
+    },
+    {
+      "id": "apex-category-baby-toddler-toys",
+      "name": "Baby & Toddler Toys",
+      "slug": "baby-toddler-toys",
+      "parentId": "apex-category-baby-products",
+      "order": 3
+    },
+    {
+      "id": "apex-category-building-toys",
+      "name": "Building Toys",
+      "slug": "building-toys",
+      "parentId": "apex-category-baby-toddler-toys",
+      "order": 0
+    },
+    {
+      "id": "apex-category-toy-gift-sets",
+      "name": "Toy Gift Sets",
+      "slug": "toy-gift-sets",
+      "parentId": "apex-category-baby-toddler-toys",
+      "order": 1
+    },
+    {
+      "id": "apex-category-music-sound",
+      "name": "Music & Sound",
+      "slug": "music-sound",
+      "parentId": "apex-category-baby-toddler-toys",
+      "order": 2
+    },
+    {
+      "id": "apex-category-bath-toys",
+      "name": "Bath Toys",
+      "slug": "bath-toys",
+      "parentId": "apex-category-baby-toddler-toys",
+      "order": 3
+    },
+    {
+      "id": "apex-category-gear",
+      "name": "Gear",
+      "slug": "gear",
+      "parentId": "apex-category-baby-products",
+      "order": 4
+    },
+    {
+      "id": "apex-category-walkers",
+      "name": "Walkers",
+      "slug": "walkers",
+      "parentId": "apex-category-gear",
+      "order": 0
+    },
+    {
+      "id": "apex-category-backpacks-carriers",
+      "name": "Backpacks & Carriers",
+      "slug": "backpacks-carriers",
+      "parentId": "apex-category-gear",
+      "order": 1
+    },
+    {
+      "id": "apex-category-swings-jumpers-bouncers",
+      "name": "Swings Jumpers & Bouncers",
+      "slug": "swings-jumpers-bouncers",
+      "parentId": "apex-category-gear",
+      "order": 2
+    },
+    {
+      "id": "apex-category-sleeping-nursery",
+      "name": "Sleeping & Nursery",
+      "slug": "sleeping-nursery",
+      "parentId": "apex-category-baby-products",
+      "order": 5
+    },
+    {
+      "id": "apex-category-baby-beds",
+      "name": "Baby Beds",
+      "slug": "baby-beds",
+      "parentId": "apex-category-sleeping-nursery",
+      "order": 0
+    },
+    {
+      "id": "apex-category-baby-bedding",
+      "name": "Baby Bedding",
+      "slug": "baby-bedding",
+      "parentId": "apex-category-sleeping-nursery",
+      "order": 1
+    },
+    {
+      "id": "apex-category-nursery-beds",
+      "name": "Nursery Beds",
+      "slug": "nursery-beds",
+      "parentId": "apex-category-sleeping-nursery",
+      "order": 2
+    },
+    {
+      "id": "apex-category-baby-mattresses",
+      "name": "Baby Mattresses",
+      "slug": "baby-mattresses",
+      "parentId": "apex-category-sleeping-nursery",
+      "order": 3
+    },
+    {
+      "id": "apex-category-sporting-goods",
+      "name": "Sporting Goods",
+      "slug": "sporting-goods",
+      "parentId": null,
+      "order": 10
+    },
+    {
+      "id": "apex-category-sports-fitness",
+      "name": "Sports & Fitness",
+      "slug": "sports-fitness",
+      "parentId": "apex-category-sporting-goods",
+      "order": 0
+    },
+    {
+      "id": "apex-category-sporting-goods-sports-nutrition",
+      "name": "Sports Nutrition",
+      "slug": "sporting-goods-sports-nutrition",
+      "parentId": "apex-category-sporting-goods",
+      "order": 1
+    },
+    {
+      "id": "apex-category-outdoor-recreation",
+      "name": "Outdoor Recreation",
+      "slug": "outdoor-recreation",
+      "parentId": "apex-category-sporting-goods",
+      "order": 2
+    },
+    {
+      "id": "apex-category-automobile",
+      "name": "Automobile",
+      "slug": "automobile",
+      "parentId": null,
+      "order": 11
+    },
+    {
+      "id": "apex-category-car-electronics-accessories",
+      "name": "Car Electronics & Accessories",
+      "slug": "car-electronics-accessories",
+      "parentId": "apex-category-automobile",
+      "order": 0
+    },
+    {
+      "id": "apex-category-car-safety-security",
+      "name": "Car Safety & Security",
+      "slug": "car-safety-security",
+      "parentId": "apex-category-automobile",
+      "order": 1
+    },
+    {
+      "id": "apex-category-motorcycle-powersports",
+      "name": "Motorcycle & Powersports",
+      "slug": "motorcycle-powersports",
+      "parentId": "apex-category-automobile",
+      "order": 2
+    },
+    {
+      "id": "apex-category-lights-lighting-accessories",
+      "name": "Lights & Lighting Accessories",
+      "slug": "lights-lighting-accessories",
+      "parentId": "apex-category-automobile",
+      "order": 3
+    },
+    {
+      "id": "apex-category-replacement-parts",
+      "name": "Replacement Parts",
+      "slug": "replacement-parts",
+      "parentId": "apex-category-automobile",
+      "order": 4
+    },
+    {
+      "id": "apex-category-garden-outdoors",
+      "name": "Garden & Outdoors",
+      "slug": "garden-outdoors",
+      "parentId": null,
+      "order": 12
+    },
+    {
+      "id": "apex-category-gardening-lawn-care",
+      "name": "Gardening & Lawn Care",
+      "slug": "gardening-lawn-care",
+      "parentId": "apex-category-garden-outdoors",
+      "order": 0
+    },
+    {
+      "id": "apex-category-grilling-outdoor-cooking",
+      "name": "Grilling & Outdoor Cooking",
+      "slug": "grilling-outdoor-cooking",
+      "parentId": "apex-category-garden-outdoors",
+      "order": 1
+    },
+    {
+      "id": "apex-category-outdoor-decor",
+      "name": "Outdoor Decor",
+      "slug": "outdoor-decor",
+      "parentId": "apex-category-garden-outdoors",
+      "order": 2
+    },
+    {
+      "id": "apex-category-patio-furniture-accessories",
+      "name": "Patio Furniture & Accessories",
+      "slug": "patio-furniture-accessories",
+      "parentId": "apex-category-garden-outdoors",
+      "order": 3
+    },
+    {
+      "id": "apex-category-farm-ranch",
+      "name": "Farm & Ranch",
+      "slug": "farm-ranch",
+      "parentId": "apex-category-garden-outdoors",
+      "order": 4
+    },
+    {
+      "id": "apex-category-books-movies-music",
+      "name": "Books, Movies & Music",
+      "slug": "books-movies-music",
+      "parentId": null,
+      "order": 13
+    },
+    {
+      "id": "apex-category-education-learning",
+      "name": "Education & Learning",
+      "slug": "education-learning",
+      "parentId": "apex-category-books-movies-music",
+      "order": 0
+    },
+    {
+      "id": "apex-category-biography-autobiography",
+      "name": "Biography & Autobiography",
+      "slug": "biography-autobiography",
+      "parentId": "apex-category-books-movies-music",
+      "order": 1
+    },
+    {
+      "id": "apex-category-literature",
+      "name": "Literature",
+      "slug": "literature",
+      "parentId": "apex-category-books-movies-music",
+      "order": 2
+    },
+    {
+      "id": "apex-category-children-teens",
+      "name": "Children & Teens",
+      "slug": "children-teens",
+      "parentId": "apex-category-books-movies-music",
+      "order": 3
+    },
+    {
+      "id": "apex-category-study-aids",
+      "name": "Study Aids",
+      "slug": "study-aids",
+      "parentId": "apex-category-books-movies-music",
+      "order": 4
+    },
+    {
+      "id": "apex-category-christian-books-bibles",
+      "name": "Christian Books & Bibles",
+      "slug": "christian-books-bibles",
+      "parentId": "apex-category-books-movies-music",
+      "order": 5
+    }
+  ]
+}

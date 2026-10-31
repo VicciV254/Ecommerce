@@ -1,12 +1,14 @@
 import express from 'express';
-import { getAdminData, getTheme, publishAdminData, publishTheme } from '../controllers/settingsController.js';
+import { getStorefront, getStorefrontDraft, saveStorefrontDraft, publishStorefront, retiredSettings } from '../controllers/settingsController.js';
 import { authenticateAdmin, authorize } from '../middleware/adminAuth.js';
 
 const router = express.Router();
-
-router.get('/admin-data', getAdminData);
-router.put('/admin-data', authenticateAdmin, authorize('SUPER_ADMIN', 'ADMIN'), publishAdminData);
-router.get('/theme', getTheme);
-router.put('/theme', authenticateAdmin, authorize('SUPER_ADMIN', 'ADMIN'), publishTheme);
-
+router.get('/storefront', getStorefront);
+router.get('/storefront/draft', authenticateAdmin, getStorefrontDraft);
+router.put('/storefront/draft', authenticateAdmin, authorize('SUPER_ADMIN', 'ADMIN'), saveStorefrontDraft);
+router.post('/storefront/publish', authenticateAdmin, authorize('SUPER_ADMIN', 'ADMIN'), publishStorefront);
+router.get('/admin-data', retiredSettings);
+router.put('/admin-data', authenticateAdmin, authorize('SUPER_ADMIN', 'ADMIN'), retiredSettings);
+router.get('/theme', retiredSettings);
+router.put('/theme', authenticateAdmin, authorize('SUPER_ADMIN', 'ADMIN'), retiredSettings);
 export default router;

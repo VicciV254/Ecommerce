@@ -119,38 +119,9 @@ export const getActivityLogs = async (req, res, next) => {
   }
 };
 
-export const createInitialAdmin = async (req, res, next) => {
-  try {
-    const { email, username, password } = req.body;
-    
-    // Check if admin already exists
-    const existingAdmin = await prisma.admin.findFirst();
-    if (existingAdmin) {
-      return res.status(400).json({ error: 'Admin already exists' });
-    }
-    
-    const hashedPassword = await bcrypt.hash(password, 10);
-    
-    const admin = await prisma.admin.create({
-      data: {
-        email,
-        username,
-        password: hashedPassword,
-        role: 'SUPER_ADMIN',
-      },
-      select: {
-        id: true,
-        email: true,
-        username: true,
-        role: true,
-      },
-    });
-    
-    res.status(201).json(admin);
-  } catch (error) {
-    next(error);
-  }
-};
+export const createInitialAdmin = (_req, res) => res.status(410).json({
+  error: 'HTTP staff bootstrap is retired. Use the guarded initialization command with secure environment credentials.',
+});
 
 export const getUsers = async (req, res, next) => {
   try {
@@ -269,81 +240,6 @@ export const deleteUser = async (req, res, next) => {
   }
 };
 
-const adminDeliveryMap = {
-  pickup: 'STORE_PICKUP',
-  'store-pickup': 'STORE_PICKUP',
-  STORE_PICKUP: 'STORE_PICKUP',
-  'same-day': 'SAME_DAY',
-  SAME_DAY: 'SAME_DAY',
-  standard: 'STANDARD',
-  STANDARD: 'STANDARD',
-};
-const adminPaymentMap = { mpesa: 'MPESA', MPESA: 'MPESA', card: 'CARD', CARD: 'CARD', bank: 'BANK_TRANSFER', BANK_TRANSFER: 'BANK_TRANSFER', cod: 'COD', COD: 'COD' };
-
-export const importLocalOrders = async (req, res, next) => {
-  try {
-    const receipts = Array.isArray(req.body.receipts) ? req.body.receipts : [];
-    const results = [];
-    for (const receipt of receipts) {
-      const email = receipt.address?.email;
-      if (!email || !receipt.orderNumber) {
-        results.push({ orderNumber: receipt.orderNumber, imported: false, reason: 'Missing email or order number' });
-        continue;
-      }
-      const existing = await prisma.order.findUnique({ where: { orderNumber: receipt.orderNumber } });
-      if (existing) {
-        results.push({ orderNumber: receipt.orderNumber, imported: false, reason: 'Already exists' });
-        continue;
-      }
-      const user = await prisma.user.findUnique({ where: { email } });
-      if (!user) {
-        results.push({ orderNumber: receipt.orderNumber, imported: false, reason: 'No matching user' });
-        continue;
-      }
-      const address = await prisma.address.create({
-        data: {
-          userId: user.id,
-          street: receipt.address.address || 'Not provided',
-          city: receipt.address.city || 'Not provided',
-          county: receipt.address.county || 'Not provided',
-          postalCode: receipt.address.zip || null,
-          isDefault: false,
-        },
-      });
-      await prisma.order.create({
-        data: {
-          orderNumber: receipt.orderNumber,
-          userId: user.id,
-          addressId: address.id,
-          subtotal: Number(receipt.subtotal || 0),
-          discount: 0,
-          tax: Number(receipt.tax || 0),
-          shippingCost: Number(receipt.shippingCost || 0),
-          total: Number(receipt.total || 0),
-          status: receipt.status || 'PENDING',
-          paymentMethod: adminPaymentMap[receipt.paymentMethod] || 'MPESA',
-          paymentStatus: receipt.paymentStatus || 'PENDING',
-          deliveryMethod: adminDeliveryMap[receipt.deliveryMethod] || 'STANDARD',
-          notes: receipt.mpesaCheckoutRequestId ? `Imported local receipt. M-Pesa CheckoutRequestID: ${receipt.mpesaCheckoutRequestId}` : 'Imported local receipt',
-          items: {
-            create: (receipt.items || []).map((item) => ({
-              productId: item.productId || 'unknown',
-              productName: item.productName || 'Product',
-              productPrice: Number(item.productPrice || 0),
-              quantity: Number(item.quantity || 1),
-              subtotal: Number(item.subtotal || 0),
-              productImage: item.productImage || null,
-            })),
-          },
-          trackingHistory: { create: { status: receipt.status || 'PENDING', description: 'Order Placed - Imported from local receipt', location: 'No Maneno Bazaar Warehouse' } },
-          createdAt: receipt.createdAt ? new Date(receipt.createdAt) : undefined,
-          updatedAt: receipt.updatedAt ? new Date(receipt.updatedAt) : undefined,
-        },
-      });
-      results.push({ orderNumber: receipt.orderNumber, imported: true });
-    }
-    res.json({ results });
-  } catch (error) {
-    next(error);
-  }
-};
+export const importLocalOrders = (_req, res) => res.status(410).json({
+  error: 'Legacy browser receipts cannot be imported into the fresh store.',
+});

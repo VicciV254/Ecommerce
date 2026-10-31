@@ -1,24 +1,24 @@
-import { Breadcrumb, Container, ProductCard } from "../components/ui";
-import { useStore } from "../store/StoreContext";
+import { Breadcrumb, Container, ErrorPanel, LoadingPanel, ProductCard } from "../components/ui";
 import { Link } from "../router";
+import { useCatalog } from "../store/CatalogContext";
+import { useStore } from "../store/StoreContext";
 
 export default function Wishlist() {
-  const { state, catalog } = useStore();
-  const items = catalog.filter((p) => state.wishlist.includes(p.id));
+  const { state, toggleWish } = useStore();
+  const catalog = useCatalog();
+  const saved = state.wishlist;
+  const items = saved.flatMap((id) => catalog.productsById.get(id) ?? []);
+  const unavailable = catalog.status === "ready" ? saved.filter((id) => !catalog.productsById.has(id)) : [];
 
   return (
     <Container className="py-8">
       <Breadcrumb items={[{ label: "Wishlist" }]} />
       <h1 className="mt-5 font-display text-2xl uppercase tracking-wider text-brand-primary">My Wishlist</h1>
-      <p className="mt-1 text-xs text-gray-400">{items.length} saved items</p>
 
-      {items.length === 0 ? (
-        <div className="rounded-lg bg-light-pink p-16 text-center shadow-sm">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor" className="mx-auto h-16 w-16 text-gray-200">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
-          </svg>
-          <h2 className="mt-4 font-display text-xl text-brand-primary">Your wishlist is empty</h2>
-          <p className="mt-1 text-sm text-gray-400">Save items you love to find them easily later.</p>
+      {saved.length === 0 ? (
+        <div className="mt-6 rounded-lg bg-white p-16 text-center shadow-sm">
+          <h2 className="font-display text-xl text-brand-primary">Your wishlist is empty</h2>
+          <p className="mt-1 text-sm text-gray-500">Save items you love to find them easily later.</p>
           <Link
             to="/shop"
             className="mt-6 inline-block rounded-sm bg-brand-primary px-8 py-3 text-xs font-bold uppercase tracking-[0.12em] text-white hover:bg-brand-secondary hover:text-brand-primary"
@@ -26,12 +26,27 @@ export default function Wishlist() {
             Browse Products
           </Link>
         </div>
-      ) : (
-        <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
-          {items.map((p) => (
-            <ProductCard key={p.id} product={p} />
-          ))}
+      ) : catalog.status === "loading" ? (
+        <div className="mt-6"><LoadingPanel label="Loading your saved items…" /></div>
+      ) : catalog.status === "error" ? (
+        <div className="mt-6">
+          <ErrorPanel title="Saved items are unavailable" message={`${catalog.error ?? "The catalog could not be loaded."} Your wishlist is unchanged.`} onRetry={catalog.reload} />
         </div>
+      ) : (
+        <>
+          <p className="mt-1 text-xs text-gray-500">{items.length} saved {items.length === 1 ? "item" : "items"}</p>
+          {unavailable.length > 0 && (
+            <div role="status" className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-warning/40 bg-warning/10 p-3 text-xs text-charcoal">
+              <span>{unavailable.length} saved {unavailable.length === 1 ? "item is" : "items are"} no longer available.</span>
+              <button type="button" onClick={() => unavailable.forEach(toggleWish)} className="font-bold text-brand-primary underline">
+                Remove unavailable items
+              </button>
+            </div>
+          )}
+          <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+            {items.map((product) => <ProductCard key={product.id} product={product} />)}
+          </div>
+        </>
       )}
     </Container>
   );

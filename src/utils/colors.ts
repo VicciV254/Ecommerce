@@ -1,0 +1,20 @@
+/** Swatch fills for colour option values; unknown names render as labelled text chips. */
+export const COLOR_MAP: Record<string, string> = {
+  White: "#ffffff", Blue: "#2563eb", Black: "#1a1a1a", Navy: "#1e293b",
+  Cream: "#f5f0e1", Brown: "#8b5a2b", Red: "#dc2626", Green: "#16a34a",
+  Grey: "#6b7280", Gold: "#e8a838", Silver: "#cbd5e1", Khaki: "#c3b091",
+  Olive: "#6b7c3b", Pink: "#ec4899", Yellow: "#eab308", Purple: "#9333ea",
+  Beige: "#f5ede3", Tan: "#d2a679", Nude: "#e3bc9a", Pastel: "#f8c8dc",
+  Coral: "#e67e5a", Sky: "#7dd3fc", Mint: "#a7f3d0", Stone: "#d6d3d1",
+  Sand: "#e6d2a8", Camel: "#c19a6b", Charcoal: "#36454f", Burgundy: "#800020",
+  Rust: "#b7410e", Taupe: "#b8a99a", Berry: "#9c2542", Wine: "#722f37",
+  Emerald: "#046307", Ivory: "#fffff0", Blush: "#de98a8", Mustard: "#e1ad01",
+  Rose: "#ff66cc", Natural: "#e8dcc4", Denim: "#3b5998",
+  "Multi-color": "linear-gradient(135deg,#e8a838,#e67e5a,#1a5276)",
+  Various: "linear-gradient(135deg,#e8a838,#e67e5a,#1a5276)",
+  "Navy/White": "linear-gradient(135deg,#1e293b 50%,#ffffff 50%)",
+  "Red/White": "linear-gradient(135deg,#dc2626 50%,#ffffff 50%)",
+  "White/Black": "linear-gradient(135deg,#ffffff 50%,#1a1a1a 50%)",
+  "White/Blue": "linear-gradient(135deg,#ffffff 50%,#2563eb 50%)",
+  Stripe: "linear-gradient(90deg,#1e293b 25%,#fff 25%,#fff 50%,#1e293b 50%,#1e293b 75%,#fff 75%)",
+};

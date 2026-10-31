@@ -1,20 +1,21 @@
 @import "tailwindcss";
 
+/* Pre-publication paint: mirrors the API's initial Apex Cart theme; published settings override it. */
 @theme {
-  --color-brand-primary: #1a1a1a;
-  --color-brand-secondary: #e8a838;
-  --color-brand-accent: #b8915c;
-  --color-warm-beige: #F8E0E5;
-  --color-ocean-blue: #1a5276;
-  --color-ocean-blue-dark: #154360;
-  --color-coral: #E96078;
-  --color-success: #27ae60;
-  --color-warning: #f39c12;
-  --color-error: #e74c3c;
-  --color-charcoal: #2c3e50;
-  --color-off-white: #faf8f5;
-  --color-light-gray: #e8e8e8;
-  --color-light-pink: #FAD4DC;
+  --color-brand-primary: #14213d;
+  --color-brand-secondary: #d4a73c;
+  --color-brand-accent: #926d21;
+  --color-warm-beige: #f4f1e9;
+  --color-ocean-blue: #1d4e89;
+  --color-ocean-blue-dark: #173f6e;
+  --color-coral: #b75238;
+  --color-success: #237a4b;
+  --color-warning: #9a6700;
+  --color-error: #b42318;
+  --color-charcoal: #253044;
+  --color-off-white: #f8fafc;
+  --color-light-gray: #d8dee7;
+  --color-light-pink: #eef2f7;
 
   --font-display: "Marcellus", serif;
   --font-body: "Jost", sans-serif;

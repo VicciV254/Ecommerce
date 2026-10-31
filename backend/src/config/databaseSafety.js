@@ -44,6 +44,10 @@ export function assertLocalDatabaseReset(env = process.env) {
   if (env.ALLOW_LOCAL_DATABASE_RESET !== 'true') {
     throw new Error('Database reset/seed requires explicit ALLOW_LOCAL_DATABASE_RESET=true');
   }
+  assertMatchingLocalDatabases(env);
+}
+
+export function assertMatchingLocalDatabases(env = process.env) {
   const app = assertLocalDatabaseUrl(env.DATABASE_URL);
   const direct = assertLocalDatabaseUrl(env.DIRECT_URL, 'DIRECT_URL');
   const target = (url) => [
@@ -55,4 +59,15 @@ export function assertLocalDatabaseReset(env = process.env) {
   if (target(app) !== target(direct)) {
     throw new Error('DATABASE_URL and DIRECT_URL must target the same local database and schema');
   }
+  return { app, direct };
+}
+
+export function assertDemoInitialization(env = process.env, dryRun = false) {
+  if (!['development', 'test'].includes(env.NODE_ENV)) {
+    throw new Error('Demo initialization requires NODE_ENV=development or test');
+  }
+  if (!dryRun && env.ALLOW_DEMO_INITIALIZATION !== 'true') {
+    throw new Error('Demo initialization requires explicit ALLOW_DEMO_INITIALIZATION=true');
+  }
+  return assertMatchingLocalDatabases(env);
 }

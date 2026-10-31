@@ -1,243 +1,82 @@
+import { z } from 'zod';
 import prisma from '../config/database.js';
-import { stockSchema } from '../utils/validators.js';
+import { catalogStockSchema, idSchema } from '../utils/catalogValidation.js';
+import { httpError, serializable, stockDto, stockInclude, stockStatus } from '../services/catalogService.js';
 
-export const getAllStock = async (req, res, next) => {
-  try {
-    const stock = await prisma.stock.findMany({
-      include: {
-        product: {
-          include: {
-            category: true,
-            images: true,
-          },
-        },
-      },
-    });
-    
-    res.json(stock);
-  } catch (error) {
-    next(error);
-  }
+const stockWhere = { variant: { is: { isActive: true, product: { is: { deletedAt: null } } } } };
+async function findStock(db, variantId) {
+  const stock = await db.stock.findUnique({ where: { variantId }, include: stockInclude });
+  if (!stock || stock.variant.product.deletedAt) throw httpError(404, 'Variant stock not found');
+  return stock;
+}
+export const getAllStock = async (_req, res, next) => {
+  try { res.json({ stocks: (await prisma.stock.findMany({ where: stockWhere, include: stockInclude, orderBy: { id: 'asc' } })).map(stockDto) }); }
+  catch (error) { next(error); }
 };
-
-export const getLowStock = async (req, res, next) => {
+export const getLowStock = async (_req, res, next) => {
   try {
-    const stock = await prisma.stock.findMany({
-      where: {
-        status: 'LOW_STOCK',
-      },
-      include: {
-        product: {
-          include: {
-            category: true,
-            images: true,
-          },
-        },
-      },
-    });
-    
-    res.json(stock);
-  } catch (error) {
-    next(error);
-  }
+    const rows = await prisma.stock.findMany({ where: stockWhere, include: stockInclude });
+    res.json({ stocks: rows.filter((item) => item.quantity > 0 && item.quantity <= item.minThreshold).map(stockDto) });
+  } catch (error) { next(error); }
 };
-
 export const getProductStock = async (req, res, next) => {
-  try {
-    const { productId } = req.params;
-    
-    const stock = await prisma.stock.findUnique({
-      where: { productId },
-      include: {
-        product: true,
-        restockHistory: {
-          orderBy: { createdAt: 'desc' },
-          take: 10,
-        },
-        stockLogs: {
-          orderBy: { createdAt: 'desc' },
-          take: 20,
-        },
-      },
-    });
-    
-    if (!stock) {
-      return res.status(404).json({ error: 'Stock not found' });
-    }
-    
-    res.json(stock);
-  } catch (error) {
-    next(error);
-  }
+  try { res.json(stockDto(await findStock(prisma, req.params.variantId))); } catch (error) { next(error); }
 };
-
+async function setStock(db, variantId, input, adminId, action) {
+  const current = await findStock(db, variantId);
+  const threshold = input.minThreshold ?? current.minThreshold;
+  const updated = await db.stock.update({ where: { id: current.id }, data: {
+    ...input, status: stockStatus(input.quantity, threshold),
+    ...(input.quantity > current.quantity && { lastRestocked: new Date() }),
+  }, include: stockInclude });
+  await db.stockLog.create({ data: {
+    stockId: current.id, previousStock: current.quantity,
+    newStock: input.quantity, action, adminId,
+  } });
+  return stockDto(updated);
+}
 export const updateStock = async (req, res, next) => {
   try {
-    const { productId } = req.params;
-    const validatedData = stockSchema.parse(req.body);
-    
-    const stock = await prisma.stock.findUnique({
-      where: { productId },
-    });
-    
-    if (!stock) {
-      return res.status(404).json({ error: 'Stock not found' });
-    }
-    
-    const previousStock = stock.quantity;
-    
-    // Update stock
-    const updatedStock = await prisma.stock.update({
-      where: { productId },
-      data: {
-        quantity: validatedData.quantity,
-        maxStock: validatedData.maxStock,
-        minThreshold: validatedData.minThreshold,
-        status: validatedData.quantity === 0 ? 'OUT_OF_STOCK' : 
-                validatedData.quantity <= (validatedData.minThreshold || 10) ? 'LOW_STOCK' : 'IN_STOCK',
-        lastRestocked: new Date(),
-      },
-    });
-    
-    // Log stock change
-    await prisma.stockLog.create({
-      data: {
-        stockId: stock.id,
-        previousStock,
-        newStock: validatedData.quantity,
-        action: 'set',
-        adminId: req.admin?.id,
-      },
-    });
-    
-    res.json(updatedStock);
-  } catch (error) {
-    next(error);
-  }
+    const input = catalogStockSchema.parse(req.body);
+    res.json(await serializable((db) => setStock(db, req.params.variantId, input, req.admin.id, 'set')));
+  } catch (error) { next(error); }
 };
-
 export const bulkUpdateStock = async (req, res, next) => {
   try {
-    const { updates } = req.body; // Array of { productId, quantity }
-    
-    const results = await Promise.all(
-      updates.map(async ({ productId, quantity }) => {
-        const stock = await prisma.stock.findUnique({
-          where: { productId },
-        });
-        
-        if (!stock) {
-          return { productId, error: 'Stock not found' };
-        }
-        
-        const previousStock = stock.quantity;
-        
-        const updatedStock = await prisma.stock.update({
-          where: { productId },
-          data: {
-            quantity,
-            status: quantity === 0 ? 'OUT_OF_STOCK' : 
-                    quantity <= stock.minThreshold ? 'LOW_STOCK' : 'IN_STOCK',
-            lastRestocked: new Date(),
-          },
-        });
-        
-        await prisma.stockLog.create({
-          data: {
-            stockId: stock.id,
-            previousStock,
-            newStock: quantity,
-            action: 'bulk-update',
-            adminId: req.admin?.id,
-          },
-        });
-        
-        return { productId, success: true, quantity };
-      })
-    );
-    
-    res.json(results);
-  } catch (error) {
-    next(error);
-  }
+    const { updates } = z.object({ updates: z.array(catalogStockSchema.extend({ variantId: idSchema })).min(1).max(100) }).strict().parse(req.body);
+    if (new Set(updates.map((item) => item.variantId)).size !== updates.length) throw httpError(400, 'Bulk stock updates must identify distinct variants');
+    const stocks = await serializable(async (db) => {
+      const results = [];
+      for (const { variantId, ...input } of updates) results.push(await setStock(db, variantId, input, req.admin.id, 'bulk-update'));
+      return results;
+    });
+    res.json({ stocks, updated: stocks.length });
+  } catch (error) { next(error); }
 };
-
 export const getStockHistory = async (req, res, next) => {
   try {
-    const { productId } = req.params;
-    
-    const stock = await prisma.stock.findUnique({
-      where: { productId },
-      include: {
-        stockLogs: {
-          orderBy: { createdAt: 'desc' },
-          take: 50,
-        },
-        restockHistory: {
-          orderBy: { createdAt: 'desc' },
-          take: 20,
-        },
-      },
-    });
-    
-    if (!stock) {
-      return res.status(404).json({ error: 'Stock not found' });
-    }
-    
-    res.json(stock);
-  } catch (error) {
-    next(error);
-  }
+    const stock = await findStock(prisma, req.params.variantId);
+    const [stockLogs, restockHistory] = await Promise.all([
+      prisma.stockLog.findMany({ where: { stockId: stock.id }, orderBy: { createdAt: 'desc' }, take: 50 }),
+      prisma.restockHistory.findMany({ where: { stockId: stock.id }, orderBy: { createdAt: 'desc' }, take: 20 }),
+    ]);
+    res.json({ stock: stockDto(stock), stockLogs, restockHistory });
+  } catch (error) { next(error); }
 };
-
 export const restockProduct = async (req, res, next) => {
   try {
-    const { productId } = req.params;
-    const { quantity, reason } = req.body;
-    
-    const stock = await prisma.stock.findUnique({
-      where: { productId },
+    const input = z.object({
+      quantity: z.number().int().positive().max(1_000_000),
+      reason: z.string().trim().min(1).max(500).default('Manual restock'),
+    }).strict().parse(req.body);
+    const result = await serializable(async (db) => {
+      const current = await findStock(db, req.params.variantId);
+      const quantity = current.quantity + input.quantity;
+      if (quantity > 1_000_000) throw httpError(400, 'Stock quantity exceeds the supported range');
+      const stock = await setStock(db, current.variantId, { quantity }, req.admin.id, 'restock');
+      await db.restockHistory.create({ data: { stockId: current.id, quantity: input.quantity, reason: input.reason, adminId: req.admin.id } });
+      return stock;
     });
-    
-    if (!stock) {
-      return res.status(404).json({ error: 'Stock not found' });
-    }
-    
-    const previousStock = stock.quantity;
-    
-    const updatedStock = await prisma.stock.update({
-      where: { productId },
-      data: {
-        quantity: previousStock + quantity,
-        status: (previousStock + quantity) === 0 ? 'OUT_OF_STOCK' : 
-                (previousStock + quantity) <= stock.minThreshold ? 'LOW_STOCK' : 'IN_STOCK',
-        lastRestocked: new Date(),
-      },
-    });
-    
-    // Create restock history
-    await prisma.restockHistory.create({
-      data: {
-        stockId: stock.id,
-        quantity,
-        reason: reason || 'Manual restock',
-        adminId: req.admin?.id,
-      },
-    });
-    
-    // Log stock change
-    await prisma.stockLog.create({
-      data: {
-        stockId: stock.id,
-        previousStock,
-        newStock: previousStock + quantity,
-        action: 'add',
-        adminId: req.admin?.id,
-      },
-    });
-    
-    res.json(updatedStock);
-  } catch (error) {
-    next(error);
-  }
+    res.json(result);
+  } catch (error) { next(error); }
 };

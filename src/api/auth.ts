@@ -35,26 +35,46 @@ export interface LoginData {
   password: string;
 }
 
+export interface AuthSession {
+  user: User;
+  token: string;
+  refreshToken: string;
+}
+
+/** Login rejection body; `requiresOtp` routes the customer to verification. */
+export interface LoginErrorBody {
+  error?: string;
+  requiresOtp?: boolean;
+  email?: string;
+}
+
+export interface VerificationResult {
+  message: string;
+  verificationEmailSent?: boolean;
+}
+
 export const authAPI = {
-  login: (data: LoginData) => api.post('/auth/login', data),
-  register: (data: RegisterData) => api.post('/auth/register', data),
-  logout: () => api.post('/auth/logout'),
+  login: (data: LoginData) => api.post<AuthSession>('/auth/login', data),
+  register: (data: RegisterData) =>
+    api.post<AuthSession & { verificationEmailSent?: boolean }>('/auth/register', data),
+  logout: () => api.post<{ message: string }>('/auth/logout'),
   getMe: () => api.get<User>('/auth/me'),
-  refreshToken: (refreshToken: string) =>
-    api.post('/auth/refresh', { refreshToken }),
   updateProfile: (data: Partial<User>) => api.put<User>('/auth/profile', data),
-  changePassword: (data: { currentPassword: string; newPassword: string }) =>
-    api.put('/auth/password', data),
-  verifyEmail: (token: string) => api.post('/auth/verify-email', { token }),
   verifyOtp: (email: string, code: string) =>
-    api.post('/auth/verify-otp', { email, code }),
+    api.post<{ message: string }>('/auth/verify-otp', { email, code }),
   resendVerification: (email: string) =>
-    api.post('/auth/resend-verification', { email }),
+    api.post<VerificationResult>('/auth/resend-verification', { email }),
   addAddress: (address: Omit<Address, 'id'>) =>
     api.post<Address>('/auth/addresses', address),
   updateAddress: (id: string, address: Partial<Address>) =>
-    api.put<Address>(`/auth/addresses/${id}`, address),
-  deleteAddress: (id: string) => api.delete(`/auth/addresses/${id}`),
-  setDefaultAddress: (id: string) =>
-    api.put(`/auth/addresses/${id}/default`),
+    api.put<Address>(`/auth/addresses/${encodeURIComponent(id)}`, address),
+  deleteAddress: (id: string) => api.delete<{ message: string }>(`/auth/addresses/${encodeURIComponent(id)}`),
 };
+
+/** Accepts a stored customer profile only when its identity fields are intact. */
+export function isUser(value: unknown): value is User {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return ['id', 'email', 'firstName', 'lastName'].every((key) => typeof candidate[key] === 'string') &&
+    (candidate.addresses === undefined || Array.isArray(candidate.addresses));
+}
