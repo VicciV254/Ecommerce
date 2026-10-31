@@ -11,7 +11,6 @@ interface ReturnOrderModalProps {
 export default function ReturnOrderModal({
   isOpen,
   onClose,
-  orderId,
   onReturn,
 }: ReturnOrderModalProps) {
   const [reason, setReason] = useState("");

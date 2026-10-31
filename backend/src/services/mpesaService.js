@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import '../config/environment.js';
 import axios from 'axios';
 
 function baseUrl() {

@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: apex_test
+      POSTGRES_PASSWORD: local_test_only
+      POSTGRES_DB: apex_test
+    ports:
+      - "127.0.0.1:55432:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U apex_test -d apex_test"]
+      interval: 2s
+      timeout: 2s
+      retries: 30

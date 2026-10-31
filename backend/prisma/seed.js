@@ -1,6 +1,13 @@
+import '../src/config/environment.js';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { assertLocalDatabaseReset } from '../src/config/databaseSafety.js';
 
+assertLocalDatabaseReset();
+const adminPassword = process.env.ADMIN_PASSWORD;
+if (!adminPassword || adminPassword.length < 12) {
+  throw new Error('ADMIN_PASSWORD must contain at least 12 characters before seeding');
+}
 const prisma = new PrismaClient();
 
 const CATEGORIES = [
@@ -282,7 +289,7 @@ async function main() {
   }
 
   console.log('🔐 Creating initial admin...');
-  const hashedPassword = await bcrypt.hash('admin123', 10);
+  const hashedPassword = await bcrypt.hash(adminPassword, 10);
   const admin = await prisma.admin.create({
     data: {
       email: process.env.ADMIN_EMAIL || 'admin@nomanenobazaar.com',
@@ -291,7 +298,7 @@ async function main() {
       role: 'SUPER_ADMIN',
     },
   });
-  console.log(`  ✓ Created admin: ${admin.email} (password: admin123)`);
+  console.log(`  ✓ Created admin: ${admin.email}`);
 
   console.log('✨ Database seed completed successfully!');
   console.log('\n📝 Summary:');

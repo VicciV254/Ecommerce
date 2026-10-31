@@ -1,14 +1,9 @@
-import "dotenv/config";
+import "./environment.js";
 import { PrismaClient } from "@prisma/client";
 
 // Uses DATABASE_URL from prisma/schema.prisma, shared with the Prisma CLI
 const prisma = new PrismaClient({
-  log: ["query", "error", "warn"],
+  log: process.env.NODE_ENV === "test" ? ["error", "warn"] : ["query", "error", "warn"],
 });
 
 export default prisma;
-
-// Handle graceful shutdown
-process.on("beforeExit", async () => {
-  await prisma.$disconnect();
-});

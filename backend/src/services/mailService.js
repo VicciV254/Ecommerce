@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import '../config/environment.js';
 import axios from 'axios';
 import nodemailer from 'nodemailer';
 import prisma from '../config/database.js';

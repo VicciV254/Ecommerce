@@ -14,7 +14,7 @@ export const createOrder = async (req, res, next) => {
         items: {
           include: {
             product: {
-              include: { stock: true },
+              include: { stock: true, images: true },
             },
           },
         },
@@ -27,7 +27,7 @@ export const createOrder = async (req, res, next) => {
 
     // Check stock availability
     for (const item of cart.items) {
-      if (item.product.stock.quantity < item.quantity) {
+      if (!item.product.stock || item.product.stock.quantity < item.quantity) {
         return res.status(400).json({
           error: `Insufficient stock for ${item.product.name}`,
         });
@@ -77,8 +77,7 @@ export const createOrder = async (req, res, next) => {
         },
         trackingHistory: {
           create: {
-            status:
-              normalizedPaymentStatus === "PAID" ? "PROCESSING" : "PENDING",
+            status: "PENDING",
             description: "Order placed successfully",
           },
         },

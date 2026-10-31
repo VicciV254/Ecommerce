@@ -1,4 +1,6 @@
-FROM node:18-alpine
+FROM node:24.22.1-bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends openssl && apt-get clean
 
 WORKDIR /app
 
@@ -6,13 +8,13 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies
-RUN npm ci --only=production
+RUN npm ci --no-audit --no-fund
 
 # Copy source code
 COPY . .
 
 # Generate Prisma client
-RUN npx prisma generate
+RUN npm run build && npm prune --omit=dev --no-audit --no-fund
 
 # Expose port
 EXPOSE 5000

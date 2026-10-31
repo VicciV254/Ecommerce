@@ -17,6 +17,9 @@ export default function ProductDetail({ id }: { id: string }) {
   const [qty, setQty] = useState(1);
   const [tab, setTab] = useState<(typeof TABS)[number]>("Description");
   const [added, setAdded] = useState(false);
+  const [activeAngle, setActiveAngle] = useState<"front" | "side" | "top" | "closeup">("front");
+  const [imageError, setImageError] = useState(false);
+  const [imgLoading, setImgLoading] = useState(true);
   
   if (!base) {
     return (
@@ -46,9 +49,6 @@ export default function ProductDetail({ id }: { id: string }) {
   };
 
   const imageSet = resolveImageSet(p);
-  const [activeAngle, setActiveAngle] = useState<"front" | "side" | "top" | "closeup">("front");
-  const [imageError, setImageError] = useState(false);
-  const [imgLoading, setImgLoading] = useState(true);
 
   const angleOrder: Array<"front" | "side" | "top" | "closeup"> = ["front", "side", "top", "closeup"];
   const angleLabels = {

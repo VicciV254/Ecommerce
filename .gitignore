@@ -52,6 +52,8 @@ backend/.vite/
 # Testing
 coverage/
 .nyc_output/
+test-results/
+playwright-report/
 
 # Misc
 *.pid
@@ -63,3 +65,5 @@ coverage/
 backend/.vercel/
 .vercel
 .env*
+!.env.example
+!backend/.env.example

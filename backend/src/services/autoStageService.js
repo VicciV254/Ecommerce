@@ -14,11 +14,6 @@ export const autoStageService = {
           status: {
             in: STAGE_SEQUENCE.slice(0, -1), // All stages except DELIVERED
           },
-          NOT: {
-            status: 'CANCELLED',
-            status: 'AWAITING_REFUND',
-            status: 'RETURNED',
-          },
         },
         include: {
           trackingHistory: {

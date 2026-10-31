@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import '../config/environment.js';
 import axios from 'axios';
 import FormData from 'form-data';
 
@@ -100,6 +100,7 @@ class ImageHostService {
           password: password,
         },
         {
+          timeout: 30000,
           withCredentials: true,
           headers: {
             'Content-Type': 'application/json',
@@ -140,7 +141,7 @@ class ImageHostService {
         console.error(`Status: ${error.response.status}, Data:`, error.response.data);
       }
       
-      throw new Error(`Image host authentication failed: ${error.message}`);
+      throw new Error(`Image host authentication failed: ${error.message}`, { cause: error });
     }
   }
 
@@ -231,7 +232,7 @@ class ImageHostService {
       if (error.response) {
         console.error(`Status: ${error.response.status}, Data:`, error.response.data);
       }
-      throw new Error(`Image upload failed: ${error.message}`);
+      throw new Error(`Image upload failed: ${error.message}`, { cause: error });
     }
   }
 
@@ -348,46 +349,36 @@ class ImageHostService {
 
 const imageHostService = new ImageHostService();
 
-const initializeImageHost = async () => {
+export function startImageHostServices() {
   if (!imageHostService.hasCredentials()) {
     console.log('Image host credentials not configured; uploads will be disabled until credentials are added.');
-    return;
+    return () => {};
   }
 
-  try {
-    await imageHostService.login();
-    console.log('Image host service initialized successfully');
-  } catch (error) {
-    console.error('Image host initialization failed:', error.message);
+  const minutes = Number(process.env.IMAGE_HOST_SESSION_REFRESH ?? '45');
+  if (!Number.isInteger(minutes) || minutes < 0 || minutes > 35791) {
+    throw new Error('IMAGE_HOST_SESSION_REFRESH must be an integer from 0 to 35791 minutes');
   }
-};
-
-initializeImageHost();
-
-const startSessionRefresh = () => {
-  if (!imageHostService.hasCredentials()) {
-    return;
-  }
-
-  const refreshInterval = parseInt(process.env.IMAGE_HOST_SESSION_REFRESH || '45');
-  
-  setInterval(async () => {
+  let stopped = false;
+  let running = false;
+  const refresh = async () => {
+    if (stopped || running || imageHostService.isSessionValid()) return;
+    running = true;
     try {
-      if (!imageHostService.isSessionValid()) {
-        console.log('Session expired, refreshing...');
-        await imageHostService.login();
-        console.log('Session refreshed successfully');
-      }
+      await imageHostService.login();
     } catch (error) {
-      console.error('Failed to refresh session:', error.message);
+      console.error('Image host session initialization/refresh failed:', error.message);
+    } finally {
+      running = false;
     }
-  }, refreshInterval * 60 * 1000);
-  
-  console.log(`Session refresh scheduler started (every ${refreshInterval} minutes)`);
-};
+  };
 
-if (process.env.IMAGE_HOST_SESSION_REFRESH !== '0') {
-  startSessionRefresh();
+  void refresh();
+  const timer = minutes > 0 ? setInterval(refresh, minutes * 60_000) : null;
+  return () => {
+    stopped = true;
+    if (timer) clearInterval(timer);
+  };
 }
 
 export default imageHostService;
