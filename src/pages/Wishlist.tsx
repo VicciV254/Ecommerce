@@ -3,7 +3,7 @@ import { useStore } from "../store/StoreContext";
 import { Link } from "../router";
 
 export default function Wishlist() {
-  const { state, productWithStock, catalog } = useStore();
+  const { state, catalog } = useStore();
   const items = catalog.filter((p) => state.wishlist.includes(p.id));
 
   return (
@@ -29,7 +29,7 @@ export default function Wishlist() {
       ) : (
         <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
           {items.map((p) => (
-            <ProductCard key={p.id} product={productWithStock(p)} />
+            <ProductCard key={p.id} product={p} />
           ))}
         </div>
       )}

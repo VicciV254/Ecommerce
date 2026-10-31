@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 import app from './app.js';
 import prisma from './config/database.js';
 import { startBackgroundJobs } from './services/backgroundJobs.js';
+import { assertAuthConfigured } from './config/auth.js';
 
 export async function startServer({
   port = Number(process.env.PORT || 5000),
@@ -15,11 +16,7 @@ export async function startServer({
   for (const key of ['DATABASE_URL', 'DIRECT_URL', 'JWT_SECRET', 'JWT_REFRESH_SECRET']) {
     if (!process.env[key]) throw new Error(`${key} must be configured before starting the server`);
   }
-  for (const key of ['JWT_SECRET', 'JWT_REFRESH_SECRET']) {
-    if (process.env[key].length < 32 || process.env[key].startsWith('your_')) {
-      throw new Error(`${key} must be a unique signing secret of at least 32 characters`);
-    }
-  }
+  assertAuthConfigured();
   let server;
   let stopJobs;
   let closing;

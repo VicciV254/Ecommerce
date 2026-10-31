@@ -1,9 +1,9 @@
 import bcrypt from 'bcryptjs';
-import crypto from 'crypto';
 import prisma from '../config/database.js';
-import { generateToken, generateRefreshToken, verifyRefreshToken } from '../config/auth.js';
+import { generateToken, generateRefreshToken, isCustomerToken, verifyRefreshToken } from '../config/auth.js';
 import { registerSchema, loginSchema, forgotPasswordSchema, resetPasswordSchema, changePasswordSchema, addressSchema } from '../utils/validators.js';
-import { sendOtpVerificationEmail, sendVerificationEmail } from '../services/mailService.js';
+import { sendOtpVerificationEmail } from '../services/mailService.js';
+import { userAccessError, userSessionSelect } from '../utils/account.js';
 
 const OTP_EXPIRY_MINUTES = Number(process.env.OTP_EXPIRY_MINUTES || 10);
 const OTP_MAX_ATTEMPTS = Number(process.env.OTP_MAX_ATTEMPTS || 5);
@@ -189,30 +189,27 @@ export const refresh = async (req, res, next) => {
   try {
     const { refreshToken } = req.body;
 
-    if (!refreshToken) {
+    if (typeof refreshToken !== 'string' || !refreshToken || refreshToken.length > 4096) {
       return res.status(400).json({ error: 'Refresh token is required' });
     }
 
     const decoded = verifyRefreshToken(refreshToken);
 
-    if (!decoded?.userId) {
+    if (!isCustomerToken(decoded)) {
       return res.status(401).json({ error: 'Invalid refresh token' });
     }
 
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
-      select: {
-        id: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        phone: true,
-      },
+      select: userSessionSelect,
     });
 
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
+
+    const denied = userAccessError(user);
+    if (denied) return res.status(403).json(denied);
 
     res.json({
       token: generateToken({ userId: user.id }),
@@ -587,4 +584,3 @@ export const resetPassword = async (req, res, next) => {
     next(error);
   }
 };
-

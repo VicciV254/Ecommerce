@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { CATEGORIES, PRODUCTS, stockStatus, type Product } from "../data/products";
 import { Container } from "../components/ui";
 import { PasswordInput } from "../components/PasswordInput";
@@ -10,7 +10,7 @@ import {
   type Discount,
 } from "../store/StoreContext";
 import { useAdminDraft } from "../store/useAdminDraft";
-import { ConfirmModal, Toast } from "../components/Modal";
+import { ConfirmModal, ModalDialog, Toast } from "../components/Modal";
 import { navigate } from "../router";
 import { useCustomize, FONT_OPTIONS, COLOR_PRESETS, COLOR_SLOT_LEGEND } from "../store/CustomizeContext";
 import { adminAPI } from "../api/admin";
@@ -1451,16 +1451,6 @@ function CatalogManager({ draftApi }: { draftApi: DraftApi }) {
         }}
       />
 
-      {/* Add category modal */}
-      <ConfirmModal
-        open={addCatOpen}
-        title="Create New Category"
-        confirmLabel="Create Category"
-        confirmDisabled={!newCatValid}
-        onConfirm={submitNewCat}
-        onCancel={() => { setAddCatOpen(false); setNewCat({ name: "", image: "" }); }}
-      />
-
       <ConfirmModal
         open={!!editingCategory}
         title="Edit Category"
@@ -1558,27 +1548,25 @@ function CatalogManager({ draftApi }: { draftApi: DraftApi }) {
         onCancel={() => { setAddCatOpen(false); setNewCat({ name: "", image: "" }); }}
       >
         <div className="mt-4 space-y-3">
-          <div>
-            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">Category Name</label>
-            <input
+          <Field label="Category Name">
+            {(id) => <input
+              id={id}
               value={newCat.name}
               onChange={(e) => setNewCat((s) => ({ ...s, name: e.target.value }))}
               placeholder="e.g. Traditional Wear"
               className="w-full rounded-sm border border-light-gray bg-off-white px-3 py-2 text-sm outline-none"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">Header Image URL</label>
-            <input
+            />}
+          </Field>
+          <Field label="Header Image URL">
+            {(id) => <input
+              id={id}
               value={newCat.image}
               onChange={(e) => setNewCat((s) => ({ ...s, image: e.target.value }))}
               placeholder="https://..."
               className="w-full rounded-sm border border-light-gray bg-off-white px-3 py-2 text-sm outline-none"
-            />
-            {newCat.image && (
-              <img src={newCat.image} alt="" className="mt-2 h-20 w-20 rounded-sm object-cover" />
-            )}
-          </div>
+            />}
+          </Field>
+          {newCat.image && <img src={newCat.image} alt="" className="mt-2 h-20 w-20 rounded-sm object-cover" />}
         </div>
       </ConfirmModal>
 
@@ -1793,28 +1781,27 @@ function ProductEditor({
   };
 
   return (
-    <div className="fixed inset-0 z-120 flex items-center justify-center p-2 sm:p-6">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative flex h-full max-h-[95vh] w-full max-w-6xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
+    <ModalDialog open label="Edit product" onClose={onClose}>
+      <div className="relative flex h-full max-h-[calc(100dvh-2rem)] w-full max-w-6xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
         {/* Top bar */}
-        <div className="flex items-center justify-between border-b border-light-gray px-4 py-3">
-          <div className="flex items-center gap-2">
-            <button onClick={onPrev} disabled={index <= 0} className="flex h-8 w-8 items-center justify-center rounded-full border border-light-gray text-charcoal disabled:opacity-30">←</button>
-            <button onClick={onNext} disabled={index >= allProducts.length - 1} className="flex h-8 w-8 items-center justify-center rounded-full border border-light-gray text-charcoal disabled:opacity-30">→</button>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-light-gray px-4 py-3">
+          <div className="flex min-w-0 basis-full items-center gap-2 sm:basis-auto">
+            <button aria-label="Previous product" onClick={onPrev} disabled={index <= 0} className="flex h-8 w-8 items-center justify-center rounded-full border border-light-gray text-charcoal disabled:opacity-30">←</button>
+            <button aria-label="Next product" onClick={onNext} disabled={index >= allProducts.length - 1} className="flex h-8 w-8 items-center justify-center rounded-full border border-light-gray text-charcoal disabled:opacity-30">→</button>
             <span className="ml-2 text-[10px] font-bold uppercase tracking-wider text-gray-400">{index + 1} of {allProducts.length} in {product.category}</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
             <button onClick={() => setPreview((p) => !p)} className={`rounded-sm border px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider transition-colors ${preview ? "border-brand-secondary bg-brand-secondary text-brand-primary" : "border-light-gray text-charcoal hover:border-brand-secondary"}`}>{preview ? "Editing View" : "Preview"}</button>
             <button onClick={apply} className="rounded-sm bg-brand-primary px-4 py-1.5 text-[11px] font-bold uppercase tracking-wider text-white hover:bg-brand-secondary hover:text-brand-primary">{saved ? "✓ Applied" : "Apply"}</button>
             {onRemove && <button onClick={onRemove} className="rounded-sm border border-error/40 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-error hover:bg-error hover:text-white">Remove</button>}
-            <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-warm-beige">
+            <button aria-label="Close product editor" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-warm-beige">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
             </button>
           </div>
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           {preview ? (
             /* PREVIEW MODE — mimics product detail */
             <div className="grid gap-8 p-6 lg:grid-cols-2">
@@ -1824,7 +1811,7 @@ function ProductEditor({
                 </div>
                 <div className="mt-3 grid grid-cols-5 gap-2">
                   {allImgs.map((img, i) => (
-                    <button key={i} onClick={() => setActiveAngle(i as 0|1|2|3|4)} className={`aspect-square overflow-hidden rounded-md border-2 ${i === activeAngle ? "border-brand-primary" : "border-transparent"}`}>
+                    <button key={i} aria-label={`Preview image ${i + 1}`} aria-pressed={i === activeAngle} onClick={() => setActiveAngle(i as 0|1|2|3|4)} className={`aspect-square overflow-hidden rounded-md border-2 ${i === activeAngle ? "border-brand-primary" : "border-transparent"}`}>
                       <img src={img} alt="" className="h-full w-full object-cover" />
                     </button>
                   ))}
@@ -1851,13 +1838,13 @@ function ProductEditor({
                 <h4 className="mb-3 text-[11px] font-bold uppercase tracking-wider text-brand-primary">Images</h4>
                 <div className="space-y-3">
                   <Field label="Overview image (main)">
-                    <input value={form.image} onChange={(e) => setForm({ ...form, image: e.target.value })} className="w-full rounded-sm border border-light-gray bg-off-white px-3 py-2 text-xs outline-none" />
+                    {(id) => <input id={id} value={form.image} onChange={(e) => setForm({ ...form, image: e.target.value })} className="w-full rounded-sm border border-light-gray bg-off-white px-3 py-2 text-xs outline-none" />}
                   </Field>
                   {form.image && <img src={form.image} alt="" className="h-24 w-24 rounded-sm object-cover" />}
-                  <Field label="Detail pic 1"><input value={form.g0} onChange={(e) => setForm({ ...form, g0: e.target.value })} className="w-full rounded-sm border border-light-gray bg-off-white px-3 py-2 text-xs outline-none" /></Field>
-                  <Field label="Detail pic 2"><input value={form.g1} onChange={(e) => setForm({ ...form, g1: e.target.value })} className="w-full rounded-sm border border-light-gray bg-off-white px-3 py-2 text-xs outline-none" /></Field>
-                  <Field label="Detail pic 3"><input value={form.g2} onChange={(e) => setForm({ ...form, g2: e.target.value })} className="w-full rounded-sm border border-light-gray bg-off-white px-3 py-2 text-xs outline-none" /></Field>
-                  <Field label="Detail pic 4"><input value={form.g3} onChange={(e) => setForm({ ...form, g3: e.target.value })} className="w-full rounded-sm border border-light-gray bg-off-white px-3 py-2 text-xs outline-none" /></Field>
+                  <Field label="Detail pic 1">{(id) => <input id={id} value={form.g0} onChange={(e) => setForm({ ...form, g0: e.target.value })} className="w-full rounded-sm border border-light-gray bg-off-white px-3 py-2 text-xs outline-none" />}</Field>
+                  <Field label="Detail pic 2">{(id) => <input id={id} value={form.g1} onChange={(e) => setForm({ ...form, g1: e.target.value })} className="w-full rounded-sm border border-light-gray bg-off-white px-3 py-2 text-xs outline-none" />}</Field>
+                  <Field label="Detail pic 3">{(id) => <input id={id} value={form.g2} onChange={(e) => setForm({ ...form, g2: e.target.value })} className="w-full rounded-sm border border-light-gray bg-off-white px-3 py-2 text-xs outline-none" />}</Field>
+                  <Field label="Detail pic 4">{(id) => <input id={id} value={form.g3} onChange={(e) => setForm({ ...form, g3: e.target.value })} className="w-full rounded-sm border border-light-gray bg-off-white px-3 py-2 text-xs outline-none" />}</Field>
                   <div className="grid grid-cols-4 gap-2">
                     {[form.g0, form.g1, form.g2, form.g3].map((g, i) => g && <img key={i} src={g} alt="" className="aspect-square w-full rounded-sm object-cover" />)}
                   </div>
@@ -1866,30 +1853,30 @@ function ProductEditor({
               <div>
                 <h4 className="mb-3 text-[11px] font-bold uppercase tracking-wider text-brand-primary">Details</h4>
                 <div className="space-y-3">
-                  <Field label="Name"><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full rounded-sm border border-light-gray bg-off-white px-3 py-2 text-sm outline-none" /></Field>
-                  <Field label="Price (KES)"><input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} className="w-full rounded-sm border border-light-gray bg-off-white px-3 py-2 text-sm outline-none" /></Field>
+                  <Field label="Name">{(id) => <input id={id} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full rounded-sm border border-light-gray bg-off-white px-3 py-2 text-sm outline-none" />}</Field>
+                  <Field label="Price (KES)">{(id) => <input id={id} type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} className="w-full rounded-sm border border-light-gray bg-off-white px-3 py-2 text-sm outline-none" />}</Field>
                   <Field label="Category">
-                    <div className="flex gap-2">
-                      <select value={form.categorySlug} onChange={(e) => setForm({ ...form, categorySlug: e.target.value })} className="flex-1 rounded-sm border border-light-gray bg-off-white px-2 py-2 text-xs outline-none">
+                    {(id) => <div className="flex gap-2">
+                      <select id={id} value={form.categorySlug} onChange={(e) => setForm({ ...form, categorySlug: e.target.value })} className="min-w-0 flex-1 rounded-sm border border-light-gray bg-off-white px-2 py-2 text-xs outline-none">
                         {allCategories.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}
                       </select>
-                      <button onClick={onAddCategory} className="rounded-sm border border-brand-primary px-3 py-2 text-[10px] font-bold uppercase text-brand-primary hover:bg-brand-primary hover:text-white">+ New</button>
-                    </div>
+                      <button aria-label="Create category" onClick={onAddCategory} className="rounded-sm border border-brand-primary px-3 py-2 text-[10px] font-bold uppercase text-brand-primary hover:bg-brand-primary hover:text-white">+ New</button>
+                    </div>}
                   </Field>
                   <Field label="Designer">
-                    <div className="flex gap-2">
-                      <select value={form.designerId} onChange={(e) => setForm({ ...form, designerId: e.target.value })} className="flex-1 rounded-sm border border-light-gray bg-off-white px-2 py-2 text-xs outline-none">
+                    {(id) => <div className="flex gap-2">
+                      <select id={id} value={form.designerId} onChange={(e) => setForm({ ...form, designerId: e.target.value })} className="min-w-0 flex-1 rounded-sm border border-light-gray bg-off-white px-2 py-2 text-xs outline-none">
                         <option value="">— None —</option>
                         {allDesigners.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
                       </select>
-                      <button onClick={onAddDesigner} className="rounded-sm border border-brand-primary px-3 py-2 text-[10px] font-bold uppercase text-brand-primary hover:bg-brand-primary hover:text-white">+ New</button>
-                    </div>
+                      <button aria-label="Create designer" onClick={onAddDesigner} className="rounded-sm border border-brand-primary px-3 py-2 text-[10px] font-bold uppercase text-brand-primary hover:bg-brand-primary hover:text-white">+ New</button>
+                    </div>}
                   </Field>
                   <Field label="Tags (comma separated)">
-                    <input value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} placeholder="shirt, cotton, summer" className="w-full rounded-sm border border-light-gray bg-off-white px-3 py-2 text-sm outline-none" />
+                    {(id) => <input id={id} value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} placeholder="shirt, cotton, summer" className="w-full rounded-sm border border-light-gray bg-off-white px-3 py-2 text-sm outline-none" />}
                   </Field>
                   <Field label="Description">
-                    <textarea rows={4} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full rounded-sm border border-light-gray bg-off-white px-3 py-2 text-sm outline-none" />
+                    {(id) => <textarea id={id} rows={4} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full rounded-sm border border-light-gray bg-off-white px-3 py-2 text-sm outline-none" />}
                   </Field>
                 </div>
               </div>
@@ -1897,15 +1884,16 @@ function ProductEditor({
           )}
         </div>
       </div>
-    </div>
+    </ModalDialog>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children }: { label: string; children: (id: string) => React.ReactNode }) {
+  const id = useId();
   return (
     <div>
-      <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">{label}</label>
-      {children}
+      <label htmlFor={id} className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">{label}</label>
+      {children(id)}
     </div>
   );
 }
@@ -2231,6 +2219,3 @@ function PromotionsManager({ showToast }: { showToast: (message: string) => void
     )}
   </div>;
 }
-
-
-

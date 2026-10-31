@@ -1,5 +1,6 @@
-import { verifyToken } from '../config/auth.js';
+import { isCustomerToken, verifyToken } from '../config/auth.js';
 import prisma from '../config/database.js';
+import { userAccessError, userSessionSelect } from '../utils/account.js';
 
 export const authenticate = async (req, res, next) => {
   try {
@@ -12,33 +13,28 @@ export const authenticate = async (req, res, next) => {
     const token = authHeader.substring(7);
     const decoded = verifyToken(token);
     
-    if (!decoded) {
+    if (!isCustomerToken(decoded)) {
       return res.status(401).json({ error: 'Invalid or expired token' });
     }
     
     // Get user from database
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
-      select: {
-        id: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        phone: true,
-      },
+      select: userSessionSelect,
     });
     
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
-    if (user.isDisabled) {
-      return res.status(403).json({ error: 'This account has been disabled' });
+    const denied = userAccessError(user);
+    if (denied) {
+      return res.status(403).json(denied);
     }
     
     req.user = user;
     next();
   } catch (error) {
-    res.status(401).json({ error: 'Authentication failed' });
+    next(error);
   }
 };
 
@@ -54,26 +50,19 @@ export const optionalAuth = async (req, res, next) => {
     const token = authHeader.substring(7);
     const decoded = verifyToken(token);
     
-    if (!decoded) {
+    if (!isCustomerToken(decoded)) {
       req.user = null;
       return next();
     }
     
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
-      select: {
-        id: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        phone: true,
-      },
+      select: userSessionSelect,
     });
     
-    req.user = user || null;
+    req.user = user && !userAccessError(user) ? user : null;
     next();
   } catch (error) {
-    req.user = null;
-    next();
+    next(error);
   }
 };

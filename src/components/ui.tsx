@@ -59,6 +59,7 @@ export function StockBadge({ stock }: { stock: number }) {
 }
 
 /* ---------- Product Card ---------- */
+/** Accepts a catalog product; display pricing is applied here once. */
 export function ProductCard({ product }: { product: Product }) {
   const { addToCart, toggleWish, state, productWithStock } = useStore();
   const { user } = useAuth();

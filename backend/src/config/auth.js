@@ -1,31 +1,53 @@
 import './environment.js';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key_here_min_32_characters';
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'your_refresh_secret_here_min_32_characters';
-const JWT_EXPIRE = process.env.JWT_EXPIRE || '7d';
-const JWT_REFRESH_EXPIRE = process.env.JWT_REFRESH_EXPIRE || '30d';
-
-export const generateToken = (payload) => {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRE });
-};
-
-export const generateRefreshToken = (payload) => {
-  return jwt.sign(payload, JWT_REFRESH_SECRET, { expiresIn: JWT_REFRESH_EXPIRE });
-};
-
-export const verifyToken = (token) => {
-  try {
-    return jwt.verify(token, JWT_SECRET);
-  } catch (error) {
-    return null;
+export function assertAuthConfigured() {
+  for (const key of ['JWT_SECRET', 'JWT_REFRESH_SECRET']) {
+    const value = process.env[key];
+    if (!value || value.length < 32 || value.startsWith('your_')) {
+      const error = new Error(`${key} must be configured as a unique signing secret of at least 32 characters`);
+      error.statusCode = 503;
+      throw error;
+    }
   }
-};
-
-export const verifyRefreshToken = (token) => {
-  try {
-    return jwt.verify(token, JWT_REFRESH_SECRET);
-  } catch (error) {
-    return null;
+  if (process.env.JWT_SECRET === process.env.JWT_REFRESH_SECRET) {
+    const error = new Error('Access and refresh signing secrets must be different');
+    error.statusCode = 503;
+    throw error;
   }
-};
+}
+
+function signingKey(key) {
+  assertAuthConfigured();
+  return process.env[key];
+}
+
+function verify(token, key) {
+  const secret = signingKey(key);
+  if (typeof token !== 'string' || !token) return null;
+  try {
+    return jwt.verify(token, secret, { algorithms: ['HS256'] });
+  } catch (error) {
+    if (error instanceof jwt.JsonWebTokenError || error instanceof jwt.TokenExpiredError || error instanceof jwt.NotBeforeError) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+export const generateToken = (payload) =>
+  jwt.sign(payload, signingKey('JWT_SECRET'), { algorithm: 'HS256', expiresIn: process.env.JWT_EXPIRE || '7d' });
+
+export const generateRefreshToken = (payload) =>
+  jwt.sign(payload, signingKey('JWT_REFRESH_SECRET'), { algorithm: 'HS256', expiresIn: process.env.JWT_REFRESH_EXPIRE || '30d' });
+
+export const verifyToken = (token) => verify(token, 'JWT_SECRET');
+export const verifyRefreshToken = (token) => verify(token, 'JWT_REFRESH_SECRET');
+
+export const isCustomerToken = (payload) =>
+  payload !== null && typeof payload === 'object' &&
+  typeof payload.userId === 'string' && payload.userId.length > 0 && payload.adminId === undefined;
+
+export const isAdminToken = (payload) =>
+  payload !== null && typeof payload === 'object' &&
+  typeof payload.adminId === 'string' && payload.adminId.length > 0 && payload.userId === undefined;

@@ -2,6 +2,7 @@ import prisma from "../config/database.js";
 import { generateOrderNumber } from "../utils/helpers.js";
 import emailService from "../services/emailService.js";
 import autoStageService from "../services/autoStageService.js";
+import { userSummarySelect } from "../utils/account.js";
 
 export const createOrder = async (req, res, next) => {
   try {
@@ -63,6 +64,8 @@ export const createOrder = async (req, res, next) => {
         shippingCost,
         total,
         paymentMethod,
+        paymentStatus: "PENDING",
+        status: "PENDING",
         deliveryMethod,
         notes,
         items: {
@@ -85,7 +88,7 @@ export const createOrder = async (req, res, next) => {
       include: {
         items: true,
         address: true,
-        user: true,
+        user: { select: userSummarySelect },
       },
     });
 
@@ -426,7 +429,7 @@ export const returnOrder = async (req, res, next) => {
         items: true,
         address: true,
         trackingHistory: { orderBy: { createdAt: "desc" } },
-        user: true,
+        user: { select: userSummarySelect },
       },
     });
 
@@ -631,7 +634,7 @@ export const approveRefund = async (req, res, next) => {
         items: true,
         address: true,
         trackingHistory: { orderBy: { createdAt: 'desc' } },
-        user: true,
+        user: { select: userSummarySelect },
       },
     });
 
@@ -651,28 +654,6 @@ export const approveRefund = async (req, res, next) => {
   }
 };
 
-const DELIVERY_MAP = {
-  pickup: "STORE_PICKUP",
-  "store-pickup": "STORE_PICKUP",
-  STORE_PICKUP: "STORE_PICKUP",
-  "same-day": "SAME_DAY",
-  SAME_DAY: "SAME_DAY",
-  standard: "STANDARD",
-  STANDARD: "STANDARD",
-};
-
-const PAYMENT_MAP = {
-  mpesa: "MPESA",
-  MPESA: "MPESA",
-  card: "CARD",
-  CARD: "CARD",
-  bank: "BANK_TRANSFER",
-  bank_transfer: "BANK_TRANSFER",
-  BANK_TRANSFER: "BANK_TRANSFER",
-  cod: "COD",
-  COD: "COD",
-};
-
 function dayRange(day) {
   if (!day) return undefined;
   const start = new Date(`${day}T00:00:00.000Z`);
@@ -681,93 +662,10 @@ function dayRange(day) {
   return { gte: start, lte: end };
 }
 
-export const createCheckoutOrder = async (req, res, next) => {
-  try {
-    const {
-      orderNumber,
-      items = [],
-      subtotal = 0,
-      tax = 0,
-      shippingCost = 0,
-      total = 0,
-      paymentMethod,
-      paymentStatus,
-      deliveryMethod,
-      address = {},
-      notes,
-    } = req.body;
-    if (!items.length)
-      return res.status(400).json({ error: "Order items are required" });
-
-    const savedAddress = await prisma.address.create({
-      data: {
-        userId: req.user.id,
-        street: address.address || address.street || "Not provided",
-        city: address.city || "Not provided",
-        county: address.county || "Not provided",
-        postalCode: address.zip || address.postalCode || null,
-        isDefault: false,
-      },
-    });
-
-    const delivery = DELIVERY_MAP[deliveryMethod] || "STANDARD";
-    const payment = PAYMENT_MAP[paymentMethod] || "MPESA";
-    const normalizedPaymentStatus =
-      paymentStatus || (payment === "COD" ? "PENDING" : "PAID");
-    const no = orderNumber || generateOrderNumber();
-
-    const order = await prisma.order.create({
-      data: {
-        orderNumber: no,
-        userId: req.user.id,
-        addressId: savedAddress.id,
-        subtotal: Number(subtotal),
-        discount: 0,
-        tax: Number(tax),
-        shippingCost: Number(shippingCost),
-        total: Number(total),
-        paymentMethod: payment,
-        paymentStatus: normalizedPaymentStatus,
-        status: normalizedPaymentStatus === "PAID" ? "PROCESSING" : "PENDING",
-        deliveryMethod: delivery,
-        notes,
-        items: {
-          create: items.map((item) => ({
-            productId: item.productId || "unknown",
-            productName: item.productName || item.name || "Product",
-            productPrice: Number(item.productPrice ?? item.price ?? 0),
-            quantity: Number(item.quantity ?? item.qty ?? 1),
-            subtotal: Number(
-              item.subtotal ??
-                (item.productPrice ?? item.price ?? 0) *
-                  (item.quantity ?? item.qty ?? 1),
-            ),
-            productImage: item.productImage || item.image || null,
-          })),
-        },
-        trackingHistory: {
-          create: {
-            status: "PENDING",
-            description:
-              normalizedPaymentStatus === "PAID"
-                ? "Order Placed - Payment confirmed"
-                : "Order Placed - Awaiting payment confirmation",
-            location: "No Maneno Bazaar Warehouse",
-          },
-        },
-      },
-      include: {
-        items: true,
-        address: true,
-        trackingHistory: { orderBy: { createdAt: "desc" } },
-      },
-    });
-
-    res.status(201).json(order);
-  } catch (error) {
-    next(error);
-  }
-};
+export const createCheckoutOrder = (_req, res) =>
+  res.status(503).json({
+    error: "Checkout is temporarily unavailable while verified payment processing is being implemented.",
+  });
 
 export const toggleAutoStage = async (req, res, next) => {
   try {

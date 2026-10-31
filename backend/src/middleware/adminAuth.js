@@ -1,4 +1,4 @@
-import { verifyToken } from '../config/auth.js';
+import { isAdminToken, verifyToken } from '../config/auth.js';
 import prisma from '../config/database.js';
 
 export const authenticateAdmin = async (req, res, next) => {
@@ -12,7 +12,7 @@ export const authenticateAdmin = async (req, res, next) => {
     const token = authHeader.substring(7);
     const decoded = verifyToken(token);
     
-    if (!decoded) {
+    if (!isAdminToken(decoded)) {
       return res.status(401).json({ error: 'Invalid or expired token' });
     }
     
@@ -34,7 +34,7 @@ export const authenticateAdmin = async (req, res, next) => {
     req.admin = admin;
     next();
   } catch (error) {
-    res.status(401).json({ error: 'Authentication failed' });
+    next(error);
   }
 };
 

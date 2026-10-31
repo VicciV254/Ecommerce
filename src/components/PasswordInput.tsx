@@ -27,9 +27,6 @@ export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
         <button
           type="button"
           onClick={() => setVisible((v) => !v)}
-          // Keep this out of the normal tab order and away from form submission —
-          // it's a visibility toggle, not a field to tab through or a submit trigger.
-          tabIndex={-1}
           aria-label={visible ? "Hide password" : "Show password"}
           aria-pressed={visible}
           className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 transition-colors hover:text-gray-600"

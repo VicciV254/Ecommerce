@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { forwardRef, useEffect, useState, useCallback, type ComponentPropsWithoutRef, type MouseEvent } from "react";
 
 function currentRoute() {
   const hashRoute = window.location.hash.replace(/^#/, "");
@@ -31,31 +31,29 @@ export function navigate(to: string) {
   window.location.hash = to;
 }
 
-export function Link({
-  to,
-  className,
-  children,
-  onClick,
-}: {
-  to: string;
-  className?: string;
-  children: React.ReactNode;
-  onClick?: () => void;
-}) {
+type LinkProps = Omit<ComponentPropsWithoutRef<"a">, "href"> & { to: string };
+
+export const Link = forwardRef<HTMLAnchorElement, LinkProps>(function Link({
+  to, onClick, target, download, children, ...props
+}, ref) {
   const handle = useCallback(
-    (e: React.MouseEvent) => {
+    (e: MouseEvent<HTMLAnchorElement>) => {
+      onClick?.(e);
+      if (
+        e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey ||
+        (target && target !== "_self") || (download !== undefined && download !== false)
+      ) return;
       e.preventDefault();
-      onClick?.();
       navigate(to);
     },
-    [to, onClick]
+    [to, onClick, target, download]
   );
   return (
-    <a href={`#${to}`} className={className} onClick={handle}>
+    <a {...props} ref={ref} href={`#${to}`} target={target} download={download} onClick={handle}>
       {children}
     </a>
   );
-}
+});
 
 export function parseRoute(route: string) {
   const [path, query] = route.split("?");

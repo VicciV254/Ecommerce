@@ -9,6 +9,10 @@ import { useAuth } from "../contexts/AuthContext";
 const TABS = ["Description", "Materials", "Care", "Size Guide"] as const;
 
 export default function ProductDetail({ id }: { id: string }) {
+  return <ProductContent key={id} id={id} />;
+}
+
+function ProductContent({ id }: { id: string }) {
   const { addToCart, toggleWish, state, productWithStock, catalog } = useStore();
   const { user } = useAuth();
   const base = catalog.find((p) => p.id === id) ?? getProduct(id);
@@ -18,8 +22,8 @@ export default function ProductDetail({ id }: { id: string }) {
   const [tab, setTab] = useState<(typeof TABS)[number]>("Description");
   const [added, setAdded] = useState(false);
   const [activeAngle, setActiveAngle] = useState<"front" | "side" | "top" | "closeup">("front");
-  const [imageError, setImageError] = useState(false);
-  const [imgLoading, setImgLoading] = useState(true);
+  const [failedImage, setFailedImage] = useState<string | null>(null);
+  const [loadedImage, setLoadedImage] = useState<string | null>(null);
   
   if (!base) {
     return (
@@ -36,6 +40,9 @@ export default function ProductDetail({ id }: { id: string }) {
   const wished = state.wishlist.includes(p.id);
   const out = p.stock <= 0;
   const status = stockStatus(p.stock);
+  const selectedSize = p.sizes?.includes(size ?? "") ? size : p.sizes?.[0];
+  const selectedColor = p.colors?.includes(color ?? "") ? color : p.colors?.[0];
+  const quantity = Math.max(1, Math.min(qty, p.stock));
   const related = catalog.filter((r) => r.categorySlug === p.categorySlug && r.id !== p.id).slice(0, 4);
 
   const doAdd = () => {
@@ -43,7 +50,8 @@ export default function ProductDetail({ id }: { id: string }) {
       navigate("/login");
       return;
     }
-    addToCart({ productId: p.id, qty, size, color });
+    if (out) return;
+    addToCart({ productId: p.id, qty: quantity, size: selectedSize, color: selectedColor });
     setAdded(true);
     setTimeout(() => setAdded(false), 1500);
   };
@@ -59,6 +67,8 @@ export default function ProductDetail({ id }: { id: string }) {
   };
 
   const currentImage = imageSet[activeAngle];
+  const imageError = failedImage === currentImage;
+  const imgLoading = loadedImage !== currentImage && !imageError;
 
   return (
     <Container className="py-8">
@@ -94,11 +104,12 @@ export default function ProductDetail({ id }: { id: string }) {
               </div>
             ) : (
               <img
+                key={currentImage}
                 src={currentImage}
                 alt={`${p.name} — ${angleLabels[activeAngle]}`}
                 className="absolute inset-0 w-full h-full object-cover transition-all duration-500 hover:scale-105"
-                onLoad={() => setImgLoading(false)}
-                onError={() => { setImageError(true); setImgLoading(false); }}
+                onLoad={() => setLoadedImage(currentImage)}
+                onError={() => setFailedImage(currentImage)}
               />
             )}
           </div>
@@ -109,7 +120,9 @@ export default function ProductDetail({ id }: { id: string }) {
               {angleOrder.map((angle) => (
                 <button
                   key={angle}
-                  onClick={() => { setActiveAngle(angle); setImageError(false); setImgLoading(true); }}
+                  aria-label={angleLabels[angle]}
+                  aria-pressed={angle === activeAngle}
+                  onClick={() => { setActiveAngle(angle); setFailedImage(null); }}
                   className={`aspect-square overflow-hidden rounded-md bg-warm-beige border-2 transition-all relative ${
                     angle === activeAngle ? "border-brand-primary" : "border-transparent hover:border-brand-secondary"
                   }`}
@@ -120,8 +133,9 @@ export default function ProductDetail({ id }: { id: string }) {
                     alt={`${p.name} — ${angleLabels[angle]}`}
                     className="w-full h-full object-cover"
                     onError={(e) => {
-                      (e.target as HTMLImageElement).style.opacity = "0.4";
+                      e.currentTarget.style.opacity = "0.4";
                     }}
+                    onLoad={(e) => { e.currentTarget.style.opacity = ""; }}
                   />
                   <span className="absolute bottom-0 inset-x-0 bg-black/50 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">
                     {angle}
@@ -185,9 +199,10 @@ export default function ProductDetail({ id }: { id: string }) {
                 {p.sizes.map((s) => (
                   <button
                     key={s}
+                    aria-pressed={selectedSize === s}
                     onClick={() => setSize(s)}
                     className={`min-w-11 rounded-sm border px-3 py-2 text-xs font-medium transition-colors ${
-                      size === s
+                      selectedSize === s
                         ? "border-brand-primary bg-brand-primary text-white"
                         : "border-light-gray hover:border-brand-accent"
                     }`}
@@ -202,15 +217,17 @@ export default function ProductDetail({ id }: { id: string }) {
           {/* Colors */}
           {p.colors && (
             <div className="mt-5">
-              <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.12em] text-brand-primary">Color: <span className="font-normal text-gray-500">{color}</span></p>
+              <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.12em] text-brand-primary">Color: <span className="font-normal text-gray-500">{selectedColor}</span></p>
               <div className="flex flex-wrap gap-2">
                 {p.colors.map((c) => (
                   <button
                     key={c}
+                    aria-label={c}
+                    aria-pressed={selectedColor === c}
                     onClick={() => setColor(c)}
                     title={c}
                     className={`h-8 w-8 rounded-full border-2 transition-all ${
-                      color === c ? "border-brand-primary ring-2 ring-brand-secondary/50 ring-offset-1" : "border-gray-200"
+                      selectedColor === c ? "border-brand-primary ring-2 ring-brand-secondary/50 ring-offset-1" : "border-gray-200"
                     }`}
                     style={{ background: COLOR_MAP[c] ?? "#ccc" }}
                   />
@@ -223,9 +240,9 @@ export default function ProductDetail({ id }: { id: string }) {
           <div className="mt-6 flex items-center gap-4">
             <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-brand-primary">Quantity</p>
             <div className="flex items-center rounded-sm border border-light-gray">
-              <button onClick={() => setQty((q) => Math.max(1, q - 1))} className="px-3 py-2 text-sm text-gray-500 hover:text-brand-primary">−</button>
-              <span className="w-10 text-center text-sm">{qty}</span>
-              <button onClick={() => setQty((q) => q + 1)} className="px-3 py-2 text-sm text-gray-500 hover:text-brand-primary">+</button>
+              <button aria-label="Decrease quantity" disabled={quantity <= 1} onClick={() => setQty(Math.max(1, quantity - 1))} className="px-3 py-2 text-sm text-gray-500 hover:text-brand-primary disabled:opacity-40">−</button>
+              <span aria-live="polite" className="w-10 text-center text-sm">{quantity}</span>
+              <button aria-label="Increase quantity" disabled={out || quantity >= p.stock} onClick={() => setQty(Math.min(p.stock, quantity + 1))} className="px-3 py-2 text-sm text-gray-500 hover:text-brand-primary disabled:opacity-40">+</button>
             </div>
           </div>
 
@@ -330,7 +347,7 @@ export default function ProductDetail({ id }: { id: string }) {
         <h2 className="mb-6 font-display text-xl uppercase tracking-wider text-brand-primary">You May Also Like</h2>
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           {related.map((r) => (
-            <ProductCard key={r.id} product={productWithStock(r)} />
+            <ProductCard key={r.id} product={r} />
           ))}
         </div>
       </div>

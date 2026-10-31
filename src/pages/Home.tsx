@@ -122,7 +122,7 @@ function HScroll({ children }: { children: React.ReactNode }) {
 }
 
 export default function Home() {
-  const { productWithStock, catalog, allCategories } = useStore();
+  const { catalog, allCategories } = useStore();
   const bestSellers = [
     ...catalog.filter((p) => p.bestSeller),
     ...catalog.filter((p) => p.custom),
@@ -204,7 +204,7 @@ export default function Home() {
           <HScroll>
             {bestSellers.map((p) => (
               <div key={p.id} className="w-[240px] shrink-0 sm:w-[260px]">
-                <ProductCard product={productWithStock(p)} />
+                <ProductCard product={p} />
               </div>
             ))}
           </HScroll>
@@ -226,7 +226,7 @@ export default function Home() {
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           {babySpot.map((p, i) => (
             <Reveal key={p.id} delay={i * 80}>
-              <ProductCard product={productWithStock(p)} />
+              <ProductCard product={p} />
             </Reveal>
           ))}
         </div>
@@ -268,7 +268,7 @@ export default function Home() {
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           {kitchenSpot.map((p, i) => (
             <Reveal key={p.id} delay={i * 80}>
-              <ProductCard product={productWithStock(p)} />
+              <ProductCard product={p} />
             </Reveal>
           ))}
         </div>

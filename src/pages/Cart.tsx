@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Breadcrumb, Container, ProductImage } from "../components/ui";
 import { formatKES, useStore } from "../store/StoreContext";
-import { Link, navigate } from "../router";
+import { Link } from "../router";
 import { useAuth } from "../contexts/AuthContext";
 
 export default function Cart() {
@@ -138,11 +138,16 @@ export default function Cart() {
           </div>
 
           <button
-            onClick={() => navigate("/checkout")}
-            className="mt-5 w-full rounded-sm bg-brand-primary py-3.5 text-xs font-bold uppercase tracking-[0.12em] text-white transition-all hover:bg-brand-secondary hover:text-brand-primary"
+            type="button"
+            disabled
+            aria-describedby="checkout-unavailable"
+            className="mt-5 w-full cursor-not-allowed rounded-sm bg-light-gray py-3.5 text-xs font-bold uppercase tracking-[0.12em] text-charcoal"
           >
-            Proceed to Checkout
+            Checkout temporarily unavailable
           </button>
+          <p id="checkout-unavailable" className="mt-2 text-center text-xs text-charcoal">
+            Checkout is paused until verified payment processing is available. Your cart is unchanged.
+          </p>
           <Link to="/shop" className="mt-3 block text-center text-[11px] text-gray-400 underline-offset-4 hover:text-brand-primary hover:underline">
             Continue Shopping
           </Link>

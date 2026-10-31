@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import api from '../api/client';
+import { isAxiosError, isCancel } from 'axios';
 import {
   type Address,
   type RegisterData,
@@ -84,9 +85,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data } = await authAPI.getMe();
       setUser(data);
       localStorage.setItem('user', JSON.stringify(data));
-    } catch {
-      clearSession();
-      setUser(null);
+    } catch (error) {
+      if (isCancel(error)) return;
+      if (isAxiosError(error) && [401, 403].includes(error.response?.status ?? 0)) {
+        clearSession();
+        setUser(null);
+      } else {
+        console.error('Could not refresh account', {
+          status: isAxiosError(error) ? error.response?.status : undefined,
+          code: isAxiosError(error) ? error.code : undefined,
+        });
+      }
     }
   }, []);
 

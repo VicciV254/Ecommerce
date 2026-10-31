@@ -87,7 +87,11 @@ The frontend check runs TypeScript, ESLint, component tests and the bundle.
 The backend check generates Prisma Client, then runs ESLint and Node tests.
 Browser checks start with a 390px mobile viewport, followed by desktop. They
 use an automatically managed loopback Vite server and fixture API/media
-responses, not the live site. If Chromium is missing, install the project's
+responses, not the live site. The fixtures also cover newly opened tabs.
+Interaction checks include narrow-phone/tablet drawer resizing, keyboard
+search, modifier-click navigation, nested dialogs, focus restoration and
+feedback inside active dialogs. Native dialog behavior is checked in the
+browser, not simulated by jsdom. If Chromium is missing, install the project's
 browser revision with `npx --no-install playwright install chromium`.
 
 To run the PostgreSQL/API integration checks:
@@ -114,6 +118,39 @@ runner at Neon or another shared/production database.
 `npm run typecheck`, `npm run lint`, `npm run test:unit` and their backend
 counterparts can also be run separately. Fix failing checks rather than
 replacing type checking with the Vite build.
+
+## Development contracts
+
+- Pass raw catalog products to `ProductCard`; it applies display stock and
+  discounts once. Standalone product details and search suggestions use the
+  same display helper. The base price remains separate from the displayed
+  discount; this is not yet server-authoritative checkout pricing.
+- Customer credentials are attached per request, never as a sticky Axios
+  default. Concurrent customer 401s share a bounded refresh and each request
+  retries at most once. Staff headers and public sign-in failures do not use
+  customer refresh credentials. Superseded-session responses are cancelled;
+  transient transport errors do not automatically sign out the customer.
+- Use the shared `Link` for hash routes. It forwards anchor attributes and
+  refs, respects a caller's `preventDefault`, and leaves modified clicks,
+  alternate targets and downloads to the browser.
+- Use `ModalDialog` or `ConfirmModal` instead of independent fixed overlays.
+  They provide native modality, initial/restored focus, boundary Tab wrapping,
+  Escape and backdrop dismissal. Guard `onClose` during pending operations,
+  keep content viewport-bounded, and put feedback in the active dialog.
+  The shared `Toast` follows the active dialog layer.
+
+The storefront checkout is temporarily paused until server-authoritative
+pricing and verified payment processing replace the legacy visual-payment
+flow. Its cart action is disabled, and `POST /api/orders/checkout` returns
+HTTP 503 before creating an address, order, item or tracking event. The
+database-cart order API always creates pending orders, ignoring any
+customer-supplied payment or fulfilment status.
+
+Browsing, cart editing and existing order history remain available. The
+checkout pause is deliberate and is not controlled by `ENABLE_MPESA`:
+enabling a provider alone cannot make the old client-trusted flow safe.
+Reintroduce checkout only with the planned trusted quote/order and verified
+payment lifecycle. This checkpoint does not implement real M-Pesa payments.
 
 ## Tech Stack
 

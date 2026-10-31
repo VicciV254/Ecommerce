@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useId } from "react";
 import { ConfirmModal } from "./Modal";
 
 interface ReturnOrderModalProps {
@@ -19,6 +19,7 @@ export default function ReturnOrderModal({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const fieldId = useId();
 
   const handleSubmit = () => {
     if (!reason.trim()) {
@@ -88,10 +89,11 @@ export default function ReturnOrderModal({
     >
       <div className="mt-4 space-y-4">
         <div>
-          <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">
+          <label htmlFor={`${fieldId}-reason`} className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">
             Reason for Return <span className="text-error">*</span>
           </label>
           <textarea
+            id={`${fieldId}-reason`}
             value={reason}
             onChange={(e) => {
               setReason(e.target.value);
@@ -102,14 +104,15 @@ export default function ReturnOrderModal({
             className="w-full rounded-sm border border-light-gray px-3 py-2 text-xs focus:border-brand-secondary focus:outline-none"
             required
           />
-          {error && <p className="mt-1 text-xs text-error">{error}</p>}
+          {error && <p role="alert" className="mt-1 text-xs text-error">{error}</p>}
         </div>
 
         <div>
-          <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">
+          <label htmlFor={`${fieldId}-resolution`} className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">
             Resolution
           </label>
           <select
+            id={`${fieldId}-resolution`}
             value={resolution}
             onChange={(e) => setResolution(e.target.value)}
             className="w-full rounded-sm border border-light-gray px-3 py-2 text-xs focus:border-brand-secondary focus:outline-none"
@@ -121,7 +124,7 @@ export default function ReturnOrderModal({
         </div>
 
         <div>
-          <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">
+          <label htmlFor={`${fieldId}-images`} className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">
             Images (Optional)
           </label>
           <div className="flex gap-2">
@@ -142,6 +145,7 @@ export default function ReturnOrderModal({
             </button>
           </div>
           <input
+            id={`${fieldId}-images`}
             ref={fileInputRef}
             type="file"
             accept="image/*"
@@ -162,6 +166,7 @@ export default function ReturnOrderModal({
                 />
                 <button
                   type="button"
+                  aria-label={`Remove return image ${index + 1}`}
                   onClick={() => removeImage(index)}
                   className="absolute right-1 top-1 rounded-full bg-error p-1 text-white hover:bg-red-700"
                 >

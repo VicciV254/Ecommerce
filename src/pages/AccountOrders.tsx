@@ -6,6 +6,7 @@ import { formatKES } from "../store/StoreContext";
 import { getReceipts, type LocalReceipt } from "../utils/userReceipts";
 import CancelOrderModal from "../components/CancelOrderModal";
 import ReturnOrderModal from "../components/ReturnOrderModal";
+import { ConfirmModal, ModalDialog } from "../components/Modal";
 
 type OrderStatus = LocalReceipt["status"] | "CANCELLED" | "AWAITING_REFUND" | "RETURNED";
 type AccountOrder = Omit<LocalReceipt, "status" | "paymentStatus"> & {
@@ -309,8 +310,8 @@ export default function AccountOrders() {
         </Link>
       </div>
 
-      {actionMessage && (
-        <div className="mt-4 rounded-md border border-brand-secondary/30 bg-light-pink p-3 text-sm text-brand-primary">
+      {actionMessage && !selected && (
+        <div role="status" className="mt-4 rounded-md border border-brand-secondary/30 bg-light-pink p-3 text-sm text-brand-primary">
           {actionMessage}
         </div>
       )}
@@ -354,7 +355,7 @@ export default function AccountOrders() {
                   <p className="font-display text-xl text-brand-primary">{formatKES(order.total)}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <button onClick={() => setSelected(order)} className="rounded-sm border border-light-gray px-3 py-2 text-[11px] font-bold uppercase tracking-wider hover:border-brand-primary">
+                  <button onClick={() => { setActionMessage(""); setSelected(order); }} className="rounded-sm border border-light-gray px-3 py-2 text-[11px] font-bold uppercase tracking-wider hover:border-brand-primary">
                     Details
                   </button>
                   <button onClick={() => printReceipt(order)} className="rounded-sm border border-brand-primary px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-brand-primary hover:bg-brand-primary hover:text-white">
@@ -391,9 +392,8 @@ export default function AccountOrders() {
       </div>
 
       {selected && (
-        <div className="fixed inset-0 z-100 flex items-center justify-center p-4">
-          <button className="absolute inset-0 bg-black/30" aria-label="Close receipt details" onClick={() => setSelected(null)} />
-          <div className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-6 shadow-xl">
+        <ModalDialog open label="Receipt Details" onClose={() => setSelected(null)}>
+          <div className="relative max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-lg bg-white p-6 shadow-xl">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h3 className="font-display text-xl text-brand-primary">Receipt Details</h3>
@@ -401,6 +401,7 @@ export default function AccountOrders() {
               </div>
               <button onClick={() => setSelected(null)} className="text-gray-400 hover:text-brand-primary">Close</button>
             </div>
+            {actionMessage && <p role="status" className="mt-4 rounded-md border border-brand-secondary/30 bg-light-pink p-3 text-sm text-brand-primary">{actionMessage}</p>}
             <div className="mt-5 space-y-3 text-sm">
               <p><strong>Customer:</strong> {selected.address.name}</p>
               <p><strong>Email:</strong> {selected.address.email}</p>
@@ -437,7 +438,7 @@ export default function AccountOrders() {
               )}
             </div>
           </div>
-        </div>
+        </ModalDialog>
       )}
 
       <CancelOrderModal
@@ -452,28 +453,14 @@ export default function AccountOrders() {
         orderId={orderToReturn?.id || ''}
         onReturn={handleReturnSubmit}
       />
-      {confirmModal.isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="rounded-lg bg-white p-6 shadow-lg max-w-md w-full mx-4">
-            <h3 className="text-lg font-bold text-brand-primary mb-2">{confirmModal.title}</h3>
-            <p className="text-sm text-gray-600 mb-4">{confirmModal.message}</p>
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => setConfirmModal({ isOpen: false, title: "", message: "", onConfirm: null })}
-                className="px-4 py-2 rounded-sm border border-light-gray text-sm font-medium text-gray-600 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmModal.onConfirm || (() => {})}
-                className="px-4 py-2 rounded-sm bg-brand-primary text-sm font-medium text-white hover:bg-brand-secondary"
-              >
-                Confirm
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmModal
+        open={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmDisabled={!confirmModal.onConfirm}
+        onConfirm={() => confirmModal.onConfirm?.()}
+        onCancel={() => setConfirmModal({ isOpen: false, title: "", message: "", onConfirm: null })}
+      />
     </div>
   );
 }

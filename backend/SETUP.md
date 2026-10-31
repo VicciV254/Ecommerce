@@ -22,6 +22,26 @@ Keep signing secrets in the local environment or an approved secret store,
 not in source, terminal transcripts or chat. Server startup rejects missing
 required values and placeholder/short signing secrets before connecting.
 
+Access and refresh tokens use HS256 and distinct keys; there is no fallback
+signing secret. Protected customer requests and refreshes re-read the current
+account, reject disabled/deleted customers, and enforce email verification
+when `ENABLE_EMAIL_VERIFICATION=true`. Optional authentication treats those
+customers as guests rather than granting an authenticated identity.
+
+Customer tokens identify only `userId`; staff tokens identify only `adminId`.
+Malformed or mixed actor claims are rejected before a database query. Staff
+roles come from the current database record, not token role claims. Account
+projections used by order responses exclude password and verification/reset
+credentials. Configuration and datastore failures reach error middleware
+instead of being disguised as invalid tokens or anonymous sessions.
+
+The legacy `POST /api/orders/checkout` endpoint is deliberately unavailable:
+authenticated calls return HTTP 503 before any checkout writes. It must be
+replaced with trusted pricing and payment verification, not reopened by a
+provider environment flag. The separate database-cart `POST /api/orders`
+path always creates an unpaid, pending order; request payment/status claims
+are not settlement evidence.
+
 External image-host, email and payment settings may remain empty/disabled
 for local checks. Do not pull or replace live Vercel/Neon credentials just
 to run the tests.

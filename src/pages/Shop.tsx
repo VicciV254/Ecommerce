@@ -4,6 +4,7 @@ import { Breadcrumb, Container, ProductCard } from "../components/ui";
 import { useStore } from "../store/StoreContext";
 import { parseRoute } from "../router";
 import { searchProducts } from "../utils/search";
+import { ModalDialog } from "../components/Modal";
 
 const ALL_SIZES = ["S", "M", "L", "XL", "30", "32", "34", "36", "One Size"];
 const ALL_COLORS = ["White", "Black", "Blue", "Red", "Green", "Grey", "Gold", "Pink", "Brown", "Navy"];
@@ -22,7 +23,7 @@ function seededShuffle<T>(arr: T[], seed: number): T[] {
 }
 
 export default function Shop({ route }: { route: string }) {
-  const { productWithStock, catalog, allCategories, allDesigners } = useStore();
+  const { catalog, allCategories, allDesigners } = useStore();
   const { params } = parseRoute(route);
   const initialCat = params.get("cat") ?? "";
   const initialDesigner = params.get("designer") ?? "";
@@ -102,6 +103,7 @@ export default function Shop({ route }: { route: string }) {
         <h4 className="mb-3 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Price Range</h4>
         <input
           type="range"
+          aria-label="Maximum price"
           min={500}
           max={30000}
           step={500}
@@ -177,6 +179,7 @@ export default function Shop({ route }: { route: string }) {
         </div>
         <div className="flex items-center gap-2">
           <select
+            aria-label="Sort products"
             value={sort}
             onChange={(e) => setSort(e.target.value)}
             className="rounded-sm border border-light-gray bg-white px-3 py-2 text-xs outline-none"
@@ -193,6 +196,8 @@ export default function Shop({ route }: { route: string }) {
           </select>
           <button
             onClick={() => setShowFilters((s) => !s)}
+            aria-haspopup="dialog"
+            aria-expanded={showFilters}
             className="flex items-center gap-1.5 rounded-sm border border-light-gray px-3 py-2 text-xs lg:hidden"
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-3.5 w-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75" /></svg>
@@ -207,18 +212,17 @@ export default function Shop({ route }: { route: string }) {
         </aside>
 
         {showFilters && (
-          <div className="fixed inset-0 z-50 flex lg:hidden">
-            <div className="flex-1 bg-black/30" onClick={() => setShowFilters(false)} />
-            <div className="w-80 max-w-[85%] overflow-y-auto bg-white p-6">
+          <ModalDialog open={showFilters} label="Product filters" placement="end" dismissAt="(min-width: 1024px)" onClose={() => setShowFilters(false)}>
+            <div className="h-full w-80 max-w-full overflow-y-auto overscroll-contain bg-white p-6">
               <div className="mb-5 flex items-center justify-between">
                 <h3 className="font-display text-lg">Filters</h3>
-                <button onClick={() => setShowFilters(false)} className="text-gray-400 hover:text-brand-primary">
+                <button aria-label="Close filters" onClick={() => setShowFilters(false)} className="text-gray-400 hover:text-brand-primary">
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
                 </button>
               </div>
               {FilterPanel}
             </div>
-          </div>
+          </ModalDialog>
         )}
 
         <div className="flex-1">
@@ -231,7 +235,7 @@ export default function Shop({ route }: { route: string }) {
             <>
               <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
                 {pageItems.map((p) => (
-                  <ProductCard key={p.id} product={productWithStock(p)} />
+                  <ProductCard key={p.id} product={p} />
                 ))}
               </div>
 

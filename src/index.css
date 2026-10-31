@@ -34,6 +34,15 @@ body {
   line-height: 1.6;
 }
 
+body:has(dialog.modal-frame[open]) {
+  overflow: hidden;
+}
+
+:where(a, button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--color-ocean-blue);
+  outline-offset: 3px;
+}
+
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-display);
 }
@@ -62,6 +71,16 @@ h1, h2, h3, h4, h5, h6 {
   animation: fadeIn 0.4s ease-out both;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .animate-fade-in {
+    animation: none;
+  }
+}
+
 /* Image loading */
 img {
   image-rendering: auto;
@@ -71,5 +90,3 @@ img {
 input:-webkit-autofill {
   -webkit-box-shadow: 0 0 0 30px var(--color-off-white) inset !important;
 }
-
-

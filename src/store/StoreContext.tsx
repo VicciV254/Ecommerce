@@ -410,7 +410,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             comparePrice: p.price,
             price: discountedPrice,
             discountPercent: pct,
-          } as Product & { discountPercent: number };
+          };
         }
         return { ...p, stock };
       },
@@ -443,4 +443,3 @@ export function useStore() {
 export function formatKES(n: number) {
   return "KES " + n.toLocaleString("en-KE");
 }
-

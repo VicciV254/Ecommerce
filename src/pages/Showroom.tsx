@@ -39,7 +39,7 @@ function shuffle<T>(arr: T[], seed = 7): T[] {
 const LOOKBOOK_PER_PAGE = 8;
 
 export default function Showroom() {
-  const { addToCart, productWithStock, catalog, state } = useStore();
+  const { addToCart, catalog, state } = useStore();
   const { user } = useAuth();
   const [collection, setCollection] = useState<string>("summer-2026");
   const [activeRunway, setActiveRunway] = useState(0);
@@ -181,7 +181,7 @@ export default function Showroom() {
           <div className="no-scrollbar -mx-4 flex gap-4 overflow-x-auto px-4 pb-2 lg:mx-0 lg:grid lg:grid-cols-4 lg:gap-4 lg:overflow-visible lg:px-0">
             {collectionProducts.map((p) => (
               <div key={p.id} className="w-[200px] shrink-0 sm:w-60 lg:w-auto">
-                <ProductCard product={productWithStock(p)} />
+                <ProductCard product={p} />
               </div>
             ))}
           </div>
@@ -325,7 +325,7 @@ export default function Showroom() {
           </div>
           <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
             {dProducts.slice(0, 6).map((p) => (
-              <ProductCard key={p.id} product={productWithStock(p)} />
+              <ProductCard key={p.id} product={p} />
             ))}
           </div>
         </Container>
