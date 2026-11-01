@@ -1,21 +1,22 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { AxiosError, AxiosHeaders } from "axios";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { CatalogProduct, CatalogStock, StorefrontDraft } from "../../api/catalog";
-import { buildCategoryTree, productPriceView, variantPriceView } from "../../store/catalogModel";
+import type { CatalogDiscount, CatalogProduct, CatalogStock, StorefrontDraft } from "../../api/catalog";
+import { buildCategoryTree } from "../../store/catalogModel";
 import type { CatalogValue } from "../../store/CatalogContext";
-import { fixtureImage, fixtureSnapshot, fixtureStorefrontSettings } from "../../test-support/catalogFixtures";
+import { fixtureDiscounts, fixtureImage, fixtureSnapshot, fixtureStorefrontSettings } from "../../test-support/catalogFixtures";
 import { DiscountManager } from "./DiscountManager";
 import { StockManager } from "./StockManager";
 import { StorefrontManager } from "./StorefrontManager";
 
-const NOW = new Date("2026-10-31T12:00:00.000Z");
 const admin = vi.hoisted(() => ({
   reload: vi.fn(),
   api: {
     createDiscount: vi.fn(),
     updateDiscount: vi.fn(),
+    deleteDiscount: vi.fn(),
     bulkUpdateStock: vi.fn(),
+    updateStock: vi.fn(),
     getStorefrontDraft: vi.fn(),
     saveStorefrontDraft: vi.fn(),
     publishStorefront: vi.fn(),
@@ -23,12 +24,16 @@ const admin = vi.hoisted(() => ({
   catalog: null as CatalogValue | null,
 }));
 
-const snapshot = fixtureSnapshot({ mode: "admin" });
+/** Staff snapshots include coupon-only discounts, which public snapshots omit. */
+const couponDiscount: CatalogDiscount = { ...fixtureDiscounts[0], id: "disc-coupon", name: "Linen coupon", value: 15, couponCode: "LINEN15" };
+const fixedDiscount: CatalogDiscount = { ...couponDiscount, id: "disc-fixed", name: "Fixed coupon", type: "FIXED", value: 150.25, couponCode: "FIXED150" };
+const snapshot = { ...fixtureSnapshot({ mode: "admin" }), discounts: [...fixtureDiscounts, couponDiscount, fixedDiscount] };
 const stocks: CatalogStock[] = snapshot.products.flatMap((product) => product.variants.map((variant) => ({
   id: `stock-${variant.id}`, variantId: variant.id, sku: variant.sku, attributes: variant.attributes,
   productId: product.id, productName: product.name, categoryId: product.categoryId, isDemo: product.isDemo,
-  quantity: variant.stock, maxStock: variant.maxStock, minThreshold: variant.minThreshold, status: "IN_STOCK" as const,
-})));
+  quantity: variant.onHand, reserved: variant.reserved, available: variant.stock,
+  maxStock: variant.maxStock, minThreshold: variant.minThreshold, status: "IN_STOCK" as const,
+}))).map((row) => (row.variantId === "var-polo" ? { ...row, quantity: 14, reserved: 2 } : row));
 
 vi.mock("./AdminCatalogContext", () => ({
   useAdminCatalog: () => ({
@@ -50,8 +55,6 @@ function publicCatalog(products: CatalogProduct[]): CatalogValue {
     status: "ready", error: null, mode: "live", products,
     productsById: new Map(products.map((product) => [product.id, product])),
     categories: buildCategoryTree(snapshot.categories), designers: [], discounts: [], reload: vi.fn(),
-    priceOf: (product) => productPriceView(product, [], NOW),
-    priceOfVariant: (product, variant) => variantPriceView(product, variant, [], NOW),
   };
 }
 
@@ -120,6 +123,76 @@ describe("admin catalog panels", () => {
     fireEvent.click(screen.getByRole("button", { name: "Products" }));
     expect(screen.getByRole("checkbox", { name: /Cotton Polo Shirt/ })).toBeTruthy();
     expect(screen.queryByRole("checkbox", { name: /Demo Smartphone/ })).toBeNull();
+  });
+
+  it("creates a coupon-only discount with the normalized code and keeps codes when editing", async () => {
+    admin.api.createDiscount.mockResolvedValue({ data: {} });
+    admin.api.updateDiscount.mockResolvedValue({ data: {} });
+    render(<DiscountManager showToast={vi.fn()} />);
+    const code = screen.getByLabelText("Coupon code (optional)");
+    fireEvent.change(code, { target: { value: "bad code" } });
+    expect(screen.getByRole("alert").textContent).toBe("Use 3–40 letters, numbers, hyphens or underscores.");
+    expect(screen.getByRole("button", { name: "Create Discount" }).hasAttribute("disabled")).toBe(true);
+    fireEvent.change(code, { target: { value: " linen-20 " } });
+    fireEvent.click(screen.getByRole("button", { name: "Create Discount" }));
+    const dialog = screen.getByRole("dialog", { name: "Create this discount?" });
+    expect(within(dialog).getByText(/applies only to checkout quotes that enter the code/)).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create Discount" }));
+    await waitFor(() => expect(admin.reload).toHaveBeenCalled());
+    expect(admin.api.createDiscount).toHaveBeenCalledWith(expect.objectContaining({ type: "PERCENTAGE", value: 10, couponCode: "LINEN-20" }));
+
+    const card = screen.getByText("Coupon LINEN15").closest("article")!;
+    fireEvent.change(within(card).getByLabelText("Percentage"), { target: { value: "20" } });
+    fireEvent.click(within(card).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(admin.api.updateDiscount).toHaveBeenCalledWith("disc-coupon", expect.objectContaining({ value: 20, couponCode: "LINEN15" })));
+  });
+
+  it("edits on-hand stock, shows reserved and available units and never goes below reserved", async () => {
+    admin.api.bulkUpdateStock.mockResolvedValue({ data: { stocks: [], updated: 1 } });
+    render(<StockManager showToast={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("Search stock"), { target: { value: "Polo" } });
+    const row = screen.getByText("VAR-POLO").closest("tr")!;
+    expect(within(row).getByText("2")).toBeTruthy();
+    expect(within(row).getByText("12")).toBeTruthy();
+    fireEvent.change(within(row).getByLabelText("On-hand quantity for VAR-POLO"), { target: { value: "1" } });
+    expect(within(row).getByText("Whole number, at least 2")).toBeTruthy();
+    expect(within(row).getByRole("button", { name: "Save" }).hasAttribute("disabled")).toBe(true);
+
+    fireEvent.change(screen.getByLabelText("Bulk quantity"), { target: { value: "50" } });
+    fireEvent.click(screen.getByRole("button", { name: "Subtract" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Apply bulk stock change?" })).getByRole("button", { name: "Apply" }));
+    await waitFor(() => expect(admin.api.bulkUpdateStock).toHaveBeenCalledWith([{ variantId: "var-polo", quantity: 2 }]));
+    expect(admin.api.updateStock).not.toHaveBeenCalled();
+  });
+
+  it("creates fixed coupons in cents and explains their once-per-basket scope", async () => {
+    admin.api.createDiscount.mockResolvedValue({ data: {} });
+    render(<DiscountManager showToast={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Fixed amount" }));
+    fireEvent.change(screen.getByLabelText("Fixed amount (KES)"), { target: { value: "150.25" } });
+    fireEvent.change(screen.getByLabelText("Coupon code (optional)"), { target: { value: "save150" } });
+    expect(screen.getByText(/deducted once from eligible merchandise/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Create Discount" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Create this discount?" })).getByRole("button", { name: "Create Discount" }));
+    await waitFor(() => expect(admin.api.createDiscount).toHaveBeenCalledWith(expect.objectContaining({
+      type: "FIXED", value: 150.25, couponCode: "SAVE150",
+    })));
+  });
+
+  it("edits and stops existing fixed discounts without changing their coupon identity", async () => {
+    admin.api.updateDiscount.mockResolvedValue({ data: {} });
+    admin.api.deleteDiscount.mockResolvedValue({ data: {} });
+    render(<DiscountManager showToast={vi.fn()} />);
+    const card = screen.getByText("Coupon FIXED150").closest("article")!;
+    fireEvent.change(within(card).getByLabelText("Amount (KES)"), { target: { value: "250.75" } });
+    fireEvent.click(within(card).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(admin.api.updateDiscount).toHaveBeenCalledWith("disc-fixed", expect.objectContaining({
+      type: "FIXED", value: 250.75, couponCode: "FIXED150",
+    })));
+    await waitFor(() => expect(within(card).getByRole("button", { name: "Stop Discount" }).hasAttribute("disabled")).toBe(false));
+    fireEvent.click(within(card).getByRole("button", { name: "Stop Discount" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Stop this discount?" })).getByRole("button", { name: "Stop Discount" }));
+    await waitFor(() => expect(admin.api.deleteDiscount).toHaveBeenCalledWith("disc-fixed"));
   });
 
   it("applies bulk stock changes atomically and reports a failed batch", async () => {

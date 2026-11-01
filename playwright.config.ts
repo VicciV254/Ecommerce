@@ -1,6 +1,8 @@
 import { defineConfig } from "@playwright/test";
 import { E2E_ORIGIN, E2E_PORT } from "./tests/browser-config";
 
+const previewDirectory = `.cache/e2e-preview-${E2E_PORT}`;
+
 export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: false,
@@ -18,10 +20,10 @@ export default defineConfig({
     { name: "desktop", use: { viewport: { width: 1280, height: 900 } } },
   ],
   webServer: {
-    command: `npm run dev -- --host 127.0.0.1 --port ${E2E_PORT} --strictPort --mode test`,
+    command: `npm run build -- --mode test --outDir ${previewDirectory} && npm run preview -- --host 127.0.0.1 --port ${E2E_PORT} --strictPort --outDir ${previewDirectory}`,
     url: E2E_ORIGIN,
     reuseExistingServer: false,
-    timeout: 30_000,
-    env: { NODE_ENV: "test", VITE_API_URL: `${E2E_ORIGIN}/api` },
+    timeout: 90_000,
+    env: { NODE_ENV: "production", VITE_API_URL: `${E2E_ORIGIN}/api` },
   },
 });

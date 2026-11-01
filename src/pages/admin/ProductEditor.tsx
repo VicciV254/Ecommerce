@@ -298,8 +298,8 @@ export function ProductEditor({
               <Field label="Name">{(id) => <input id={id} value={name} onChange={(event) => setName(event.target.value)} className={inputClass} />}</Field>
               <Field label="Description">{(id) => <textarea id={id} rows={5} value={description} onChange={(event) => setDescription(event.target.value)} className={inputClass} />}</Field>
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Price (KES)">{(id) => <input id={id} type="number" min={0} value={price} onChange={(event) => setPrice(event.target.value)} className={inputClass} />}</Field>
-                <Field label="Compare-at price (optional)">{(id) => <input id={id} type="number" min={0} value={compareAt} onChange={(event) => setCompareAt(event.target.value)} className={inputClass} />}</Field>
+                <Field label="Price (KES)">{(id) => <input id={id} type="number" min={0.01} step={0.01} value={price} onChange={(event) => setPrice(event.target.value)} className={inputClass} />}</Field>
+                <Field label="Compare-at price (optional)">{(id) => <input id={id} type="number" min={0.01} step={0.01} value={compareAt} onChange={(event) => setCompareAt(event.target.value)} className={inputClass} />}</Field>
               </div>
               <Field label="Category">
                 {(id) => (
@@ -367,7 +367,7 @@ export function ProductEditor({
             <h3 className="text-[11px] font-bold uppercase tracking-wider text-brand-primary">Variants (sellable SKUs)</h3>
             <p className="text-[11px] text-gray-600">
               {product
-                ? "Stock for existing SKUs is managed on the Stock tab. Removing a row deactivates that SKU."
+                ? "On-hand stock for existing SKUs is managed on the Stock tab; reserved units are held for unpaid orders. Removing a row deactivates that SKU."
                 : "Leave empty to create one default SKU with zero stock. Add only the combinations you actually sell."}
             </p>
             <div className="flex flex-wrap items-center gap-2">
@@ -389,7 +389,7 @@ export function ProductEditor({
                       {optionKeys.map((key) => <th key={key}>{key}</th>)}
                       <th>Price override</th>
                       <th>Active</th>
-                      <th>{product ? "Stock" : "Initial stock"}</th>
+                      <th>{product ? "On hand" : "Initial on hand"}</th>
                       <th><span className="sr-only">Remove</span></th>
                     </tr>
                   </thead>
@@ -414,15 +414,20 @@ export function ProductEditor({
                             </td>
                           ))}
                           <td className="pr-2">
-                            <input aria-label={`Price override for variant ${index + 1}`} type="number" min={0} value={row.priceOverride} placeholder="Base price" onChange={(event) => editVariants((rows) => rows.map((item) => item.rowKey === row.rowKey ? { ...item, priceOverride: event.target.value } : item))} className="w-28 rounded-sm border border-light-gray px-2 py-1" />
+                            <input aria-label={`Price override for variant ${index + 1}`} type="number" min={0.01} step={0.01} value={row.priceOverride} placeholder="Base price" onChange={(event) => editVariants((rows) => rows.map((item) => item.rowKey === row.rowKey ? { ...item, priceOverride: event.target.value } : item))} className="w-28 rounded-sm border border-light-gray px-2 py-1" />
                           </td>
                           <td>
                             <input aria-label={`Variant ${index + 1} active`} type="checkbox" checked={row.isActive} onChange={(event) => editVariants((rows) => rows.map((item) => item.rowKey === row.rowKey ? { ...item, isActive: event.target.checked } : item))} className="h-4 w-4 accent-brand-secondary" />
                           </td>
                           <td className="pr-2">
-                            {row.id
-                              ? <span className="text-gray-600">{current?.stock ?? 0}</span>
-                              : <input aria-label={`Initial stock for new variant ${index + 1}`} type="number" min={0} value={row.initialStock} placeholder="0" onChange={(event) => editVariants((rows) => rows.map((item) => item.rowKey === row.rowKey ? { ...item, initialStock: event.target.value } : item))} className="w-20 rounded-sm border border-light-gray px-2 py-1" />}
+                            {row.id ? (
+                              current ? (
+                                <span className="whitespace-nowrap text-gray-600">
+                                  <span className="font-semibold text-charcoal">{current.onHand}</span>
+                                  <span className="block text-[10px]">{current.reserved} reserved · {current.stock} available</span>
+                                </span>
+                              ) : <span className="text-gray-600">—</span>
+                            ) : <input aria-label={`Initial on-hand stock for new variant ${index + 1}`} type="number" min={0} value={row.initialStock} placeholder="0" onChange={(event) => editVariants((rows) => rows.map((item) => item.rowKey === row.rowKey ? { ...item, initialStock: event.target.value } : item))} className="w-20 rounded-sm border border-light-gray px-2 py-1" />}
                           </td>
                           <td>
                             <button type="button" aria-label={`Remove variant ${index + 1}`} onClick={() => editVariants((rows) => rows.filter((item) => item.rowKey !== row.rowKey))} className={dangerButtonClass}>×</button>

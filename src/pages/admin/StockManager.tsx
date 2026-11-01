@@ -57,9 +57,10 @@ export function StockManager({ showToast }: { showToast: (message: string) => vo
     setConfirmBulk(null);
     setSaving("bulk");
     setError("");
+    // On-hand units can never fall below those reserved for unpaid orders; the API rejects that.
     const updates = operation.rows.map((row) => ({
       variantId: row.variantId,
-      quantity: operation.op === "add" ? row.quantity + operation.amount : Math.max(0, row.quantity - operation.amount),
+      quantity: operation.op === "add" ? row.quantity + operation.amount : Math.max(row.reserved, row.quantity - operation.amount),
     }));
     let saved = 0;
     try {
@@ -79,7 +80,7 @@ export function StockManager({ showToast }: { showToast: (message: string) => vo
   return (
     <Panel
       title="Stock by SKU"
-      description="Stock is tracked for each sellable variant. Saving writes to the catalog immediately; demo SKUs hold sample quantities only."
+      description="Stock is tracked for each sellable variant. On hand includes units reserved for unpaid orders; only available units can be sold. Saving writes to the catalog immediately; demo SKUs hold sample quantities only."
     >
       <div className="mb-5 grid gap-3 lg:grid-cols-[1fr_220px_160px]">
         <input aria-label="Search stock" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by product or SKU…" className={inputClass} />
@@ -106,7 +107,7 @@ export function StockManager({ showToast }: { showToast: (message: string) => vo
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-light-gray text-left text-[10px] font-bold uppercase tracking-widest text-gray-600">
-              <th className="py-2.5">Product / SKU</th><th>Quantity</th><th>Max</th><th>Low at</th><th>Status</th><th><span className="sr-only">Actions</span></th>
+              <th className="py-2.5">Product / SKU</th><th>On hand</th><th>Reserved</th><th>Available</th><th>Max</th><th>Low at</th><th>Status</th><th><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody>
@@ -115,7 +116,7 @@ export function StockManager({ showToast }: { showToast: (message: string) => vo
               const draft = drafts[row.variantId];
               const value = draft ?? String(row.quantity);
               const parsed = Number(value);
-              const valid = value.trim() !== "" && Number.isInteger(parsed) && parsed >= 0;
+              const valid = value.trim() !== "" && Number.isInteger(parsed) && parsed >= row.reserved;
               const options = describeVariant(row);
               return (
                 <tr key={row.variantId} className="border-b border-light-gray/60 align-top">
@@ -129,19 +130,23 @@ export function StockManager({ showToast }: { showToast: (message: string) => vo
                   <td>
                     <input
                       type="number"
-                      min={0}
-                      aria-label={`Quantity for ${row.sku}`}
+                      min={row.reserved}
+                      aria-label={`On-hand quantity for ${row.sku}`}
+                      aria-invalid={draft !== undefined && !valid}
                       value={value}
                       onChange={(event) => setDrafts((all) => ({ ...all, [row.variantId]: event.target.value }))}
                       className="w-20 rounded-sm border border-light-gray px-2 py-1"
                     />
+                    {draft !== undefined && !valid && <p className="mt-1 text-[10px] font-semibold text-error">Whole number, at least {row.reserved}</p>}
                   </td>
+                  <td className="text-gray-600">{row.reserved}</td>
+                  <td className="text-gray-600">{row.available}</td>
                   <td className="text-gray-600">{row.maxStock}</td>
                   <td className="text-gray-600">{row.minThreshold}</td>
                   <td className={`whitespace-nowrap font-semibold ${style.cls}`}>{style.label}</td>
                   <td className="space-x-1 whitespace-nowrap text-right">
                     <button type="button" disabled={draft === undefined || !valid || saving === row.variantId} onClick={() => void save(row, parsed)} className={smallButtonClass}>Save</button>
-                    <button type="button" disabled={saving === row.variantId || row.quantity === row.maxStock} onClick={() => void save(row, row.maxStock)} className={smallButtonClass}>Restock to max</button>
+                    <button type="button" disabled={saving === row.variantId || row.quantity === row.maxStock || row.maxStock < row.reserved} onClick={() => void save(row, row.maxStock)} className={smallButtonClass}>Restock to max</button>
                   </td>
                 </tr>
               );
@@ -157,7 +162,7 @@ export function StockManager({ showToast }: { showToast: (message: string) => vo
       <ConfirmModal
         open={Boolean(confirmBulk)}
         title="Apply bulk stock change?"
-        message={confirmBulk ? `${confirmBulk.op === "add" ? "Add" : "Subtract"} ${confirmBulk.amount} ${confirmBulk.op === "add" ? "to" : "from"} ${confirmBulk.rows.length} SKUs. Quantities never drop below zero.` : undefined}
+        message={confirmBulk ? `${confirmBulk.op === "add" ? "Add" : "Subtract"} ${confirmBulk.amount} ${confirmBulk.op === "add" ? "to" : "from"} ${confirmBulk.rows.length} SKUs' on-hand stock. On-hand quantities never drop below their reserved units.` : undefined}
         confirmLabel="Apply"
         onConfirm={() => { if (confirmBulk) void runBulk(confirmBulk); }}
         onCancel={() => setConfirmBulk(null)}

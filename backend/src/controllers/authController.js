@@ -3,7 +3,7 @@ import prisma from '../config/database.js';
 import { generateToken, generateRefreshToken, isCustomerToken, verifyRefreshToken } from '../config/auth.js';
 import { registerSchema, loginSchema, forgotPasswordSchema, resetPasswordSchema, changePasswordSchema, addressSchema } from '../utils/validators.js';
 import { sendOtpVerificationEmail } from '../services/mailService.js';
-import { userAccessError, userSessionSelect } from '../utils/account.js';
+import { addressSummarySelect, userAccessError, userSessionSelect } from '../utils/account.js';
 
 const OTP_EXPIRY_MINUTES = Number(process.env.OTP_EXPIRY_MINUTES || 10);
 const OTP_MAX_ATTEMPTS = Number(process.env.OTP_MAX_ATTEMPTS || 5);
@@ -73,6 +73,7 @@ export const register = async (req, res, next) => {
         profileImage: true,
         emailVerified: true,
         createdAt: true,
+        addresses: { select: addressSummarySelect },
       },
     });
 
@@ -103,6 +104,7 @@ export const login = async (req, res, next) => {
     // Find user
     const user = await prisma.user.findUnique({
       where: { email: validatedData.email },
+      select: { ...userSessionSelect, password: true, addresses: { select: addressSummarySelect } },
     });
     
     if (!user) {
@@ -143,6 +145,7 @@ export const login = async (req, res, next) => {
         phone: user.phone,
         profileImage: user.profileImage,
         emailVerified,
+        addresses: user.addresses,
       },
       token,
       refreshToken,
@@ -166,16 +169,7 @@ export const getMe = async (req, res, next) => {
         emailVerified: true,
         createdAt: true,
         updatedAt: true,
-        addresses: {
-          select: {
-            id: true,
-            street: true,
-            city: true,
-            county: true,
-            postalCode: true,
-            isDefault: true,
-          },
-        },
+        addresses: { select: addressSummarySelect },
       },
     });
     

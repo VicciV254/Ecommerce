@@ -1,11 +1,13 @@
 import { z } from 'zod';
 import prisma from '../config/database.js';
 import { idSchema } from '../utils/catalogValidation.js';
-import { httpError, loadCategories, productDto, productInclude, productWhere } from '../services/catalogService.js';
+import { httpError, loadCatalogContext, productDto, productInclude, productWhere } from '../services/catalogService.js';
+import { expireReservations } from '../services/inventoryService.js';
 
 export const getWishlist = async (req, res, next) => {
   try {
-    const context = await loadCategories();
+    await expireReservations();
+    const context = await loadCatalogContext();
     const rows = await prisma.wishlist.findMany({
       where: { userId: req.user.id, product: { is: productWhere(context) } },
       include: { product: { include: productInclude() } }, orderBy: { createdAt: 'desc' },
@@ -16,7 +18,8 @@ export const getWishlist = async (req, res, next) => {
 export const addToWishlist = async (req, res, next) => {
   try {
     const { productId } = z.object({ productId: idSchema }).strict().parse(req.body);
-    const context = await loadCategories();
+    await expireReservations();
+    const context = await loadCatalogContext();
     const product = await prisma.product.findFirst({ where: { id: productId, ...productWhere(context) }, include: productInclude() });
     if (!product) throw httpError(404, 'Product not found');
     const entry = await prisma.wishlist.upsert({

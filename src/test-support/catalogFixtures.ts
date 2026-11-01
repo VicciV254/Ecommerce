@@ -12,13 +12,24 @@ import type {
   MediaAsset,
   PublishedStorefront,
   StorefrontSettings,
+  VariantPricing,
 } from "../api/catalog";
 
 const slug = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
+/** An undiscounted server projection; discounted fixtures spell out the server's numbers explicitly. */
+export function listPricing(price: number): VariantPricing {
+  return { price, originalPrice: price, comparePrice: null, discountPercent: 0, discountId: null };
+}
+
+/** Defaults to an undiscounted projection of `price`; `stock` is available units and `onHand` adds `reserved`. */
 export function fixtureVariant(overrides: Partial<CatalogVariant> & Pick<CatalogVariant, "id">): CatalogVariant {
+  const price = overrides.price ?? 1000;
+  const stock = overrides.stock ?? 10;
+  const reserved = overrides.reserved ?? 0;
   return {
-    sku: overrides.id.toUpperCase(), attributes: {}, price: 1000, stock: 10, maxStock: 100, minThreshold: 3, isActive: true,
+    sku: overrides.id.toUpperCase(), attributes: {}, price, pricing: listPricing(price),
+    onHand: stock + reserved, reserved, stock, maxStock: 100, minThreshold: 3, isActive: true,
     ...overrides,
   };
 }
@@ -61,6 +72,11 @@ export const fixtureDesigners: CatalogDesigner[] = [{
   image: null, spotlightTitle: null, spotlightText: null, isActive: true, isDemo: false,
 }];
 
+/** The server's projection of the 10% linen promotion on KES 1,000: displayed as KES 900, never recomputed. */
+export const linenPromoPricing: VariantPricing = {
+  price: 900, originalPrice: 1000, comparePrice: 1000, discountPercent: 10, discountId: "disc-linen",
+};
+
 /** A multi-SKU shirt: not every size/colour combination exists, and one SKU is sold out. */
 export const linenShirt = fixtureProduct({
   id: "prod-linen-shirt",
@@ -75,9 +91,9 @@ export const linenShirt = fixtureProduct({
     fixtureImage({ id: "img-linen-2", url: "https://media.example.test/linen-detail.jpg", alt: "Linen shirt, collar detail", order: 1 }),
   ],
   variants: [
-    fixtureVariant({ id: "var-linen-s-white", attributes: { size: "S", color: "White" }, stock: 4 }),
-    fixtureVariant({ id: "var-linen-m-white", attributes: { size: "M", color: "White" }, stock: 2 }),
-    fixtureVariant({ id: "var-linen-m-blue", attributes: { size: "M", color: "Blue" }, stock: 0 }),
+    fixtureVariant({ id: "var-linen-s-white", attributes: { size: "S", color: "White" }, stock: 4, pricing: linenPromoPricing }),
+    fixtureVariant({ id: "var-linen-m-white", attributes: { size: "M", color: "White" }, stock: 2, pricing: linenPromoPricing }),
+    fixtureVariant({ id: "var-linen-m-blue", attributes: { size: "M", color: "Blue" }, stock: 0, pricing: linenPromoPricing }),
   ],
 });
 
@@ -108,17 +124,20 @@ export const demoPhone = fixtureProduct({
     id: "img-demo-phone", url: "https://media.example.test/sample-phone.jpg", isMain: true, isPlaceholder: true,
     sourceUrl: "https://images.example.test/source", license: "Test licence",
   })],
-  variants: [fixtureVariant({ id: "var-demo-phone", price: 15000, stock: 7 })],
+  variants: [fixtureVariant({
+    id: "var-demo-phone", price: 15000, stock: 7,
+    pricing: { price: 7500, originalPrice: 15000, comparePrice: 15000, discountPercent: 50, discountId: "disc-demo" },
+  })],
 });
 
-/** 10% off the linen shirt only; the demo discount must never touch real products. */
+/** 10% off the linen shirt only; the demo discount must never touch real products. Prices above are the server's projections. */
 export const fixtureDiscounts: CatalogDiscount[] = [
   {
-    id: "disc-linen", name: "Linen promotion", type: "PERCENTAGE", value: 10, applyTo: "SELECTED", targetIds: [linenShirt.id],
+    id: "disc-linen", name: "Linen promotion", type: "PERCENTAGE", value: 10, couponCode: null, applyTo: "SELECTED", targetIds: [linenShirt.id],
     startDate: "2000-01-01T00:00:00.000Z", endDate: "2100-01-01T00:00:00.000Z", isActive: true, isDemo: false,
   },
   {
-    id: "disc-demo", name: "Demo storewide", type: "PERCENTAGE", value: 50, applyTo: "ALL", targetIds: [],
+    id: "disc-demo", name: "Demo storewide", type: "PERCENTAGE", value: 50, couponCode: null, applyTo: "ALL", targetIds: [],
     startDate: "2000-01-01T00:00:00.000Z", endDate: null, isActive: true, isDemo: true,
   },
 ];

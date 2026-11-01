@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { startBackgroundJobs } from '../../src/services/backgroundJobs.js';
 import autoStageService from '../../src/services/autoStageService.js';
 import refundNotificationService from '../../src/services/refundNotificationService.js';
+import inventoryService from '../../src/services/inventoryService.js';
 
 function configure(t, environment, enabled) {
   const old = { environment: process.env.NODE_ENV, enabled: process.env.BACKGROUND_JOBS_ENABLED };
@@ -36,20 +37,23 @@ test('enabled jobs retain their cadence and stop cleanly', async (t) => {
   t.mock.timers.enable({ apis: ['setInterval'] });
   const stages = t.mock.method(autoStageService, 'processAutoStages', async () => {});
   const refunds = t.mock.method(refundNotificationService, 'processPendingRefundNotifications', async () => {});
+  const reservations = t.mock.method(inventoryService, 'expireReservations', async () => {});
   const stop = startBackgroundJobs();
   t.after(stop);
   t.mock.timers.tick(10_000);
   await setImmediate();
   assert.equal(stages.mock.callCount(), 1);
   assert.equal(refunds.mock.callCount(), 0);
+  assert.equal(reservations.mock.callCount(), 0);
   t.mock.timers.tick(50_000);
   await setImmediate();
   assert.equal(refunds.mock.callCount(), 1);
+  assert.equal(reservations.mock.callCount(), 1);
   stop();
-  const counts = [stages.mock.callCount(), refunds.mock.callCount()];
+  const counts = [stages.mock.callCount(), refunds.mock.callCount(), reservations.mock.callCount()];
   t.mock.timers.tick(60_000);
   await setImmediate();
-  assert.deepEqual([stages.mock.callCount(), refunds.mock.callCount()], counts);
+  assert.deepEqual([stages.mock.callCount(), refunds.mock.callCount(), reservations.mock.callCount()], counts);
 });
 
 test('a slow job cannot overlap its next scheduled run', async (t) => {

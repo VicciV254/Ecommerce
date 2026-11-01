@@ -3,6 +3,7 @@ import { catalogAdminAPI, type CatalogDiscount, type DiscountInput } from "../..
 import { describeApiError } from "../../api/errors";
 import { ConfirmModal } from "../../components/Modal";
 import { discountAppliesTo, isDiscountActive } from "../../store/catalogModel";
+import { normalizeCouponCode } from "../../store/checkoutModel";
 import { formatKES } from "../../utils/format";
 import { useAdminCatalog } from "./AdminCatalogContext";
 import {
@@ -20,17 +21,24 @@ import {
 } from "./shared";
 
 const PERCENT_PRESETS = [5, 10, 15, 20, 25, 50];
-const MAX_PERCENT = 90;
+const MAX_PERCENT = 100;
+const MAX_AMOUNT = 1_000_000_000;
 const PICKER_LIMIT = 60;
 const DEFAULT_DURATION_DAYS = 7;
 
 type Scope = CatalogDiscount["applyTo"];
+
+function validValue(type: CatalogDiscount["type"], value: number) {
+  return Number.isFinite(value) && value > 0 && value <= (type === "PERCENTAGE" ? MAX_PERCENT : MAX_AMOUNT) &&
+    Number(value.toFixed(2)) === value;
+}
 
 function discountInput(discount: CatalogDiscount, patch: Partial<DiscountInput>): DiscountInput {
   return {
     name: discount.name,
     type: discount.type,
     value: discount.value,
+    couponCode: discount.couponCode,
     applyTo: discount.applyTo,
     targetIds: discount.targetIds,
     startDate: discount.startDate,
@@ -49,7 +57,9 @@ export function DiscountManager({ showToast }: { showToast: (message: string) =>
   const [scope, setScope] = useState<Scope>("CATEGORY");
   const [categoryId, setCategoryId] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
-  const [percent, setPercent] = useState(10);
+  const [kind, setKind] = useState<CatalogDiscount["type"]>("PERCENTAGE");
+  const [discountValue, setDiscountValue] = useState(10);
+  const [couponDraft, setCouponDraft] = useState("");
   const [startDate, setStartDate] = useState(todayInput());
   const [endDate, setEndDate] = useState(todayInput(DEFAULT_DURATION_DAYS));
   const [search, setSearch] = useState("");
@@ -64,9 +74,11 @@ export function DiscountManager({ showToast }: { showToast: (message: string) =>
   const picks = products
     .filter((product) => !product.isDemo && product.name.toLowerCase().includes(search.trim().toLowerCase()))
     .slice(0, PICKER_LIMIT);
-  const validPercent = Number.isFinite(percent) && percent > 0 && percent <= MAX_PERCENT;
-  const canCreate = validPercent && Boolean(startDate) && (!endDate || endDate >= startDate) &&
+  const couponCode = couponDraft.trim() ? normalizeCouponCode(couponDraft) : null;
+  const validCoupon = !couponDraft.trim() || couponCode !== null;
+  const canCreate = validValue(kind, discountValue) && validCoupon && Boolean(startDate) && (!endDate || endDate >= startDate) &&
     (scope === "ALL" || (scope === "CATEGORY" ? Boolean(chosenCategory) : selected.length > 0));
+  const valueLabel = kind === "PERCENTAGE" ? `${discountValue}%` : formatKES(discountValue);
   const now = new Date();
 
   const create = async () => {
@@ -81,8 +93,9 @@ export function DiscountManager({ showToast }: { showToast: (message: string) =>
     try {
       await catalogAdminAPI.createDiscount({
         name,
-        type: "PERCENTAGE",
-        value: percent,
+        type: kind,
+        value: discountValue,
+        ...(couponCode ? { couponCode } : {}),
         applyTo: scope,
         targetIds: scope === "ALL" ? [] : scope === "CATEGORY" ? [chosenCategory] : selected,
         startDate: fromDateInput(startDate, "start"),
@@ -91,6 +104,7 @@ export function DiscountManager({ showToast }: { showToast: (message: string) =>
       });
       setSelected([]);
       setSearch("");
+      setCouponDraft("");
       showToast("Discount created");
       reload();
     } catch (reason) {
@@ -137,8 +151,19 @@ export function DiscountManager({ showToast }: { showToast: (message: string) =>
 
   return (
     <div className="grid gap-6 lg:grid-cols-[400px_1fr]">
-      <Panel title="Create Discount" description="Percentage discounts preview on the storefront immediately. The highest applicable percentage is shown; discounts never stack.">
+      <Panel title="Create Discount" description="Automatic discounts are reflected in storefront prices calculated by the server; the strongest offer applies and discounts never stack. A coupon discount applies only in checkout quotes where the shopper enters its code.">
         <div className="space-y-4">
+          <fieldset>
+            <legend className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-600">Discount type</legend>
+            <div className="grid grid-cols-2 gap-2">
+              {([["PERCENTAGE", "Percentage"], ["FIXED", "Fixed amount"]] as const).map(([value, label]) => (
+                <button key={value} type="button" aria-pressed={kind === value} onClick={() => setKind(value)}
+                  className={`min-h-11 rounded-sm border px-2 text-xs font-bold ${kind === value ? "border-brand-primary bg-brand-primary text-white" : "border-light-gray text-gray-600"}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </fieldset>
           <fieldset>
             <legend className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-600">Apply To</legend>
             <div className="grid grid-cols-3 gap-1">
@@ -194,30 +219,51 @@ export function DiscountManager({ showToast }: { showToast: (message: string) =>
           )}
 
           <fieldset>
-            <legend className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-600">Discount %</legend>
-            <div className="mb-2 flex gap-1">
+            <legend className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-600">{kind === "PERCENTAGE" ? "Discount %" : "Discount amount (KES)"}</legend>
+            {kind === "PERCENTAGE" && <div className="mb-2 flex gap-1">
               {PERCENT_PRESETS.map((value) => (
                 <button
                   key={value}
                   type="button"
-                  aria-pressed={percent === value}
-                  onClick={() => setPercent(value)}
-                  className={`flex-1 rounded-sm border py-1.5 text-[11px] font-bold ${percent === value ? "border-brand-primary bg-brand-primary text-white" : "border-light-gray text-gray-600"}`}
+                  aria-pressed={discountValue === value}
+                  onClick={() => setDiscountValue(value)}
+                  className={`flex-1 rounded-sm border py-1.5 text-[11px] font-bold ${discountValue === value ? "border-brand-primary bg-brand-primary text-white" : "border-light-gray text-gray-600"}`}
                 >
                   {value}%
                 </button>
               ))}
-            </div>
+            </div>}
             <input
               type="number"
-              aria-label="Custom percentage"
-              value={percent}
-              min={1}
-              max={MAX_PERCENT}
-              onChange={(event) => setPercent(Number(event.target.value))}
+              aria-label={kind === "PERCENTAGE" ? "Custom percentage" : "Fixed amount (KES)"}
+              value={discountValue}
+              min={0.01}
+              step={0.01}
+              max={kind === "PERCENTAGE" ? MAX_PERCENT : MAX_AMOUNT}
+              onChange={(event) => setDiscountValue(Number(event.target.value))}
               className={inputClass}
             />
           </fieldset>
+
+          <div>
+            <Field label="Coupon code (optional)" hint="Leave empty for an automatic discount shown in storefront prices.">
+              {(id) => (
+                <input
+                  id={id}
+                  value={couponDraft}
+                  autoComplete="off"
+                  spellCheck={false}
+                  aria-invalid={!validCoupon}
+                  onChange={(event) => setCouponDraft(event.target.value)}
+                  className={`uppercase ${inputClass}`}
+                />
+              )}
+            </Field>
+            {!validCoupon && <p role="alert" className="mt-1 text-[11px] font-semibold text-error">Use 3–40 letters, numbers, hyphens or underscores.</p>}
+          </div>
+          {kind === "FIXED" && <p className="text-xs text-gray-600">
+            {couponCode ? "A fixed coupon is deducted once from eligible merchandise, not once per item." : "An automatic fixed discount applies per eligible unit using the configured catalog rounding."}
+          </p>}
 
           <div className="grid grid-cols-2 gap-2">
             <Field label="Start">{(id) => <input id={id} type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} className={inputClass} />}</Field>
@@ -249,6 +295,7 @@ export function DiscountManager({ showToast }: { showToast: (message: string) =>
                         {active ? "Active" : discount.isActive ? "Scheduled / Ended" : "Paused"}
                       </span>
                       {discount.isDemo && <span className="rounded-full bg-ocean-blue/15 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-ocean-blue">Demo: demo products only</span>}
+                      {discount.couponCode && <span className="rounded-full bg-brand-secondary/20 px-2 py-0.5 font-mono text-[10px] font-bold text-brand-accent">Coupon {discount.couponCode}</span>}
                     </p>
                     <p className="mt-1 text-xs text-gray-600">
                       {affected} {affected === 1 ? "product" : "products"} · {toDateInput(discount.startDate)} → {discount.endDate ? toDateInput(discount.endDate) : "no end date"}
@@ -259,15 +306,10 @@ export function DiscountManager({ showToast }: { showToast: (message: string) =>
                     <span className="block text-[9px] uppercase tracking-wider text-gray-500">off</span>
                   </p>
                 </div>
-                {discount.type === "FIXED" ? (
-                  <p className="mt-3 border-t border-light-gray pt-3 text-xs text-gray-600">
-                    Fixed-amount discounts are not previewed on the storefront; they await the checkout quote.
-                  </p>
-                ) : (
                   <div className="mt-3 grid gap-2 border-t border-light-gray pt-3 sm:grid-cols-4">
-                    <Field label="Percentage">
+                    <Field label={discount.type === "PERCENTAGE" ? "Percentage" : "Amount (KES)"}>
                       {(id) => (
-                        <input id={id} type="number" min={1} max={MAX_PERCENT} value={edit.value}
+                        <input id={id} type="number" min={0.01} step={0.01} max={discount.type === "PERCENTAGE" ? MAX_PERCENT : MAX_AMOUNT} value={edit.value}
                           onChange={(event) => setEdits((all) => ({ ...all, [discount.id]: { ...edit, value: Number(event.target.value) } }))}
                           className={inputClass} />
                       )}
@@ -280,7 +322,7 @@ export function DiscountManager({ showToast }: { showToast: (message: string) =>
                       )}
                     </Field>
                     <div className="flex items-end">
-                      <button type="button" disabled={!dirty || saving === discount.id || !(edit.value > 0 && edit.value <= MAX_PERCENT)} onClick={() => void saveEdit(discount)} className={`w-full ${smallButtonClass}`}>
+                      <button type="button" disabled={!dirty || saving === discount.id || !validValue(discount.type, edit.value)} onClick={() => void saveEdit(discount)} className={`w-full ${smallButtonClass}`}>
                         Save
                       </button>
                     </div>
@@ -290,7 +332,6 @@ export function DiscountManager({ showToast }: { showToast: (message: string) =>
                       </button>
                     </div>
                   </div>
-                )}
               </article>
             );
           })}
@@ -300,7 +341,9 @@ export function DiscountManager({ showToast }: { showToast: (message: string) =>
       <ConfirmModal
         open={confirmCreate}
         title="Create this discount?"
-        message={`A ${percent}% discount will be saved and shown to shoppers from ${startDate}.`}
+        message={couponCode
+          ? `A ${valueLabel} discount for coupon ${couponCode} will be saved. From ${startDate} it applies only to checkout quotes that enter the code.`
+          : `A ${valueLabel} discount will be saved and shown to shoppers from ${startDate}.`}
         confirmLabel="Create Discount"
         onConfirm={() => void create()}
         onCancel={() => setConfirmCreate(false)}

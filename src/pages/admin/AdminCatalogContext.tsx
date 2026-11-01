@@ -25,7 +25,7 @@ const STOCK_STATUSES = ["IN_STOCK", "LOW_STOCK", "OUT_OF_STOCK"];
 function isStock(value: unknown): value is CatalogStock {
   return isRecord(value) && ["id", "variantId", "sku", "productId", "productName", "categoryId"].every((key) => typeof value[key] === "string") &&
     isRecord(value.attributes) && typeof value.isDemo === "boolean" && STOCK_STATUSES.includes(String(value.status)) &&
-    ["quantity", "maxStock", "minThreshold"].every((key) => typeof value[key] === "number");
+    ["quantity", "reserved", "available", "maxStock", "minThreshold"].every((key) => typeof value[key] === "number");
 }
 
 function parseStocks(data: unknown): CatalogStock[] {

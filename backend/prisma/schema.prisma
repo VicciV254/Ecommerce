@@ -11,30 +11,31 @@ datasource db {
 // ========== USER MODELS ==========
 
 model User {
-  id                 String         @id @default(cuid())
-  email              String         @unique
+  id                 String          @id @default(cuid())
+  email              String          @unique
   password           String
   firstName          String
   lastName           String
   phone              String?
   profileImage       String?
-  emailVerified      Boolean        @default(false)
-  emailVerifyToken   String?        @unique
+  emailVerified      Boolean         @default(false)
+  emailVerifyToken   String?         @unique
   emailVerifyExpires DateTime?
   otpCode            String?
   otpExpiresAt       DateTime?
-  otpAttempts        Int            @default(0)
+  otpAttempts        Int             @default(0)
   otpLastSentAt      DateTime?
-  isDisabled         Boolean        @default(false)
-  promotionalEmails  Boolean        @default(false)
+  isDisabled         Boolean         @default(false)
+  promotionalEmails  Boolean         @default(false)
   addresses          Address[]
   orders             Order[]
+  quotes             CheckoutQuote[]
   wishlist           Wishlist[]
   cart               Cart?
   passwordReset      PasswordReset?
   reviews            Review[]
-  createdAt          DateTime       @default(now())
-  updatedAt          DateTime       @updatedAt
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
 }
 
 model SiteSetting {
@@ -54,7 +55,7 @@ model MpesaPayment {
   merchantRequestId String?
   orderNumber       String?
   phone             String
-  amount            Float
+  amount            Decimal  @db.Decimal(14, 2)
   status            String   @default("PENDING")
   resultCode        Int?
   resultDesc        String?
@@ -83,9 +84,9 @@ model Cart {
   userId     String     @unique
   user       User       @relation(fields: [userId], references: [id])
   items      CartItem[]
-  subtotal   Float      @default(0)
-  discount   Float      @default(0)
-  total      Float      @default(0)
+  subtotal   Decimal    @default(0) @db.Decimal(14, 2)
+  discount   Decimal    @default(0) @db.Decimal(14, 2)
+  total      Decimal    @default(0) @db.Decimal(14, 2)
   couponCode String?
   updatedAt  DateTime   @updatedAt
 }
@@ -99,7 +100,7 @@ model CartItem {
   variantId String
   variant   ProductVariant @relation(fields: [variantId], references: [id])
   quantity  Int            @default(1)
-  price     Float
+  price     Decimal        @db.Decimal(14, 2)
   createdAt DateTime       @default(now())
 
   @@unique([cartId, variantId])
@@ -172,8 +173,8 @@ model Product {
   name           String
   slug           String           @unique
   description    String
-  price          Float
-  compareAtPrice Float?
+  price          Decimal          @db.Decimal(14, 2)
+  compareAtPrice Decimal?         @db.Decimal(14, 2)
   categoryId     String
   category       Category         @relation(fields: [categoryId], references: [id])
   designerId     String?
@@ -204,7 +205,7 @@ model ProductVariant {
   product    Product     @relation(fields: [productId], references: [id])
   sku        String      @unique
   attributes Json        @default("{}")
-  price      Float?
+  price      Decimal?    @db.Decimal(14, 2)
   isActive   Boolean     @default(true)
   stock      Stock?
   cartItems  CartItem[]
@@ -289,6 +290,7 @@ model Stock {
   variantId      String           @unique
   variant        ProductVariant   @relation(fields: [variantId], references: [id])
   quantity       Int              @default(0)
+  reserved       Int              @default(0)
   maxStock       Int              @default(100)
   minThreshold   Int              @default(10)
   status         StockStatus      @default(OUT_OF_STOCK)
@@ -329,19 +331,20 @@ enum StockStatus {
 // ========== DISCOUNT MODELS ==========
 
 model Discount {
-  id        String       @id @default(cuid())
-  name      String
-  type      DiscountType @default(PERCENTAGE)
-  value     Float
-  applyTo   ApplyTo      @default(ALL)
-  targetIds String[]
-  startDate DateTime
-  endDate   DateTime?
-  isActive  Boolean      @default(true)
-  isDemo    Boolean      @default(false)
-  products  Product[]
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
+  id         String       @id @default(cuid())
+  name       String
+  type       DiscountType @default(PERCENTAGE)
+  value      Decimal      @db.Decimal(14, 2)
+  couponCode String?      @unique
+  applyTo    ApplyTo      @default(ALL)
+  targetIds  String[]
+  startDate  DateTime
+  endDate    DateTime?
+  isActive   Boolean      @default(true)
+  isDemo     Boolean      @default(false)
+  products   Product[]
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
 }
 
 enum DiscountType {
@@ -357,38 +360,71 @@ enum ApplyTo {
 
 // ========== ORDER MODELS ==========
 
+model CheckoutQuote {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  request     Json
+  snapshot    Json
+  fingerprint String
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  order       Order?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId, expiresAt])
+}
+
+enum ReservationStatus {
+  COMMITTED
+  HELD
+  RELEASED
+  EXPIRED
+}
+
 model Order {
-  id                           String          @id @default(cuid())
-  orderNumber                  String          @unique
+  id                           String            @id @default(cuid())
+  orderNumber                  String            @unique
   userId                       String
-  user                         User            @relation(fields: [userId], references: [id])
+  user                         User              @relation(fields: [userId], references: [id])
   items                        OrderItem[]
-  subtotal                     Float
-  discount                     Float           @default(0)
-  tax                          Float
-  shippingCost                 Float
-  total                        Float
-  status                       OrderStatus     @default(PENDING)
+  subtotal                     Decimal           @db.Decimal(14, 2)
+  discount                     Decimal           @default(0) @db.Decimal(14, 2)
+  tax                          Decimal           @db.Decimal(14, 2)
+  shippingCost                 Decimal           @db.Decimal(14, 2)
+  total                        Decimal           @db.Decimal(14, 2)
+  quoteId                      String?           @unique
+  quote                        CheckoutQuote?    @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+  idempotencyKey               String?
+  requestHash                  String?
+  addressSnapshot              Json?
+  pricingSnapshot              Json?
+  reservationStatus            ReservationStatus @default(COMMITTED)
+  reservationExpiresAt         DateTime?
+  status                       OrderStatus       @default(PENDING)
   paymentMethod                PaymentMethod
-  paymentStatus                PaymentStatus   @default(PENDING)
-  isDemo                       Boolean         @default(false)
-  deliveryMethod               DeliveryMethod  @default(STANDARD)
+  paymentStatus                PaymentStatus     @default(PENDING)
+  isDemo                       Boolean           @default(false)
+  deliveryMethod               DeliveryMethod    @default(STANDARD)
   addressId                    String
-  address                      Address         @relation(fields: [addressId], references: [id])
+  address                      Address           @relation(fields: [addressId], references: [id])
   trackingNumber               String?
   notes                        String?
   cancellationReason           String?
-  refundApproved               Boolean         @default(false)
+  refundApproved               Boolean           @default(false)
   pickedUpAt                   DateTime?
-  autoStageEnabled             Boolean         @default(true)
-  autoStagePaused              Boolean         @default(false)
+  autoStageEnabled             Boolean           @default(true)
+  autoStagePaused              Boolean           @default(false)
   autoStageLastUpdate          DateTime?
   awaitingRefundAt             DateTime?
-  refundNotificationSent       Boolean         @default(false)
+  refundNotificationSent       Boolean           @default(false)
   refundNotificationLastSentAt DateTime?
   trackingHistory              TrackingEvent[]
-  createdAt                    DateTime        @default(now())
-  updatedAt                    DateTime        @updatedAt
+  createdAt                    DateTime          @default(now())
+  updatedAt                    DateTime          @updatedAt
+
+  @@unique([userId, idempotencyKey])
+  @@index([reservationStatus, reservationExpiresAt])
 }
 
 model OrderItem {
@@ -401,9 +437,10 @@ model OrderItem {
   sku               String?
   variantAttributes Json?
   productName       String
-  productPrice      Float
+  productPrice      Decimal         @db.Decimal(14, 2)
   quantity          Int
-  subtotal          Float
+  subtotal          Decimal         @db.Decimal(14, 2)
+  pricingSnapshot   Json?
   productImage      String?
 }
 

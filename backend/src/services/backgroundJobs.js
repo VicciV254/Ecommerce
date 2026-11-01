@@ -1,6 +1,7 @@
 import autoStageService from './autoStageService.js';
 import refundNotificationService from './refundNotificationService.js';
 import { startImageHostServices } from './imageHostService.js';
+import inventoryService from './inventoryService.js';
 
 export function startBackgroundJobs() {
   const enabled = process.env.BACKGROUND_JOBS_ENABLED ?? 'false';
@@ -14,6 +15,7 @@ export function startBackgroundJobs() {
 
   const stopImages = startImageHostServices();
   const jobs = [
+    { name: 'Reservation expiry', interval: 60_000, run: () => inventoryService.expireReservations() },
     { name: 'Auto-stage', interval: 10_000, run: () => autoStageService.processAutoStages() },
     { name: 'Refund notification', interval: 60_000, run: () => refundNotificationService.processPendingRefundNotifications() },
   ];

@@ -6,6 +6,7 @@ import type {
   CatalogSnapshot,
   CatalogVariant,
   MediaAsset,
+  VariantPricing,
 } from "../api/catalog";
 import { isRecord } from "../utils/storage";
 
@@ -26,15 +27,35 @@ const isNullableString = (value: unknown) => value === null || isString(value);
 const isStringArray = (value: unknown): value is string[] => Array.isArray(value) && value.every(isString);
 const isStringRecord = (value: unknown): value is Record<string, string> =>
   isRecord(value) && Object.values(value).every(isString);
+const isCount = (value: unknown): value is number => Number.isInteger(value) && Number(value) >= 0;
+
+/** Largest amount the API serializes. */
+const MAX_MONEY = 999_999_999_999.99;
+const MONEY_TEXT = /^\d+(\.\d{1,2})?$/;
+const MAX_PERCENT = 100;
+
+/** A server amount: finite, non-negative, bounded and at most two decimal places. */
+export function isMoney(value: unknown): value is number {
+  return isNumber(value) && value >= 0 && value <= MAX_MONEY && MONEY_TEXT.test(String(value));
+}
 
 function isMediaAsset(value: unknown): value is MediaAsset {
   return isRecord(value) && isString(value.id) && isString(value.url) && typeof value.isPlaceholder === "boolean" &&
     typeof value.isMain === "boolean" && isNumber(value.order) && isNullableString(value.alt);
 }
 
+function isPricing(value: unknown): value is VariantPricing {
+  return isRecord(value) && isMoney(value.price) && isMoney(value.originalPrice) &&
+    (value.comparePrice === null || isMoney(value.comparePrice)) &&
+    isNumber(value.discountPercent) && value.discountPercent >= 0 && value.discountPercent <= MAX_PERCENT &&
+    isNullableString(value.discountId);
+}
+
 function isVariant(value: unknown): value is CatalogVariant {
   return isRecord(value) && isString(value.id) && isString(value.sku) && isStringRecord(value.attributes) &&
-    isNumber(value.price) && isNumber(value.stock) && isNumber(value.minThreshold) && typeof value.isActive === "boolean";
+    isNumber(value.price) && isPricing(value.pricing) &&
+    isCount(value.onHand) && isCount(value.reserved) && isCount(value.stock) &&
+    isNumber(value.minThreshold) && typeof value.isActive === "boolean";
 }
 
 export function isCatalogProduct(value: unknown): value is CatalogProduct {
@@ -64,6 +85,7 @@ function isDesigner(value: unknown): value is CatalogDesigner {
 function isDiscount(value: unknown): value is CatalogDiscount {
   return isRecord(value) && isString(value.id) && isString(value.name) &&
     (value.type === "PERCENTAGE" || value.type === "FIXED") && isNumber(value.value) &&
+    isNullableString(value.couponCode) &&
     (value.applyTo === "ALL" || value.applyTo === "CATEGORY" || value.applyTo === "SELECTED") &&
     isStringArray(value.targetIds) && isString(value.startDate) && isNullableString(value.endDate) &&
     typeof value.isActive === "boolean" && typeof value.isDemo === "boolean";
@@ -133,11 +155,8 @@ export function optionLabel(key: string) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Price preview: one best percentage, never stacked; P3 quotes decide */
+/* Discount status (staff panels); prices come only from the server    */
 /* ------------------------------------------------------------------ */
-
-const PRICE_ROUNDING_STEP = 10;
-const MAX_PERCENT = 100;
 
 export function isDiscountActive(discount: CatalogDiscount, now: Date): boolean {
   if (!discount.isActive) return false;
@@ -156,53 +175,33 @@ export function discountAppliesTo(discount: CatalogDiscount, product: CatalogPro
   return discount.targetIds.includes(product.id);
 }
 
-/** Highest active percentage for the product. Fixed-amount discounts are left to the checkout quote. */
-export function bestDiscountPercent(product: CatalogProduct, discounts: readonly CatalogDiscount[], now: Date): number {
-  let best = 0;
-  for (const discount of discounts) {
-    if (discount.type === "PERCENTAGE" && isDiscountActive(discount, now) && discountAppliesTo(discount, product)) {
-      best = Math.max(best, discount.value);
-    }
-  }
-  return Math.min(Math.max(best, 0), MAX_PERCENT);
-}
-
-export function applyPercent(price: number, percent: number) {
-  if (percent <= 0) return price;
-  return Math.round((price * (1 - percent / 100)) / PRICE_ROUNDING_STEP) * PRICE_ROUNDING_STEP;
-}
-
+/** Display price taken verbatim from the server's per-SKU projection; quotes decide payable totals. */
 export type PriceView = {
-  /** Preview of the payable unit price after the single best percentage. */
+  /** Projected payable unit price after automatic offers. */
   price: number;
-  /** Resolved SKU price before any discount. */
+  /** SKU price before automatic offers. */
   originalPrice: number;
-  /** Struck-through reference: the pre-discount price, or the merchant's compare-at price. */
+  /** Struck-through reference supplied by the server, if any. */
   comparePrice: number | null;
   discountPercent: number;
   /** True on cards when active SKU prices differ and `price` is the lowest. */
   isFromPrice: boolean;
 };
 
-function priceView(product: CatalogProduct, original: number, percent: number, isFromPrice: boolean): PriceView {
-  const price = applyPercent(original, percent);
-  const merchantCompare = original === product.price && product.comparePrice !== null && product.comparePrice > original
-    ? product.comparePrice
-    : null;
-  return { price, originalPrice: original, comparePrice: percent > 0 ? original : merchantCompare, discountPercent: percent, isFromPrice };
+export function variantPriceView(variant: CatalogVariant): PriceView {
+  const { price, originalPrice, comparePrice, discountPercent } = variant.pricing;
+  return { price, originalPrice, comparePrice, discountPercent, isFromPrice: false };
 }
 
-export function variantPriceView(
-  product: CatalogProduct, variant: CatalogVariant, discounts: readonly CatalogDiscount[], now: Date,
-): PriceView {
-  return priceView(product, variant.price, bestDiscountPercent(product, discounts, now), false);
-}
-
-/** Card price: the lowest active SKU price (or the base price when none is sellable). */
-export function productPriceView(product: CatalogProduct, discounts: readonly CatalogDiscount[], now: Date): PriceView {
-  const prices = activeVariants(product).map((variant) => variant.price);
-  const lowest = prices.length ? Math.min(...prices) : product.price;
-  return priceView(product, lowest, bestDiscountPercent(product, discounts, now), new Set(prices).size > 1);
+/** Card price: the cheapest active SKU's projection, or `null` when no SKU is sellable. */
+export function productPriceView(product: CatalogProduct): PriceView | null {
+  const variants = activeVariants(product);
+  if (!variants.length) return null;
+  const cheapest = variants.reduce((best, variant) => (variant.pricing.price < best.pricing.price ? variant : best));
+  return {
+    ...variantPriceView(cheapest),
+    isFromPrice: variants.some((variant) => variant.pricing.price !== cheapest.pricing.price),
+  };
 }
 
 /* ------------------------------------------------------------------ */

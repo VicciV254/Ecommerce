@@ -10,6 +10,7 @@ export const autoStageService = {
       const orders = await prisma.order.findMany({
         where: {
           isDemo: false,
+          OR: [{ quoteId: null }, { paymentStatus: 'PAID', reservationStatus: 'COMMITTED' }],
           autoStageEnabled: true,
           autoStagePaused: false,
           status: {

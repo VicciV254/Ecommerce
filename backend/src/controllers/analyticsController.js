@@ -1,7 +1,10 @@
 import prisma from '../config/database.js';
-import { httpError, loadCategories, productWhere } from '../services/catalogService.js';
+import { availableStock, httpError, loadCategories, productWhere } from '../services/catalogService.js';
+import { decimal, sumMoney } from '../utils/money.js';
+import { expireReservations } from '../services/inventoryService.js';
 
 async function inventory() {
+  await expireReservations();
   return prisma.$transaction(async (db) => ({
     context: await loadCategories(db),
     products: await db.product.findMany({
@@ -39,6 +42,7 @@ function periodRange(period = 'month') {
 
 export const getDashboardMetrics = async (req, res, next) => {
   try {
+    await expireReservations();
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -49,6 +53,7 @@ export const getDashboardMetrics = async (req, res, next) => {
     const totalSales = await prisma.order.aggregate({
       where: {
         isDemo: false,
+        paymentStatus: 'PAID',
         status: { notIn: ['CANCELLED', 'RETURNED'] },
       },
       _sum: { total: true },
@@ -58,6 +63,7 @@ export const getDashboardMetrics = async (req, res, next) => {
     const thisMonthSales = await prisma.order.aggregate({
       where: {
         isDemo: false,
+        paymentStatus: 'PAID',
         status: { notIn: ['CANCELLED', 'RETURNED'] },
         createdAt: { gte: startOfMonth },
       },
@@ -69,6 +75,7 @@ export const getDashboardMetrics = async (req, res, next) => {
     const lastMonthSales = await prisma.order.aggregate({
       where: {
         isDemo: false,
+        paymentStatus: 'PAID',
         status: { notIn: ['CANCELLED', 'RETURNED'] },
         createdAt: {
           gte: startOfLastMonth,
@@ -125,6 +132,8 @@ export const getDashboardMetrics = async (req, res, next) => {
       },
     });
 
+    const currentRevenue = decimal(thisMonthSales._sum.total ?? 0);
+    const previousRevenue = decimal(lastMonthSales._sum.total ?? 0);
     res.json({
       sales: {
         total: totalSales._sum.total || 0,
@@ -132,8 +141,8 @@ export const getDashboardMetrics = async (req, res, next) => {
         thisMonthOrders: thisMonthSales._count,
         lastMonth: lastMonthSales._sum.total || 0,
         lastMonthOrders: lastMonthSales._count,
-        growth: lastMonthSales._sum.total
-          ? ((thisMonthSales._sum.total - lastMonthSales._sum.total) / lastMonthSales._sum.total) * 100
+        growth: !previousRevenue.isZero()
+          ? currentRevenue.minus(previousRevenue).div(previousRevenue).mul(100).toDecimalPlaces(2).toNumber()
           : 0,
       },
       orders: {
@@ -175,9 +184,9 @@ export const getInventoryBreakdown = async (req, res, next) => {
       const variants = inventoryVariants(members);
       return {
         category: category.name, totalProducts: members.length,
-        totalValue: variants.reduce((sum, variant) => sum + variant.price * variant.stock.quantity, 0),
-        lowStock: variants.filter((variant) => variant.stock.quantity > 0 && variant.stock.quantity <= variant.stock.minThreshold).length,
-        outOfStock: variants.filter((variant) => variant.stock.quantity === 0).length,
+        totalValue: sumMoney(variants.map((variant) => decimal(variant.price).mul(variant.stock.quantity))),
+        lowStock: variants.filter((variant) => availableStock(variant.stock) > 0 && availableStock(variant.stock) <= variant.stock.minThreshold).length,
+        outOfStock: variants.filter((variant) => availableStock(variant.stock) === 0).length,
         stockUnit: 'variant',
       };
     });
@@ -213,26 +222,26 @@ export const getSalesReport = async (req, res, next) => {
       orderBy: { createdAt: 'desc' },
     });
 
-    const paidOrders = orders.filter((order) => order.status !== 'CANCELLED' && order.status !== 'RETURNED');
+    const paidOrders = orders.filter((order) => order.paymentStatus === 'PAID' && order.status !== 'CANCELLED' && order.status !== 'RETURNED');
     const cancelledOrders = orders.filter((order) => order.status === 'CANCELLED');
     const returnedOrders = orders.filter((order) => order.status === 'RETURNED');
     const refundedOrders = orders.filter((order) => order.paymentStatus === 'REFUNDED');
-    const totalRevenue = paidOrders.reduce((sum, o) => sum + o.total, 0);
-    const grossRevenue = orders.reduce((sum, o) => sum + o.total, 0);
-    const cancelledValue = cancelledOrders.reduce((sum, o) => sum + o.total, 0);
-    const returnedValue = returnedOrders.reduce((sum, o) => sum + o.total, 0);
-    const refundedValue = refundedOrders.reduce((sum, o) => sum + o.total, 0);
-    const totalItemsSold = orders.reduce((sum, o) => sum + o.items.reduce((s, i) => s + i.quantity, 0), 0);
+    const totalRevenue = sumMoney(paidOrders.map((order) => order.total));
+    const grossRevenue = sumMoney(orders.filter((order) => ['PAID', 'REFUNDED'].includes(order.paymentStatus)).map((order) => order.total));
+    const cancelledValue = sumMoney(cancelledOrders.map((order) => order.total));
+    const returnedValue = sumMoney(returnedOrders.map((order) => order.total));
+    const refundedValue = sumMoney(refundedOrders.map((order) => order.total));
+    const totalItemsSold = paidOrders.reduce((sum, o) => sum + o.items.reduce((s, i) => s + i.quantity, 0), 0);
 
     // Sales by category
     const salesByCategory = {};
-    orders.forEach((order) => {
+    paidOrders.forEach((order) => {
       order.items.forEach((item) => {
         const category = item.productName.split(' ')[0] || 'Other';
         if (!salesByCategory[category]) {
-          salesByCategory[category] = { revenue: 0, items: 0 };
+          salesByCategory[category] = { revenue: decimal(0), items: 0 };
         }
-        salesByCategory[category].revenue += item.subtotal;
+        salesByCategory[category].revenue = salesByCategory[category].revenue.plus(item.subtotal);
         salesByCategory[category].items += item.quantity;
       });
     });
@@ -279,7 +288,7 @@ export const getCategoryPerformance = async (req, res, next) => {
       const variants = inventoryVariants(members);
       return {
         category: category.name, totalProducts: members.length,
-        totalStock: variants.reduce((sum, variant) => sum + variant.stock.quantity, 0),
+        totalStock: variants.reduce((sum, variant) => sum + availableStock(variant.stock), 0),
         totalReviews: members.reduce((sum, product) => sum + product._count.reviews, 0),
         avgRating: (members.reduce((sum, product) => sum + product.rating, 0) / (members.length || 1)).toFixed(1),
       };
@@ -300,6 +309,7 @@ export const getCustomerInsights = async (req, res, next) => {
         orders: {
           where: {
             isDemo: false,
+            paymentStatus: 'PAID',
             status: { notIn: ['CANCELLED', 'RETURNED'] },
           },
         },
@@ -310,15 +320,8 @@ export const getCustomerInsights = async (req, res, next) => {
       (c) => c.orders.length > 0
     ).length;
 
-    const totalSpent = customersWithOrders.reduce(
-      (sum, c) => sum + c.orders.reduce((s, o) => s + o.total, 0),
-      0
-    );
-
-    const avgOrderValue = customersWithOrders.reduce(
-      (sum, c) => sum + c.orders.reduce((s, o) => s + o.total, 0),
-      0
-    ) / (activeCustomers || 1);
+    const totalSpent = sumMoney(customersWithOrders.flatMap((customer) => customer.orders.map((order) => order.total)));
+    const avgOrderValue = totalSpent.div(activeCustomers || 1).toDecimalPlaces(2);
 
     const topCustomers = customersWithOrders
       .map((c) => ({
@@ -326,9 +329,9 @@ export const getCustomerInsights = async (req, res, next) => {
         name: `${c.firstName} ${c.lastName}`,
         email: c.email,
         totalOrders: c.orders.length,
-        totalSpent: c.orders.reduce((s, o) => s + o.total, 0),
+        totalSpent: sumMoney(c.orders.map((order) => order.total)),
       }))
-      .sort((a, b) => b.totalSpent - a.totalSpent)
+      .sort((a, b) => b.totalSpent.comparedTo(a.totalSpent))
       .slice(0, 10);
 
     res.json({

@@ -73,7 +73,7 @@ export function Footer() {
       </div>
 
       <Container className="py-12">
-        <div className="grid grid-cols-2 gap-8 md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-8 [overflow-wrap:anywhere] md:grid-cols-4">
           <div>
             <h4 className="mb-4 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-secondary">Quick Links</h4>
             <ul className="space-y-2.5 text-xs text-gray-400">

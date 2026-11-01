@@ -17,11 +17,30 @@ export type MediaAsset = {
   version: number;
 };
 
+/** Server-computed unit price for one SKU. Shoppers see this; the client never recomputes it. */
+export type VariantPricing = {
+  /** Payable unit price after the strongest automatic offer (coupons excluded). */
+  price: number;
+  /** SKU price before automatic offers. */
+  originalPrice: number;
+  /** Struck-through reference price, when the server supplies one. */
+  comparePrice: number | null;
+  discountPercent: number;
+  discountId: string | null;
+};
+
 export type CatalogVariant = {
   id: string;
   sku: string;
   attributes: Record<string, string>;
+  /** Base SKU price for staff editing; never used to settle or display a payable price. */
   price: number;
+  pricing: VariantPricing;
+  /** Units physically held. */
+  onHand: number;
+  /** Units held for unpaid pending orders. */
+  reserved: number;
+  /** Sellable units: on hand minus reserved. */
   stock: number;
   maxStock: number;
   minThreshold: number;
@@ -86,6 +105,8 @@ export type CatalogDiscount = {
   name: string;
   type: "PERCENTAGE" | "FIXED";
   value: number;
+  /** Coupon-only offers apply in checkout quotes when the code is entered; public snapshots omit them. */
+  couponCode: string | null;
   applyTo: "ALL" | "CATEGORY" | "SELECTED";
   targetIds: string[];
   startDate: string;
@@ -103,6 +124,7 @@ export type CatalogSnapshot = {
   discounts: CatalogDiscount[];
 };
 
+/** `quantity` is the on-hand count; the server rejects values below the reserved units. */
 export type StockInput = { quantity: number; maxStock?: number; minThreshold?: number };
 export type MediaInput = {
   id?: string;
@@ -126,7 +148,12 @@ export type CatalogStock = {
   productName: string;
   categoryId: string;
   isDemo: boolean;
+  /** On-hand units. */
   quantity: number;
+  /** Units held for unpaid pending orders. */
+  reserved: number;
+  /** Sellable units; `status` is derived from this. */
+  available: number;
   maxStock: number;
   minThreshold: number;
   status: "IN_STOCK" | "LOW_STOCK" | "OUT_OF_STOCK";
@@ -240,6 +267,8 @@ export type DiscountInput = {
   name: string;
   type: CatalogDiscount["type"];
   value: number;
+  /** `null` makes the discount automatic; a code limits it to checkout quotes that enter it. */
+  couponCode?: string | null;
   applyTo: CatalogDiscount["applyTo"];
   targetIds: string[];
   startDate: string;

@@ -16,7 +16,9 @@ import { fixtureSnapshot, fixtureStorefront, linenShirt, poloShirt } from "../te
 
 const CUSTOMER_ID = "pricing-test-user";
 const api = vi.hoisted(() => ({ getSnapshot: vi.fn(), getStorefront: vi.fn(), getProduct: vi.fn() }));
+const orders = vi.hoisted(() => ({ createQuote: vi.fn(), getQuote: vi.fn(), placeOrder: vi.fn(), getOrder: vi.fn() }));
 vi.mock("../api/catalog", () => ({ catalogAPI: api }));
+vi.mock("../api/orders", async (importOriginal) => ({ ...await importOriginal<typeof import("../api/orders")>(), checkoutAPI: orders }));
 vi.mock("../contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "pricing-test-user" } }) }));
 
 function renderStore(view: ReactNode) {
@@ -58,14 +60,17 @@ describe("single display discount from the canonical catalog", () => {
     });
   }
 
-  it("prices cart lines per SKU from the API without a client coupon", async () => {
+  it("shows each SKU's server unit price and quotes no total without an address", async () => {
     renderStore(<Cart />);
     const line = (await screen.findByRole("link", { name: "Linen Short-Sleeve Shirt" })).closest("li")!;
     expect(within(line).getByText("Size: M · Color: White")).toBeTruthy();
-    expect(within(line).getByText("KES 1,800")).toBeTruthy();
-    expect(screen.queryByPlaceholderText(/Promo Code/)).toBeNull();
-    expect(screen.getByText("Not yet calculated")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Checkout temporarily unavailable" }).hasAttribute("disabled")).toBe(true);
+    expect(within(line).getByText("KES 1,000")).toBeTruthy();
+    expect(within(line).getByText("KES 900 each")).toBeTruthy();
+    // Line and cart totals come only from a server quote, never from browser multiplication.
+    expect(screen.queryByText("KES 1,800")).toBeNull();
+    expect(screen.getByText("Add a delivery address to see delivery, VAT and your total.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Continue to Checkout" }).hasAttribute("disabled")).toBe(true);
+    expect(orders.createQuote).not.toHaveBeenCalled();
   });
 
   it("shows the same single discounted price in search suggestions", async () => {

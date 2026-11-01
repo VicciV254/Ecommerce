@@ -1,11 +1,18 @@
 import { isAxiosError, isCancel } from "axios";
 import { StaffSessionRequiredError } from "./staffSession";
 
-type ErrorBody = { error?: unknown; details?: unknown };
+type ErrorBody = { error?: unknown; code?: unknown; details?: unknown };
 const MAX_DETAILS = 3;
 
 export function apiStatus(error: unknown): number | undefined {
   return isAxiosError(error) ? error.response?.status : undefined;
+}
+
+/** Machine-readable reason from an API error body, when the server supplied one. */
+export function apiErrorCode(error: unknown): string | undefined {
+  if (!isAxiosError<ErrorBody>(error)) return undefined;
+  const code = error.response?.data?.code;
+  return typeof code === "string" && code ? code : undefined;
 }
 
 function validationDetails(details: unknown): string[] {

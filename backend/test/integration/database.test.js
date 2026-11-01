@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict';
 import { readdirSync } from 'node:fs';
-import { test } from 'node:test';
+import { randomUUID } from 'node:crypto';
+import { before, test } from 'node:test';
 import prisma from '../../src/config/database.js';
 import { startServer } from '../../src/server.js';
 import { generateToken, generateRefreshToken } from '../../src/config/auth.js';
 import emailService from '../../src/services/emailService.js';
 import defaults from '../../src/data/storefront-defaults.json' with { type: 'json' };
 import { STOREFRONT_KEY } from '../../src/utils/catalogValidation.js';
+
+before(() => { process.env.ENABLE_ORDER_RESERVATIONS = 'true'; });
 
 test('migrations and API reads use the isolated database and shutdown releases the listener', async (t) => {
   const migrations = await prisma.$queryRaw`
@@ -40,7 +43,7 @@ test('migrations and API reads use the isolated database and shutdown releases t
   assert.equal(server.listening, false);
 });
 
-test('database-cart checkout creates a pending order with an image and decrements local stock', async (t) => {
+test('a reviewed quote creates a pending order with an image and reserves local stock', async (t) => {
   t.mock.method(emailService, 'sendOrderConfirmation', async () => ({ success: true }));
   const user = await prisma.user.create({
     data: {
@@ -76,9 +79,11 @@ test('database-cart checkout creates a pending order with an image and decrement
   });
   const { server, close } = await startServer({ port: 0, host: '127.0.0.1' });
   t.after(close);
-  const response = await fetch(`http://127.0.0.1:${server.address().port}/api/orders`, {
+  const base = `http://127.0.0.1:${server.address().port}/api/orders`;
+  const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${generateToken({ userId: user.id })}` };
+  const rejected = await fetch(base, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${generateToken({ userId: user.id })}` },
+    headers,
     body: JSON.stringify({
       addressId: user.addresses[0].id,
       paymentMethod: 'MPESA',
@@ -86,6 +91,19 @@ test('database-cart checkout creates a pending order with an image and decrement
       status: 'DELIVERED',
       deliveryMethod: 'STANDARD',
     }),
+  });
+  assert.equal(rejected.status, 400);
+  const quote = await fetch(`${base}/quotes`, {
+    method: 'POST', headers,
+    body: JSON.stringify({
+      addressId: user.addresses[0].id, deliveryMethod: 'STANDARD',
+      items: [{ productId: product.id, variantId: product.variants[0].id, quantity: 1 }],
+    }),
+  });
+  assert.equal(quote.status, 201);
+  const response = await fetch(base, {
+    method: 'POST', headers: { ...headers, 'Idempotency-Key': randomUUID() },
+    body: JSON.stringify({ quoteId: (await quote.json()).id }),
   });
   assert.equal(response.status, 201);
   const order = await response.json();
@@ -98,11 +116,13 @@ test('database-cart checkout creates a pending order with an image and decrement
   assert.equal(order.items[0].sku, 'TEST-CHECKOUT-SKU');
   assert.deepEqual(order.items[0].variantAttributes, { size: 'M' });
   assert.equal((await prisma.trackingEvent.findFirst({ where: { orderId: order.id } })).status, 'PENDING');
-  assert.equal((await prisma.stock.findUnique({ where: { variantId: product.variants[0].id } })).quantity, 1);
+  const inventory = await prisma.stock.findUnique({ where: { variantId: product.variants[0].id } });
+  assert.equal(inventory.quantity, 2);
+  assert.equal(inventory.reserved, 1);
   assert.equal(await prisma.cartItem.count(), 0);
 });
 
-test('cancellation restores only the ordered SKU once and rejects incomplete allocations atomically', async (t) => {
+test('cancellation releases only the ordered SKU once and rejects incomplete legacy allocations atomically', async (t) => {
   t.mock.method(emailService, 'sendOrderConfirmation', async () => ({ success: true }));
   const cancellationEmail = t.mock.method(emailService, 'sendOrderCancellation', async () => ({ success: true }));
   const user = await prisma.user.create({
@@ -135,30 +155,39 @@ test('cancellation restores only the ordered SKU once and rejects incomplete all
   t.after(close);
   const base = `http://127.0.0.1:${server.address().port}/api/orders`;
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${generateToken({ userId: user.id })}` };
-  const created = await fetch(base, {
+  const quoted = await fetch(`${base}/quotes`, {
     method: 'POST', headers,
-    body: JSON.stringify({ addressId: user.addresses[0].id, paymentMethod: 'MPESA', deliveryMethod: 'STANDARD' }),
+    body: JSON.stringify({
+      addressId: user.addresses[0].id, deliveryMethod: 'STANDARD',
+      items: [{ productId: product.id, variantId: selected.id, quantity: 1 }],
+    }),
+  });
+  assert.equal(quoted.status, 201);
+  const created = await fetch(base, {
+    method: 'POST', headers: { ...headers, 'Idempotency-Key': randomUUID() },
+    body: JSON.stringify({ quoteId: (await quoted.json()).id }),
   });
   assert.equal(created.status, 201);
   const order = await created.json();
   const stock = (variantId) => prisma.stock.findUnique({ where: { variantId } });
-  assert.equal((await stock(selected.id)).quantity, 0);
+  assert.equal((await stock(selected.id)).quantity, 1);
+  assert.equal((await stock(selected.id)).reserved, 1);
   assert.equal((await stock(selected.id)).status, 'OUT_OF_STOCK');
   const cancel = (id) => fetch(`${base}/${id}/cancel`, {
     method: 'POST', headers, body: JSON.stringify({ reason: 'Test cancellation' }),
   });
   const attempts = await Promise.all([cancel(order.id), cancel(order.id)]);
-  assert.equal(attempts.filter((response) => response.status === 200).length, 1);
-  assert.ok(attempts.some((response) => [400, 409].includes(response.status)));
+  assert.ok(attempts.every((response) => response.status === 200));
   const cancelled = await attempts.find((response) => response.status === 200).json();
   assert.equal(cancelled.status, 'CANCELLED');
   assert.equal((await stock(selected.id)).quantity, 1);
+  assert.equal((await stock(selected.id)).reserved, 0);
   assert.equal((await stock(selected.id)).status, 'IN_STOCK');
   assert.equal((await stock(sibling.id)).quantity, 7);
-  assert.equal(await prisma.stockLog.count({ where: { stockId: selected.stock.id, action: 'order-cancel' } }), 1);
+  assert.equal(await prisma.stockLog.count({ where: { stockId: selected.stock.id, action: 'release' } }), 1);
   assert.equal(await prisma.trackingEvent.count({ where: { orderId: order.id, status: 'CANCELLED' } }), 1);
   assert.equal(cancellationEmail.mock.callCount(), 1);
-  assert.equal((await cancel(order.id)).status, 400);
+  assert.equal((await cancel(order.id)).status, 200);
   assert.equal((await stock(selected.id)).quantity, 1);
 
   const incomplete = await prisma.order.create({ data: {
@@ -174,7 +203,7 @@ test('cancellation restores only the ordered SKU once and rejects incomplete all
   assert.equal((await stock(sibling.id)).quantity, 7);
   assert.equal((await prisma.order.findUnique({ where: { id: incomplete.id } })).status, 'PENDING');
   assert.equal(await prisma.trackingEvent.count({ where: { orderId: incomplete.id } }), 0);
-  assert.equal(await prisma.stockLog.count({ where: { stockId: selected.stock.id, action: 'order-cancel' } }), 1);
+  assert.equal(await prisma.stockLog.count({ where: { stockId: selected.stock.id, action: 'order-cancel' } }), 0);
   assert.equal(cancellationEmail.mock.callCount(), 1);
 });
 
@@ -282,8 +311,8 @@ test('legacy checkout is unavailable and cannot persist customer payment claims'
         address: { street: 'Test street', city: 'Mombasa', county: 'Mombasa' },
       }),
     });
-    assert.equal(response.status, 503);
-    assert.match((await response.json()).error, /checkout.*unavailable/i);
+    assert.equal(response.status, 400);
+    assert.match((await response.json()).error, /quoteId/);
     assert.deepEqual(await snapshot(), before);
   }
 });

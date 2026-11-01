@@ -1,11 +1,12 @@
 import { z } from 'zod';
+import { isMoneyInput } from './money.js';
 
 export const STOREFRONT_KEY = 'storefront-v2';
 export const idSchema = z.string().trim().min(1).max(180);
 const slugSchema = z.string().trim().min(1).max(180).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
 const text = (max) => z.string().trim().max(max);
 const optionalText = (max) => text(max).nullable().optional();
-const money = z.number().finite().positive().max(1_000_000_000);
+const money = z.number().finite().positive().max(1_000_000_000).refine(isMoneyInput, 'Amounts support at most two decimal places');
 const unique = (items) => new Set(items).size === items.length;
 
 export const imageUrlSchema = z.string().max(2048).refine((value) => {
@@ -188,7 +189,8 @@ export const versionSchema = z.object({ version: z.number().int().positive() }).
 export const catalogDiscountSchema = z.object({
   name: text(180).min(2),
   type: z.enum(['PERCENTAGE', 'FIXED']),
-  value: z.number().finite().positive().max(1_000_000_000),
+  value: money,
+  couponCode: z.string().trim().toUpperCase().min(3).max(40).regex(/^[A-Z0-9_-]+$/).nullable().optional(),
   applyTo: z.enum(['ALL', 'CATEGORY', 'SELECTED']),
   targetIds: z.array(idSchema).max(200).refine(unique).default([]),
   startDate: z.coerce.date(),

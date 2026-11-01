@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   CatalogFormatError,
-  applyPercent,
-  bestDiscountPercent,
   buildCategoryTree,
+  discountAppliesTo,
   findVariant,
+  isDiscountActive,
+  isMoney,
   optionAvailable,
   parseCatalogSnapshot,
   productPriceView,
@@ -19,6 +20,7 @@ import {
   fixtureSnapshot,
   fixtureVariant,
   linenShirt,
+  listPricing,
   poloShirt,
 } from "../test-support/catalogFixtures";
 import type { CatalogDiscount } from "../api/catalog";
@@ -66,63 +68,74 @@ describe("variant resolution", () => {
   });
 });
 
-describe("price preview", () => {
-  it("applies one 10% discount to KES 1,000 as KES 900 and leaves other products unchanged", () => {
-    expect(variantPriceView(linenShirt, linenShirt.variants[0], fixtureDiscounts, NOW)).toMatchObject({
-      price: 900, originalPrice: 1000, comparePrice: 1000, discountPercent: 10,
+describe("server price projection", () => {
+  it("displays the server's 10% projection on KES 1,000 as KES 900 and leaves other products unchanged", () => {
+    expect(variantPriceView(linenShirt.variants[0])).toEqual({
+      price: 900, originalPrice: 1000, comparePrice: 1000, discountPercent: 10, isFromPrice: false,
     });
-    expect(productPriceView(poloShirt, fixtureDiscounts, NOW)).toMatchObject({ price: 2200, discountPercent: 0, comparePrice: null });
+    expect(productPriceView(poloShirt)).toMatchObject({ price: 2200, discountPercent: 0, comparePrice: null, isFromPrice: false });
   });
 
-  it("uses the highest active percentage without stacking and ignores fixed, paused and expired discounts", () => {
-    const discounts: CatalogDiscount[] = [
-      { ...fixtureDiscounts[0], id: "a", value: 10 },
-      { ...fixtureDiscounts[0], id: "b", value: 25, applyTo: "CATEGORY", targetIds: ["cat-fashion"] },
-      { ...fixtureDiscounts[0], id: "c", value: 60, isActive: false },
-      { ...fixtureDiscounts[0], id: "d", value: 70, endDate: "2001-01-01T00:00:00.000Z" },
-      { ...fixtureDiscounts[0], id: "e", value: 80, startDate: "2099-01-01T00:00:00.000Z" },
-      { ...fixtureDiscounts[0], id: "f", type: "FIXED", value: 500 },
-    ];
-    expect(bestDiscountPercent(linenShirt, discounts, NOW)).toBe(25);
-    expect(applyPercent(1000, 25)).toBe(750);
+  it("never recomputes a price from base fields or snapshot discounts", () => {
+    // The base price and an active storewide discount both disagree with the projection; only the projection is shown.
+    const product = fixtureProduct({
+      id: "projected", name: "Projected", price: 5000,
+      variants: [fixtureVariant({ id: "projected-sku", price: 5000, pricing: listPricing(4321.5) })],
+    });
+    const storewide: CatalogDiscount = { ...fixtureDiscounts[0], applyTo: "ALL", targetIds: [], value: 50 };
+    expect(discountAppliesTo(storewide, product)).toBe(true);
+    expect(productPriceView(product)).toMatchObject({ price: 4321.5, originalPrice: 4321.5, discountPercent: 0 });
   });
 
-  it("applies category discounts to descendants only", () => {
-    const category: CatalogDiscount = { ...fixtureDiscounts[0], applyTo: "CATEGORY", targetIds: ["cat-men"] };
-    expect(bestDiscountPercent(linenShirt, [category], NOW)).toBe(10);
-    expect(bestDiscountPercent(demoPhone, [{ ...category, isDemo: true }], NOW)).toBe(0);
-  });
-
-  it("keeps demo promotions off real products", () => {
-    expect(bestDiscountPercent(poloShirt, fixtureDiscounts, NOW)).toBe(0);
-    expect(bestDiscountPercent(demoPhone, fixtureDiscounts, NOW)).toBe(50);
-  });
-
-  it("shows the lowest active SKU as a from-price on cards when SKU prices differ", () => {
+  it("shows the cheapest active SKU projection as a from-price and nothing when no SKU is sellable", () => {
     const product = fixtureProduct({
       id: "multi-price",
       name: "Multi price",
-      price: 1000,
       variants: [
         fixtureVariant({ id: "v1", attributes: { size: "S" }, price: 1000 }),
-        fixtureVariant({ id: "v2", attributes: { size: "L" }, price: 1200 }),
+        fixtureVariant({
+          id: "v2", attributes: { size: "L" }, price: 1200,
+          pricing: { price: 960, originalPrice: 1200, comparePrice: 1200, discountPercent: 20, discountId: "disc-l" },
+        }),
         fixtureVariant({ id: "v3", attributes: { size: "XS" }, price: 500, isActive: false }),
       ],
     });
-    expect(productPriceView(product, [], NOW)).toMatchObject({ price: 1000, isFromPrice: true });
-    expect(productPriceView(poloShirt, [], NOW).isFromPrice).toBe(false);
+    expect(productPriceView(product)).toEqual({ price: 960, originalPrice: 1200, comparePrice: 1200, discountPercent: 20, isFromPrice: true });
+    expect(productPriceView(poloShirt)?.isFromPrice).toBe(false);
+    const retired = { ...product, variants: product.variants.map((variant) => ({ ...variant, isActive: false })) };
+    expect(productPriceView(retired)).toBeNull();
   });
 
-  it("only strikes through a merchant compare-at price for SKUs at the base price", () => {
-    const product = fixtureProduct({
-      id: "compare",
-      name: "Compare",
-      price: 1000,
-      comparePrice: 1500,
-      variants: [fixtureVariant({ id: "base", attributes: { size: "S" } }), fixtureVariant({ id: "override", attributes: { size: "L" }, price: 1600 })],
-    });
-    expect(variantPriceView(product, product.variants[0], [], NOW).comparePrice).toBe(1500);
-    expect(variantPriceView(product, product.variants[1], [], NOW).comparePrice).toBeNull();
+  it("rejects missing or malformed projections and stock counts instead of falling back", () => {
+    const withVariant = (patch: Record<string, unknown>) =>
+      ({ ...fixtureSnapshot(), products: [{ ...poloShirt, variants: [{ ...poloShirt.variants[0], ...patch }] }] });
+    expect(() => parseCatalogSnapshot(withVariant({ pricing: undefined }), ["demo"])).toThrow(/products/);
+    expect(() => parseCatalogSnapshot(withVariant({ pricing: { ...listPricing(2200), price: "2200" } }), ["demo"])).toThrow(CatalogFormatError);
+    expect(() => parseCatalogSnapshot(withVariant({ pricing: { ...listPricing(2200), price: 2199.999 } }), ["demo"])).toThrow(CatalogFormatError);
+    expect(() => parseCatalogSnapshot(withVariant({ pricing: { ...listPricing(2200), comparePrice: -1 } }), ["demo"])).toThrow(CatalogFormatError);
+    expect(() => parseCatalogSnapshot(withVariant({ reserved: undefined }), ["demo"])).toThrow(CatalogFormatError);
+    expect(() => parseCatalogSnapshot(withVariant({ onHand: 1.5 }), ["demo"])).toThrow(CatalogFormatError);
+    const valid = parseCatalogSnapshot(withVariant({ pricing: listPricing(2199.5), onHand: 5, reserved: 2, stock: 3 }), ["demo"]);
+    expect(valid.products[0].variants[0]).toMatchObject({ pricing: { price: 2199.5 }, onHand: 5, reserved: 2, stock: 3 });
+  });
+
+  it("accepts only bounded server amounts with at most two decimals", () => {
+    for (const amount of [0, 0.29, 1044.4, 999_999_999_999.99]) expect(isMoney(amount)).toBe(true);
+    for (const amount of [-0.01, 1.005, 0.1 + 0.2, Number.NaN, Number.POSITIVE_INFINITY, 1e21, "10"]) expect(isMoney(amount)).toBe(false);
+  });
+});
+
+describe("staff discount status", () => {
+  it("reports the active window and matches category descendants without touching other modes", () => {
+    const category: CatalogDiscount = { ...fixtureDiscounts[0], applyTo: "CATEGORY", targetIds: ["cat-men"] };
+    expect(isDiscountActive(category, NOW)).toBe(true);
+    expect(isDiscountActive({ ...category, isActive: false }, NOW)).toBe(false);
+    expect(isDiscountActive({ ...category, endDate: "2001-01-01T00:00:00.000Z" }, NOW)).toBe(false);
+    expect(isDiscountActive({ ...category, startDate: "2099-01-01T00:00:00.000Z" }, NOW)).toBe(false);
+    expect(discountAppliesTo(category, linenShirt)).toBe(true);
+    expect(discountAppliesTo(category, demoPhone)).toBe(false);
+    expect(discountAppliesTo(fixtureDiscounts[1], poloShirt)).toBe(false);
+    expect(discountAppliesTo(fixtureDiscounts[1], demoPhone)).toBe(true);
   });
 });
 

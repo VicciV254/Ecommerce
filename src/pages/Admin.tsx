@@ -402,13 +402,13 @@ function AnalyticsPanel() {
       .catch((error: unknown) => setReport({ status: "error", message: describeApiError(error, "The sales report could not be loaded.") }));
   }, [period]);
 
-  // Inventory value at current list prices, real records only (demo samples are not commercial stock).
+  // Inventory value of on-hand units at current list prices, real records only (demo samples are not commercial stock).
   const departments = useMemo(() => {
     const products = catalog.data?.snapshot.products.filter((product) => !product.isDemo) ?? [];
     return catalog.categories.roots.map((department) => {
       const value = products
         .filter((product) => product.categoryPath.includes(department.id))
-        .reduce((sum, product) => sum + activeVariants(product).reduce((total, variant) => total + variant.price * Math.max(0, variant.stock), 0), 0);
+        .reduce((sum, product) => sum + activeVariants(product).reduce((total, variant) => total + variant.price * variant.onHand, 0), 0);
       return { id: department.id, name: department.name, value };
     }).sort((a, b) => b.value - a.value);
   }, [catalog.data, catalog.categories]);

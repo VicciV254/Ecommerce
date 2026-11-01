@@ -1,8 +1,16 @@
 import prisma from '../config/database.js';
 import { storefrontSchema, STOREFRONT_KEY } from '../utils/catalogValidation.js';
+import { checkoutPolicy } from '../config/checkoutPolicy.js';
+import { unitPrice } from './pricingService.js';
 
 export { STOREFRONT_KEY };
-export const httpError = (statusCode, message) => Object.assign(new Error(message), { statusCode });
+export const httpError = (statusCode, message, code) => Object.assign(new Error(message), { statusCode, ...(code && { code }) });
+export const availableStock = (stock) => {
+  if (!Number.isInteger(stock.quantity) || !Number.isInteger(stock.reserved) || stock.reserved < 0 || stock.reserved > stock.quantity) {
+    throw httpError(503, 'Variant inventory data is inconsistent', 'INVENTORY_REVIEW');
+  }
+  return stock.quantity - stock.reserved;
+};
 export const demoCatalogEnabled = () => process.env.NODE_ENV !== 'production' && process.env.ALLOW_DEMO_CATALOG === 'true';
 
 export function serializable(operation) {
@@ -37,6 +45,13 @@ export function categoryContext(categories, invalidStatus = 503) {
 export const loadCategories = async (db = prisma) => categoryContext(await db.category.findMany({
   orderBy: [{ order: 'asc' }, { name: 'asc' }, { id: 'asc' }],
 }));
+
+export async function loadCatalogContext(db = prisma) {
+  const [context, discounts] = await Promise.all([
+    loadCategories(db), db.discount.findMany({ orderBy: { id: 'asc' } }),
+  ]);
+  return { ...context, discounts, policy: checkoutPolicy(), pricedAt: new Date() };
+}
 
 export function productWhere(context, admin = false) {
   if (admin) return { deletedAt: null };
@@ -81,7 +96,9 @@ export function productDto(product, context) {
     return {
       id: variant.id, sku: variant.sku, attributes: variant.attributes,
       price: variant.price ?? product.price,
-      stock: variant.stock.quantity, maxStock: variant.stock.maxStock,
+      pricing: unitPrice(product, variant, context.discounts, path.map((category) => category.id), context.policy, context.pricedAt),
+      stock: availableStock(variant.stock), onHand: variant.stock.quantity, reserved: variant.stock.reserved,
+      maxStock: variant.stock.maxStock,
       minThreshold: variant.stock.minThreshold, isActive: variant.isActive,
     };
   });
@@ -124,6 +141,7 @@ export function designerDto(designer) {
 export function discountDto(discount) {
   return {
     id: discount.id, name: discount.name, type: discount.type, value: discount.value,
+    couponCode: discount.couponCode ?? null,
     applyTo: discount.applyTo, targetIds: discount.targetIds,
     startDate: discount.startDate.toISOString(), endDate: discount.endDate?.toISOString() ?? null,
     isActive: discount.isActive, isDemo: discount.isDemo,
@@ -131,21 +149,16 @@ export function discountDto(discount) {
 }
 
 export async function catalogSnapshot(db, admin = false) {
-  const context = await loadCategories(db);
-  const [rows, designers, discounts] = await Promise.all([
+  const context = await loadCatalogContext(db);
+  const [rows, designers] = await Promise.all([
     db.product.findMany({ where: productWhere(context, admin), include: productInclude(admin), orderBy: [{ createdAt: 'desc' }, { id: 'asc' }] }),
     db.designer.findMany({
       where: { deletedAt: null, ...(!admin && { isActive: true, ...(!demoCatalogEnabled() && { isDemo: false }) }) },
       orderBy: [{ fullName: 'asc' }, { id: 'asc' }],
     }),
-    db.discount.findMany({
-      where: admin ? {} : {
-        isActive: true,
-        ...(!demoCatalogEnabled() && { isDemo: false }),
-      },
-      orderBy: { id: 'asc' },
-    }),
   ]);
+  const discounts = context.discounts.filter((discount) => admin ||
+    (discount.isActive && !discount.couponCode && (demoCatalogEnabled() || !discount.isDemo)));
   const products = rows.map((product) => productDto(product, context));
   return {
     version: 2, mode: admin ? 'admin' : demoCatalogEnabled() ? 'demo' : 'live',
@@ -219,7 +232,8 @@ export function stockDto(stock) {
     id: stock.id, variantId: variant.id, sku: variant.sku, attributes: variant.attributes,
     productId: variant.productId, productName: variant.product.name, categoryId: variant.product.categoryId,
     isDemo: variant.product.isDemo, quantity: stock.quantity,
+    reserved: stock.reserved, available: availableStock(stock),
     maxStock: stock.maxStock, minThreshold: stock.minThreshold,
-    status: stockStatus(stock.quantity, stock.minThreshold),
+    status: stockStatus(availableStock(stock), stock.minThreshold),
   };
 }

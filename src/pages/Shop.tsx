@@ -4,7 +4,7 @@ import { Breadcrumb, Container, DemoCatalogNotice, ErrorPanel, LoadingPanel, Pro
 import { ModalDialog } from "../components/Modal";
 import { Link, parseRoute } from "../router";
 import { useCatalog } from "../store/CatalogContext";
-import { activeVariants, inCategory, optionLabel } from "../store/catalogModel";
+import { activeVariants, inCategory, optionLabel, productPriceView } from "../store/catalogModel";
 import { COLOR_MAP } from "../utils/colors";
 import { searchProducts } from "../utils/search";
 
@@ -106,7 +106,10 @@ function ShopListing({ category, designerId, designerName, designerParam, q }: {
       (!category || inCategory(product, category.id)) && (!designerId || product.designerId === designerId));
   }, [catalog.products, q, category, designerId]);
 
-  const prices = useMemo(() => new Map(scoped.map((product) => [product.id, catalog.priceOf(product).price])), [scoped, catalog]);
+  const prices = useMemo(() => new Map(scoped.flatMap((product) => {
+    const price = productPriceView(product);
+    return price ? [[product.id, price.price] as const] : [];
+  })), [scoped]);
   const priceCeiling = Math.max(PRICE_STEP, Math.ceil(Math.max(0, ...prices.values()) / PRICE_STEP) * PRICE_STEP);
   const priceLimit = maxPrice ?? priceCeiling;
   const facets = useMemo(() => facetsFor(scoped), [scoped]);

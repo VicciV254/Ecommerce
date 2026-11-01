@@ -2,6 +2,7 @@ import type { Request, Route } from "@playwright/test";
 import {
   ORIGIN,
   adminSnapshot,
+  browserQuote,
   customer,
   expect,
   linenCartLine,
@@ -13,6 +14,7 @@ import {
   storefrontDraft,
   test,
 } from "./fixtures";
+import { linenPair } from "../../src/test-support/checkoutFixtures";
 
 test("search supports arrow selection and Escape before dismissing its mobile drawer", async ({ page, isMobile }) => {
   await page.goto("/#/shop");
@@ -126,7 +128,8 @@ test("receipt and cancellation dialogs preserve nested focus and expose a failed
   const receipt = page.getByRole("dialog", { name: "Receipt Details" });
   await expect(receipt.getByRole("button", { name: "Close", exact: true })).toBeFocused();
   await expect(receipt).toContainText("Payment: M-Pesa (pending)");
-  const cancel = receipt.getByRole("button", { name: "Cancel & Refund" });
+  // The order is unpaid, so cancelling it offers no refund.
+  const cancel = receipt.getByRole("button", { name: "Cancel Order", exact: true });
   await cancel.focus();
   await page.keyboard.press("Enter");
   const cancellation = page.getByRole("dialog", { name: "Cancel Order", exact: true });
@@ -173,7 +176,9 @@ test("product editor controls remain reachable and save errors are announced ins
   const close = editor.getByRole("button", { name: "Close product editor" });
   await expect(close).toBeInViewport();
   await expect(editor.getByRole("textbox", { name: "Name", exact: true })).toHaveValue("Linen Short-Sleeve Shirt");
-  await editor.getByRole("spinbutton", { name: "Price (KES)" }).fill("1200");
+  const price = editor.getByRole("spinbutton", { name: "Price (KES)" });
+  await price.fill("1200.25");
+  expect(await price.evaluate((element: HTMLInputElement) => element.validity.stepMismatch)).toBe(false);
   const createCategory = editor.getByRole("button", { name: "Create category" });
   await createCategory.focus();
   await page.keyboard.press("Enter");
@@ -189,7 +194,7 @@ test("product editor controls remain reachable and save errors are announced ins
   await expect(editor.getByRole("alert")).toHaveText("Invalid request: price: Number must be greater than 0");
   expect(saves).toHaveLength(1);
   expect(saves[0].method).toBe("PUT");
-  expect(saves[0].body).toMatchObject({ name: "Linen Short-Sleeve Shirt", price: 1200, categoryId: "cat-shirts" });
+  expect(saves[0].body).toMatchObject({ name: "Linen Short-Sleeve Shirt", price: 1200.25, categoryId: "cat-shirts" });
   expect(saves[0].body).not.toHaveProperty("variants");
   expect(saves[0].body).not.toHaveProperty("images");
   await page.keyboard.press("Escape");
@@ -251,38 +256,53 @@ test("storefront drafts save and publish with versions without leaking to shoppe
   await shopper.close();
 });
 
-test("paused checkout creates no orders and preserves the variant cart", async ({ page, context }) => {
+test("checkout explains unavailable ordering, creates no order and preserves the cart", async ({ page, context }) => {
   await signInCustomer(page, [linenCartLine]);
   const legacyReceipts = JSON.stringify([{ orderNumber: "NM-LEGACY", status: "DELIVERED", paymentStatus: "PAID" }]);
   await context.addInitScript(({ key, value, origin }) => {
     if (location.origin === origin) localStorage.setItem(key, value);
   }, { key: `nmb-receipts-${customer.id}`, value: legacyReceipts, origin: ORIGIN });
+  // The server quote reports that order reservations are switched off.
+  await context.route("**/api/orders/quotes", (route) => route.fulfill({ status: 201, json: browserQuote({ reservationsEnabled: false }) }));
   const writes: string[] = [];
-  page.on("request", (request) => { if (request.method() !== "GET") writes.push(request.url()); });
+  page.on("request", (request) => { if (request.method() !== "GET") writes.push(new URL(request.url()).pathname); });
   await page.goto("/#/checkout");
-  await expect(page.getByRole("heading", { name: "Checkout temporarily unavailable" })).toBeVisible();
-  await expect(page.getByRole("status")).toContainText("Your cart is unchanged");
+  await expect(page.getByRole("heading", { name: "Ordering is not available yet" })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "Your cart is unchanged" })).toBeVisible();
   await expect(page.locator("main input")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: /Place Order|Confirm Payment/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Reserve|Place Order|Confirm Payment|Pay/ })).toHaveCount(0);
   await page.getByRole("link", { name: "Back to Cart", exact: true }).click();
   await expect(page.getByRole("link", { name: "Linen Short-Sleeve Shirt", exact: true })).toBeVisible();
   await expect(page.getByText("Size: M · Color: White")).toBeVisible();
+  const proceed = page.getByRole("button", { name: "Continue to Checkout" });
+  await expect(proceed).toBeDisabled();
+  await expect(proceed).toHaveAccessibleDescription(/Ordering is not available yet/);
   expect((await shopperState(page)).cart).toEqual([linenCartLine]);
   expect(await page.evaluate((key) => localStorage.getItem(key), `nmb-receipts-${customer.id}`)).toBe(legacyReceipts);
-  expect(writes).toEqual([]);
+  expect(writes.length).toBeGreaterThan(0);
+  expect(writes.filter((path) => path !== "/api/orders/quotes")).toEqual([]);
 });
 
-test("cart editing remains available while the checkout action is disabled", async ({ page }) => {
+test("cart edits re-quote the whole cart and keep every line editable", async ({ page, context }) => {
   await signInCustomer(page, [linenCartLine]);
+  const quoted: { items: { quantity: number }[] }[] = [];
+  await context.route("**/api/orders/quotes", async (route) => {
+    const body = route.request().postDataJSON();
+    quoted.push(body);
+    return route.fulfill({ status: 201, json: body.items[0].quantity === 2 ? browserQuote({ id: "quote-two", ...linenPair }) : browserQuote() });
+  });
   await page.goto("/#/cart");
-  const checkout = page.getByRole("button", { name: "Checkout temporarily unavailable" });
-  await expect(checkout).toBeDisabled();
-  await expect(checkout).toHaveAccessibleDescription(/verified payment processing/);
-  await expect(page.getByPlaceholder(/Promo Code/)).toHaveCount(0);
+  const summary = page.getByRole("region", { name: "Order Summary" });
+  await expect(summary.getByText("KES 1,244")).toBeVisible();
   const increase = page.getByRole("button", { name: "Increase quantity of Linen Short-Sleeve Shirt" });
   await increase.click();
   await expect.poll(async () => (await shopperState(page)).cart[0].quantity).toBe(2);
   await expect(increase).toBeDisabled();
+  await expect(summary.getByText("KES 2,288")).toBeVisible();
+  await expect(summary.getByText("KES 1,244")).toHaveCount(0);
+  expect(quoted.at(-1)?.items).toEqual([{ ...linenCartLine, quantity: 2 }]);
+  await page.getByRole("button", { name: "Decrease quantity of Linen Short-Sleeve Shirt" }).click();
+  await expect(summary.getByText("KES 1,244")).toBeVisible();
   await page.getByRole("link", { name: "Continue Shopping", exact: true }).click();
   await expect(page).toHaveURL(/#\/shop$/);
 });

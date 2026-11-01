@@ -24,9 +24,11 @@ import {
   optionAvailable,
   optionLabel,
   orderedImages,
+  productPriceView,
   productStock,
   stockLevel,
   variantOptions,
+  variantPriceView,
   type VariantSelection,
 } from "../store/catalogModel";
 import { useStore } from "../store/StoreContext";
@@ -142,7 +144,7 @@ function ProductContent({ id }: { id: string }) {
   const level = variant ? stockLevel(variant.stock, variant.minThreshold) : stockLevel(aggregate.quantity, aggregate.lowThreshold);
   const quantity = Math.max(1, Math.min(qty, Math.max(1, available)));
   const canAdd = Boolean(variant) && available > 0;
-  const price = variant ? catalog.priceOfVariant(product, variant) : catalog.priceOf(product);
+  const price = variant ? variantPriceView(variant) : productPriceView(product);
   const wished = store.wishlist.includes(product.id);
   const reviews = "reviewList" in product ? product.reviewList ?? [] : [];
   const specifications = Object.entries(product.specifications);
@@ -260,16 +262,18 @@ function ProductContent({ id }: { id: string }) {
             <p className="mt-2 text-xs text-ocean-blue-dark">Demo listing: details, price, stock and images are samples for review, not real inventory.</p>
           )}
 
-          <div className="mt-3 flex flex-wrap items-baseline gap-3">
-            <span className="font-display text-3xl text-brand-primary">
-              {price.isFromPrice && <span className="font-body text-sm">From </span>}
-              {formatKES(price.price)}
-            </span>
-            {price.comparePrice !== null && <span className="text-base text-gray-500 line-through">{formatKES(price.comparePrice)}</span>}
-            {price.discountPercent > 0 && (
-              <span className="rounded-sm bg-coral px-2 py-0.5 text-xs font-bold text-white">-{price.discountPercent}%</span>
-            )}
-          </div>
+          {price && (
+            <div className="mt-3 flex flex-wrap items-baseline gap-3">
+              <span className="font-display text-3xl text-brand-primary">
+                {price.isFromPrice && <span className="font-body text-sm">From </span>}
+                {formatKES(price.price)}
+              </span>
+              {price.comparePrice !== null && <span className="text-base text-gray-500 line-through">{formatKES(price.comparePrice)}</span>}
+              {price.discountPercent > 0 && (
+                <span className="rounded-sm bg-coral px-2 py-0.5 text-xs font-bold text-white">-{price.discountPercent}%</span>
+              )}
+            </div>
+          )}
 
           {product.reviewsCount > 0 && (
             <p className="mt-3 flex items-center gap-2">

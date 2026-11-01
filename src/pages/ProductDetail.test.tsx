@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { AxiosError, AxiosHeaders } from "axios";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CatalogProduct, CatalogProductDetail } from "../api/catalog";
-import { buildCategoryTree, productPriceView, variantPriceView } from "../store/catalogModel";
+import { buildCategoryTree } from "../store/catalogModel";
 import type { CatalogValue } from "../store/CatalogContext";
 import {
   demoPhone,
@@ -16,7 +16,6 @@ import {
 } from "../test-support/catalogFixtures";
 import ProductDetail from "./ProductDetail";
 
-const NOW = new Date("2026-10-31T12:00:00.000Z");
 const mocks = vi.hoisted(() => ({
   addToCart: vi.fn(),
   getProduct: vi.fn(),
@@ -41,8 +40,6 @@ function catalogWith(products: CatalogProduct[], status: CatalogValue["status"] 
     designers: [],
     discounts: fixtureDiscounts,
     reload: vi.fn(),
-    priceOf: (product) => productPriceView(product, fixtureDiscounts, NOW),
-    priceOfVariant: (product, variant) => variantPriceView(product, variant, fixtureDiscounts, NOW),
   };
 }
 

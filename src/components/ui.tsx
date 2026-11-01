@@ -3,7 +3,7 @@ import type { CatalogProduct, MediaAsset } from "../api/catalog";
 import { Link, navigate } from "../router";
 import { useStore } from "../store/StoreContext";
 import { useCatalog } from "../store/CatalogContext";
-import { activeVariants, primaryImage, productStock, stockLevel, type StockLevel } from "../store/catalogModel";
+import { activeVariants, primaryImage, productPriceView, productStock, stockLevel, type StockLevel } from "../store/catalogModel";
 import { useAuth } from "../contexts/AuthContext";
 import { formatKES } from "../utils/format";
 
@@ -86,13 +86,12 @@ export function DemoBadge({ className = "" }: { className?: string }) {
 }
 
 /* ---------- Product Card ---------- */
-/** Display prices are applied here once from the canonical catalog. */
+/** Display prices are the server's per-SKU projection, shown once without client arithmetic. */
 export function ProductCard({ product }: { product: CatalogProduct }) {
   const { addToCart, toggleWish, state } = useStore();
-  const { priceOf } = useCatalog();
   const { user } = useAuth();
   const [added, setAdded] = useState(false);
-  const price = priceOf(product);
+  const price = productPriceView(product);
   const variants = activeVariants(product);
   const stock = productStock(product);
   const level = stockLevel(stock.quantity, stock.lowThreshold);
@@ -143,11 +142,11 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
         <div className="relative aspect-square overflow-hidden bg-warm-beige">
           <ProductImage product={product} className="transition-transform duration-700 group-hover:scale-110" />
           {product.isDemo && <DemoBadge className="absolute left-3 top-3 shadow-sm" />}
-          {price.discountPercent > 0 ? (
+          {price && price.discountPercent > 0 ? (
             <span className="absolute right-3 top-3 rounded-sm bg-coral px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-sm">
               -{price.discountPercent}%
             </span>
-          ) : price.comparePrice !== null ? (
+          ) : price?.comparePrice != null ? (
             <span className="absolute right-3 top-3 rounded-sm bg-brand-secondary px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-brand-primary shadow-sm">
               Sale
             </span>
@@ -184,13 +183,15 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
             </span>
           </p>
         )}
-        <div className="mt-2 flex items-baseline gap-2">
-          <span className="font-display text-lg text-brand-primary">
-            {price.isFromPrice && <span className="text-xs font-body">From </span>}
-            {formatKES(price.price)}
-          </span>
-          {price.comparePrice !== null && <span className="text-xs text-gray-500 line-through">{formatKES(price.comparePrice)}</span>}
-        </div>
+        {price && (
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className="font-display text-lg text-brand-primary">
+              {price.isFromPrice && <span className="text-xs font-body">From </span>}
+              {formatKES(price.price)}
+            </span>
+            {price.comparePrice !== null && <span className="text-xs text-gray-500 line-through">{formatKES(price.comparePrice)}</span>}
+          </div>
+        )}
         <div className="mt-2"><StockBadge level={level} /></div>
         <div className="mt-auto">{action}</div>
       </div>

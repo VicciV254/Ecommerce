@@ -147,7 +147,7 @@ export function CatalogManager({ showToast }: { showToast: (message: string) => 
                   </span>
                   <span className="block p-2">
                     <span className="block truncate text-xs font-medium text-brand-primary">{product.name}</span>
-                    <span className="block text-[10px] text-gray-600">{formatKES(product.price)} · {stock.quantity} in stock</span>
+                    <span className="block text-[10px] text-gray-600">{formatKES(product.price)} · {stock.quantity} available</span>
                     <span className="mt-1 flex flex-wrap gap-1">
                       {!product.isActive && <span className="rounded-sm bg-gray-100 px-1 text-[9px] font-bold uppercase text-gray-600">Hidden</span>}
                       {product.isDemo && <span className="rounded-sm bg-ocean-blue/15 px-1 text-[9px] font-bold uppercase text-ocean-blue">Demo</span>}

@@ -103,6 +103,8 @@ async function sendEmail(to, subject, htmlContent) {
 
 export const emailService = {
   async sendOrderConfirmation(order, user) {
+    const pending = order.paymentStatus === 'PENDING';
+    const subject = `${pending ? 'Order received - payment pending' : 'Order Confirmation'} - ${order.orderNumber}`;
     const itemsHtml = order.items.map(item => `
       <tr>
         <td>${item.productName}</td>
@@ -113,7 +115,7 @@ export const emailService = {
     `).join('');
 
     const content = `
-      <h2>Order Confirmation</h2>
+      <h2>${pending ? 'Order received - payment pending' : 'Order Confirmation'}</h2>
       <p>Dear ${user.firstName},</p>
       <p>Thank you for your order! Your order <strong>${order.orderNumber}</strong> has been successfully placed.</p>
       
@@ -123,6 +125,8 @@ export const emailService = {
         <p>Date: ${new Date(order.createdAt).toLocaleString()}</p>
         <p>Total: KES ${order.total.toLocaleString()}</p>
         <p>Payment Method: ${order.paymentMethod}</p>
+        <p>Payment Status: ${pending ? 'Pending - no payment has been received.' : order.paymentStatus}</p>
+        ${pending && order.reservationExpiresAt ? `<p>Inventory is held until ${new Date(order.reservationExpiresAt).toISOString()}. An unpaid reservation can expire.</p>` : ''}
       </div>
 
       <h3>Order Items</h3>
@@ -148,6 +152,10 @@ export const emailService = {
             <td>KES ${order.tax.toLocaleString()}</td>
           </tr>
           <tr class="total-row">
+            <td colspan="3">Discount</td>
+            <td>-KES ${(order.discount ?? 0).toLocaleString()}</td>
+          </tr>
+          <tr class="total-row">
             <td colspan="3">Shipping</td>
             <td>KES ${order.shippingCost.toLocaleString()}</td>
           </tr>
@@ -162,8 +170,8 @@ export const emailService = {
       <p>If you have any questions, please don't hesitate to contact us.</p>
     `;
 
-    const html = getBrandedEmailTemplate(`Order Confirmation - ${order.orderNumber}`, content);
-    return sendEmail(user.email, `Order Confirmation - ${order.orderNumber}`, html);
+    const html = getBrandedEmailTemplate(subject, content);
+    return sendEmail(user.email, subject, html);
   },
 
   async sendOrderCancellation(order, user) {

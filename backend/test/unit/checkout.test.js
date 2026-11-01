@@ -9,7 +9,7 @@ prisma.$use(async () => {
   return { id: 'unexpected-test-write' };
 });
 
-test('legacy checkout rejects claims before any database operation', async () => {
+test('legacy checkout payloads require a trusted quote before any database operation', async () => {
   for (const paymentStatus of ['PAID', 'PENDING', undefined]) {
     const req = {
       user: { id: 'test-customer' },
@@ -27,9 +27,11 @@ test('legacy checkout rejects claims before any database operation', async () =>
     };
     const next = mock.fn();
     await createCheckoutOrder(req, res, next);
-    assert.equal(res.statusCode, 503);
-    assert.match(res.body.error, /checkout.*unavailable/i);
     assert.equal(databaseCalls, 0);
-    assert.equal(next.mock.callCount(), 0);
+    assert.equal(next.mock.callCount(), 1);
+    const error = next.mock.calls[0].arguments[0];
+    assert.equal(error.name, 'ZodError');
+    assert.ok(error.issues.some((issue) => issue.path[0] === 'quoteId'));
+    assert.equal(res.body, null);
   }
 });

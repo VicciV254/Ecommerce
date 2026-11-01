@@ -53,7 +53,7 @@ export function Header() {
 
 
       {/* Main bar */}
-      <Container className="flex items-center justify-between gap-4 py-3">
+      <Container className="flex flex-wrap items-center justify-between gap-4 py-3">
         <BrandMark />
 
         {/* Search (desktop) */}
@@ -84,7 +84,7 @@ export function Header() {
           })}
         </nav>
 
-        <div className="flex items-center gap-1">
+        <div className="flex min-w-0 max-w-full flex-wrap items-center justify-end gap-1">
           <Link
             to="/wishlist"
             aria-label="Wishlist"

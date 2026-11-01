@@ -1,8 +1,10 @@
 import './config/environment.js';
 import express from 'express';
 import routes from './routes/index.js';
+import { moneyJsonReplacer } from './utils/money.js';
 
 const app = express();
+app.set('json replacer', moneyJsonReplacer);
 
 // Body parser
 app.use(express.json({ limit: '10mb' }));

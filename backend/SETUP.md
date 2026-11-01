@@ -19,6 +19,9 @@ The real `.env` is ignored by Git and excluded from container builds.
 | `BACKGROUND_JOBS_ENABLED` | Explicit opt-in to operational background services; defaults to `false` |
 | `ALLOW_DEMO_CATALOG` | Show labelled demo catalog records outside production; defaults to `false` |
 | `ALLOW_DEMO_INITIALIZATION` | Explicit per-invocation consent for the local demo initializer |
+| `ENABLE_ORDER_RESERVATIONS` | Permit pending-order inventory holds; defaults to `false`, never enables payment |
+| `ALLOW_DEMO_ORDERS` | Additional development/test-only opt-in for demo orders, separate from catalog visibility |
+| `CHECKOUT_POLICY_JSON` | Optional complete validated pricing profile; empty uses `src/config/checkoutPolicy.js` defaults |
 | `ADMIN_EMAIL`, `ADMIN_USERNAME`, `ADMIN_PASSWORD` | Private initial staff credentials for local initialization |
 
 Keep signing secrets in the local environment or an approved secret store,
@@ -40,18 +43,12 @@ projections used by order responses exclude password and verification/reset
 credentials. Configuration and datastore failures reach error middleware
 instead of being disguised as invalid tokens or anonymous sessions.
 
-The legacy `POST /api/orders/checkout` endpoint is deliberately unavailable:
-authenticated calls return HTTP 503 before any checkout writes. It must be
-replaced with trusted pricing and payment verification, not reopened by a
-provider environment flag. The separate database-cart `POST /api/orders`
-path always creates an unpaid, pending order; request payment/status claims
-are not settlement evidence.
-Cancellation restores the saved variant allocation, not every SKU belonging
-to a product. Stock/status/log changes and cancellation share a serializable
-transaction; incomplete allocations are rejected without partial writes.
-Legacy M-Pesa handlers also remain unavailable until payments are linked to
-trusted orders and verified provider outcomes. Demo products cannot enter
-commercial order creation even when their catalog preview is enabled.
+`POST /api/orders` and `POST /api/orders/checkout` share one strict
+quote-based pending-order service. Neither accepts client totals, ownership
+or payment-status claims. Creation requires explicit reservation enablement;
+M-Pesa and refund processing for these orders remain unavailable until the
+verified provider lifecycle is implemented. A reservation is not payment
+or permission to fulfil an order.
 
 External image-host, email and payment settings may remain empty/disabled
 for local checks. Do not pull or replace live Vercel/Neon credentials just
@@ -80,6 +77,16 @@ database** strategy: it requires variant IDs for stock/cart records and does
 not reconstruct legacy product data. Do not apply it to the current hosted
 legacy database or guess stock allocations to make old rows fit.
 
+The subsequent checkout migration converts monetary fields to
+`Decimal(14,2)` and adds quotes/reservations. It is one atomic PostgreSQL
+statement: existing negative, out-of-range or more-than-two-decimal amounts
+stop it before any schema/data change. Do not silently round or delete such
+records to force it through. Review the reported amounts and failed migration
+ledger in the intended environment before proceeding. Existing stock keeps
+its on-hand value, existing orders retain committed-allocation semantics,
+and their current address is snapshotted; earlier address edits cannot be
+reconstructed.
+
 Run `npm run dev` separately for the frontend on port 5173. The development
 Compose stack also maps frontend 5173 and backend 5000 on loopback:
 
@@ -100,11 +107,17 @@ listener, stops scheduled jobs and disconnects Prisma. SIGINT/SIGTERM use
 the same cleanup.
 
 Set `BACKGROUND_JOBS_ENABLED=true` only in an intentional operational
-environment. It enables the existing auto-stage job every 10 seconds, refund
-notification job every 60 seconds and optional image-host session work.
+environment. It enables reservation expiry every 60 seconds, the existing
+auto-stage job every 10 seconds, refund notification every 60 seconds and
+optional image-host session work.
 These services can mutate orders and send messages; they are not health
 checks. A job does not overlap its previous invocation. `NODE_ENV=test`
 always prevents background startup, even if the opt-in flag is set.
+Catalog, quote, stock and order reads also process an expiry batch, so
+restarting a server does not lose held inventory. The batch is bounded to
+100 expired orders; repeated requests or job ticks drain a backlog.
+Quoted orders cannot auto-progress until payment is verified and inventory
+is committed. Final scheduler/runtime selection remains a release check.
 
 Image uploads authenticate lazily when requested. Optional startup/session
 refresh runs only with background jobs enabled and configured image-host
@@ -198,6 +211,10 @@ remain separate operations.
 | `/api/settings/storefront/draft` | Staff draft with optimistic version checks, referenced media and unavailable media IDs |
 | `POST /api/settings/storefront/publish` | Validate references, then atomically publish the current version |
 | `POST /api/media` | Staff URL/provenance registration; external uploads remain separate |
+| `POST /api/orders/quotes` | Authenticated, versioned, expiring server quote from IDs and customer choices |
+| `GET /api/orders/quotes/:id` | Owner-only saved quote, including consumed/expired state for retry recovery |
+| `POST /api/orders`, `POST /api/orders/checkout` | `{quoteId}` plus `Idempotency-Key`; create or replay an unpaid order atomically |
+| `POST /api/orders/:id/cancel` | Owner cancellation; release reserved units once, with transactionally saved history |
 
 The old `/settings/admin-data`, `/settings/theme`, `/admin/init` and
 `/admin/orders/import-local` surfaces return HTTP 410. Catalog changes must
@@ -210,3 +227,75 @@ Draft reads preserve missing reference IDs and return them in
 another asset. Save and publish reject invalid references. Unpublished
 standalone artwork is returned in the authenticated draft's `media` list,
 not leaked into the public snapshot.
+
+## Pricing and reservation contract
+
+Money is stored as database decimals and calculated with Prisma's existing
+Decimal implementation. API money remains JSON numbers with at most two
+decimal places, explicitly checked within the supported range; no browser
+prices determine an order. Product/variant input is limited to KES 1 billion;
+an aggregate amount must be below KES 1 trillion.
+
+The compatibility pricing profile uses the following rules:
+
+| Rule | Default |
+|---|---|
+| Currency and tax | KES; 16% VAT on merchandise after discounts, added at checkout; shipping is excluded from this VAT base |
+| Automatic offers | Lowest eligible unit price; percentage/fixed offers do not compound; nearest KES 10, half-up, never above the base price or below zero |
+| Coupons | Optional normalized code; percentage or one fixed amount across eligible merchandise; use it only if the eligible basket saves more than automatic offers |
+| Coupon allocation and tax rounding | Exact cents; fixed allocation balances its final cent; tax rounds once, half-up |
+| Delivery | STANDARD 200, SAME_DAY 500, STORE_PICKUP 200; retained legacy fee behavior, no free threshold or county restriction by default |
+| Quote / inventory hold | 600 seconds / 900 seconds |
+
+These retained delivery defaults are not a claim of commercial coverage.
+Before live activation, confirm merchant fees/coverage and published policy.
+`CHECKOUT_POLICY_JSON`, when supplied, replaces the whole profile and must
+match the schema in `src/config/checkoutPolicy.js`. It contains `version`,
+`currency`, `vatRate`, `discountStep`, `quoteSeconds`, `reservationSeconds`,
+and all three delivery rules. Each delivery rule has `fee`, nullable
+`freeAbove` and a `counties` list; an empty list imposes no county restriction.
+Increase the version when changing policy. Any profile-content change also
+changes its hash and invalidates unconsumed quotes.
+
+Create a quote with a body such as:
+
+```json
+{
+  "items": [{ "productId": "current-product-id", "variantId": "current-variant-id", "quantity": 1 }],
+  "addressId": "owned-address-id",
+  "deliveryMethod": "STANDARD",
+  "couponCode": null,
+  "notes": null
+}
+```
+
+The response includes version 1, expiry, immutable quote lines, address,
+coupon result, policy version/hash, VAT, shipping and total. IDs in the
+example must be replaced by actual records; duplicate variants, unavailable
+stock, another customer's address and invalid/expired coupons are rejected.
+Catalog `variant.pricing` uses the same offer service; `stock` is available
+units, while `onHand` and `reserved` expose their separate quantities.
+Staff stock writes set on-hand quantity and cannot consume reserved units.
+
+After reviewing the quote, send only `{"quoteId":"returned-id"}` with a
+fresh `Idempotency-Key` (16-128 letters, digits, colons, underscores or
+hyphens). First acceptance returns 201; the same customer/key/body returns
+the existing order with 200, even after cancellation/expiry. Different
+contents with the same key conflict. Another key cannot reuse a consumed
+quote. The browser persists its request intent before sending and resolves
+an unknown outcome before allowing a new submission.
+
+Order creation, quote consumption, exact-variant holds, stock logs and
+matching database-cart subtraction share one serializable transaction.
+Price/address/policy changes return `QUOTE_CHANGED`; expired quotes return
+`QUOTE_EXPIRED`. Both require a fresh customer review. Conflicting writes
+return `ORDER_RETRY`; retry the same key, not a new order.
+
+Cancellation/expiry release only the held units and never increment on-hand
+stock for a new held order. Physical allocation is committed only through
+the internal `commitOrderReservation` operation inside a future verified
+payment transaction. A late payment after expiry returns
+`RESERVATION_EXPIRED` for review; it does not acquire stock again.
+The operation has no customer route and is not proof that the M-Pesa
+integration has been completed. New-order emails explicitly state that
+payment is pending and include the reservation expiry and stored discount.

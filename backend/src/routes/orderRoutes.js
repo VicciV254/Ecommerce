@@ -1,6 +1,8 @@
 import express from 'express';
 import {
   createOrder,
+  quoteOrder,
+  getCheckoutQuote,
   getUserOrders,
   getOrderById,
   cancelOrder,
@@ -31,6 +33,8 @@ router.post('/admin/auto-stage/bulk', authenticateAdmin, authorize('SUPER_ADMIN'
 
 // Customer routes
 router.use(authenticate);
+router.post('/quotes', quoteOrder);
+router.get('/quotes/:id', getCheckoutQuote);
 router.post('/checkout', createCheckoutOrder);
 router.post('/', createOrder);
 router.get('/', getUserOrders);

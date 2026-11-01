@@ -3,25 +3,29 @@ import prisma from '../config/database.js';
 import { generateSlug } from '../utils/helpers.js';
 import { catalogProductSchema, catalogProductPatchSchema, productQuerySchema, mediaSchema } from '../utils/catalogValidation.js';
 import {
-  assertNoPublishedReferences, catalogSnapshot, demoCatalogEnabled, httpError, loadCategories,
+  assertNoPublishedReferences, availableStock, catalogSnapshot, demoCatalogEnabled, httpError, loadCategories, loadCatalogContext,
   mediaDto, productDto, productInclude, productWhere, serializable, stockStatus,
 } from '../services/catalogService.js';
+import { expireReservations } from '../services/inventoryService.js';
 
 export const getCatalog = async (_req, res, next) => {
   try {
+    await expireReservations();
     res.json(await prisma.$transaction((db) => catalogSnapshot(db), { isolationLevel: 'RepeatableRead' }));
   } catch (error) { next(error); }
 };
 
 export const getAdminCatalog = async (_req, res, next) => {
   try {
+    await expireReservations();
     res.json(await prisma.$transaction((db) => catalogSnapshot(db, true), { isolationLevel: 'RepeatableRead' }));
   } catch (error) { next(error); }
 };
 
 async function listProducts(query, recent = false) {
+  await expireReservations();
   return prisma.$transaction(async (db) => {
-    const context = await loadCategories(db);
+    const context = await loadCatalogContext(db);
     const where = productWhere(context);
     if (query.active === 'false') throw httpError(400, 'Inactive products are available only through the staff catalog');
     if (query.category) {
@@ -81,8 +85,9 @@ export const getAllTags = async (_req, res, next) => {
 };
 export const getProductById = async (req, res, next) => {
   try {
+    await expireReservations();
     const result = await prisma.$transaction(async (db) => {
-      const context = await loadCategories(db);
+      const context = await loadCatalogContext(db);
       const product = await db.product.findFirst({
         where: { id: req.params.id, ...productWhere(context) }, include: {
           ...productInclude(),
@@ -163,12 +168,13 @@ async function writeVariants(db, productId, variants, adminId) {
       if (variant.stock) {
         const current = await db.stock.findUnique({ where: { variantId: variant.id } });
         if (!current) throw httpError(503, 'Variant stock data is incomplete');
+        if (variant.stock.quantity < current.reserved) throw httpError(409, 'On-hand quantity cannot be lower than reserved units', 'STOCK_RESERVED');
         const threshold = variant.stock.minThreshold ?? current.minThreshold;
         await db.stock.update({ where: { id: current.id }, data: {
-          ...variant.stock, status: stockStatus(variant.stock.quantity, threshold),
+          ...variant.stock, status: stockStatus(variant.stock.quantity - current.reserved, threshold),
         } });
         await db.stockLog.create({ data: {
-          stockId: current.id, previousStock: current.quantity, newStock: variant.stock.quantity,
+          stockId: current.id, previousStock: availableStock(current), newStock: variant.stock.quantity - current.reserved,
           action: 'catalog-update', adminId,
         } });
       }
@@ -200,7 +206,7 @@ export const createProduct = async (req, res, next) => {
   try {
     const input = catalogProductSchema.parse(req.body);
     const result = await serializable(async (db) => {
-      const context = await loadCategories(db);
+      const context = await loadCatalogContext(db);
       await validateProductRelations(db, input, null, context);
       const { variants: variantInputs, images, ...fields } = input;
       const variants = prepareVariants(variantInputs ?? [{}]);
@@ -219,11 +225,12 @@ export const createProduct = async (req, res, next) => {
 
 export const updateProduct = async (req, res, next) => {
   try {
+    await expireReservations();
     const input = catalogProductPatchSchema.parse(req.body);
     const result = await serializable(async (db) => {
       const existing = await db.product.findFirst({ where: { id: req.params.id, deletedAt: null }, include: productInclude(true) });
       if (!existing) throw httpError(404, 'Product not found');
-      const context = await loadCategories(db);
+      const context = await loadCatalogContext(db);
       await validateProductRelations(db, input, existing, context);
       const { variants: variantInputs, images, ...fields } = input;
       if (input.isActive === false) await assertNoPublishedReferences(db, { productIds: [existing.id] });

@@ -5,17 +5,13 @@ import {
   type CatalogDiscount,
   type CatalogProduct,
   type CatalogSnapshot,
-  type CatalogVariant,
 } from "../api/catalog";
 import { describeApiError } from "../api/errors";
 import {
   CatalogFormatError,
   buildCategoryTree,
   parseCatalogSnapshot,
-  productPriceView,
-  variantPriceView,
   type CategoryTree,
-  type PriceView,
 } from "./catalogModel";
 
 type LoadState =
@@ -23,6 +19,7 @@ type LoadState =
   | { status: "ready"; snapshot: CatalogSnapshot }
   | { status: "error"; message: string };
 
+/** Display prices come from each SKU's server `pricing` (see `productPriceView`/`variantPriceView`). */
 export type CatalogValue = {
   status: LoadState["status"];
   /** Actionable message when the snapshot could not be loaded. */
@@ -34,10 +31,6 @@ export type CatalogValue = {
   designers: CatalogDesigner[];
   discounts: CatalogDiscount[];
   reload: () => void;
-  /** Card price: lowest active SKU with the single best percentage preview. */
-  priceOf: (product: CatalogProduct) => PriceView;
-  /** Selected-SKU price with the same preview rules. */
-  priceOfVariant: (product: CatalogProduct, variant: CatalogVariant) => PriceView;
 };
 
 const EMPTY: CatalogSnapshot = { version: 2, mode: "live", products: [], categories: [], designers: [], discounts: [] };
@@ -63,8 +56,6 @@ function useCatalogValue(state: LoadState, reload: () => void): CatalogValue {
     designers: snapshot.designers,
     discounts: snapshot.discounts,
     reload,
-    priceOf: (product) => productPriceView(product, snapshot.discounts, new Date()),
-    priceOfVariant: (product, variant) => variantPriceView(product, variant, snapshot.discounts, new Date()),
   }), [state, snapshot, productsById, categories, reload]);
 }
 

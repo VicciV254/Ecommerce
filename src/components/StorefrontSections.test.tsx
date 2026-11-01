@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Campaign, CatalogProduct } from "../api/catalog";
-import { buildCategoryTree, productPriceView, variantPriceView } from "../store/catalogModel";
+import { buildCategoryTree } from "../store/catalogModel";
 import type { CatalogValue } from "../store/CatalogContext";
 import {
   campaignMedia,
@@ -12,7 +12,6 @@ import {
 } from "../test-support/catalogFixtures";
 import { StorefrontSections } from "./StorefrontSections";
 
-const NOW = new Date("2026-10-31T12:00:00.000Z");
 const state = vi.hoisted(() => ({ catalog: null as CatalogValue | null }));
 vi.mock("../store/CatalogContext", () => ({ useCatalog: () => state.catalog }));
 vi.mock("../store/StoreContext", () => ({ useStore: () => ({ state: { wishlist: [] }, addToCart: vi.fn(), toggleWish: vi.fn() }) }));
@@ -29,8 +28,6 @@ function catalogWith(products: CatalogProduct[], status: CatalogValue["status"] 
     designers: [],
     discounts: [],
     reload: vi.fn(),
-    priceOf: (product) => productPriceView(product, [], NOW),
-    priceOfVariant: (product, variant) => variantPriceView(product, variant, [], NOW),
   };
 }
 

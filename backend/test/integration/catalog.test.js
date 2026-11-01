@@ -24,16 +24,17 @@ const copy = (value) => JSON.parse(JSON.stringify(value));
 before(async () => {
   mock.method(emailService, 'sendOrderConfirmation', async () => ({ success: true }));
   process.env.ALLOW_DEMO_CATALOG = 'true';
+  process.env.ENABLE_ORDER_RESERVATIONS = 'true';
   const started = await startServer({ host: '127.0.0.1', port: 0 });
   close = started.close;
   base = `http://127.0.0.1:${started.server.address().port}/api`;
 });
 after(async () => { process.env.ALLOW_DEMO_CATALOG = 'false'; mock.restoreAll(); await close?.(); });
 
-async function call(path, { method = 'GET', body, token = staffToken } = {}) {
+async function call(path, { method = 'GET', body, token = staffToken, key } = {}) {
   const response = await fetch(`${base}${path}`, {
     method,
-    headers: { 'Content-Type': 'application/json', ...(token && { Authorization: `Bearer ${token}` }) },
+    headers: { 'Content-Type': 'application/json', ...(token && { Authorization: `Bearer ${token}` }), ...(key && { 'Idempotency-Key': key }) },
     ...(body !== undefined && { body: JSON.stringify(body) }),
   });
   return { status: response.status, data: await response.json() };
@@ -192,8 +193,9 @@ test('unknown variants, demo orders and legacy input paths fail before commercia
   const added = await call('/cart/items', { method: 'POST', token: customerToken, body: { productId: demo.id, variantId: demo.variants[0].id, quantity: 1 } });
   assert.equal(added.status, 200);
   const before = await prisma.order.count();
-  const rejected = await call('/orders', { method: 'POST', token: customerToken, body: {
-    addressId: user.addresses[0].id, paymentMethod: 'MPESA', deliveryMethod: 'STANDARD', isDemo: false,
+  const rejected = await call('/orders/quotes', { method: 'POST', token: customerToken, body: {
+    addressId: user.addresses[0].id, deliveryMethod: 'STANDARD',
+    items: [{ productId: demo.id, variantId: demo.variants[0].id, quantity: 1 }],
   } });
   assert.equal(rejected.status, 409);
   assert.equal(await prisma.order.count(), before);
@@ -298,9 +300,12 @@ test('reinitialization preserves customized media, deleted fixtures, new records
   assert.equal((await call(`/products/${retired.id}`, { method: 'DELETE' })).status, 200);
   assert.equal((await call(`/products/${retired.id}`, { token: null })).status, 404);
   assert.equal((await call('/cart/items', { method: 'POST', token: customerToken, body: { productId: singleProduct.id, variantId: singleProduct.variants[0].id, quantity: 1 } })).status, 200);
-  const order = await call('/orders', { method: 'POST', token: customerToken, body: {
-    addressId: user.addresses[0].id, paymentMethod: 'MPESA', deliveryMethod: 'STANDARD', paymentStatus: 'PAID',
+  const quoted = await call('/orders/quotes', { method: 'POST', token: customerToken, body: {
+    addressId: user.addresses[0].id, deliveryMethod: 'STANDARD',
+    items: [{ productId: singleProduct.id, variantId: singleProduct.variants[0].id, quantity: 1 }],
   } });
+  assert.equal(quoted.status, 201);
+  const order = await call('/orders', { method: 'POST', token: customerToken, key: 'catalog-preservation-request', body: { quoteId: quoted.data.id } });
   assert.equal(order.status, 201);
   assert.equal(order.data.paymentStatus, 'PENDING');
   const admin = await prisma.admin.findUnique({ where: { email: initEnv.ADMIN_EMAIL } });
@@ -309,9 +314,10 @@ test('reinitialization preserves customized media, deleted fixtures, new records
   const again = await initializeDemo({ env: { ...initEnv, ADMIN_PASSWORD: 'different-test-password-must-not-replace' } });
   assert.ok(Object.values(again.created).every((count) => count === 0));
   assert.equal(again.createdAdmin, false);
-  assert.equal((await prisma.product.findUnique({ where: { id: firstDemo.id } })).price, 1777);
+  assert.equal((await prisma.product.findUnique({ where: { id: firstDemo.id } })).price.toFixed(2), '1777.00');
   assert.equal((await prisma.productImage.findUnique({ where: { id: photo.id } })).url, 'https://example.test/customized.jpg');
   assert.equal((await prisma.stock.findUnique({ where: { variantId: demoVariant.id } })).quantity, 7);
+  assert.equal((await prisma.stock.findUnique({ where: { variantId: singleProduct.variants[0].id } })).reserved, 1);
   assert.equal((await prisma.category.findUnique({ where: { id: firstDemo.categoryId } })).slug, 'customized-category');
   assert.ok((await prisma.product.findUnique({ where: { id: retired.id } })).deletedAt);
   assert.ok(await prisma.product.findUnique({ where: { id: realProduct.id } }));

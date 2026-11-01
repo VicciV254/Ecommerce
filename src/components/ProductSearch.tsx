@@ -1,12 +1,12 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Link, navigate } from "../router";
 import { useCatalog } from "../store/CatalogContext";
-import { primaryImage } from "../store/catalogModel";
+import { primaryImage, productPriceView } from "../store/catalogModel";
 import { formatKES } from "../utils/format";
 import { searchSuggestions } from "../utils/search";
 
 export function ProductSearch({ onNavigate }: { onNavigate?: () => void }) {
-  const { products, priceOf, status } = useCatalog();
+  const { products, status } = useCatalog();
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
   const [active, setActive] = useState(-1);
@@ -90,7 +90,7 @@ export function ProductSearch({ onNavigate }: { onNavigate?: () => void }) {
           <div id={listId} role="listbox" aria-label="Product suggestions" className="max-h-[50dvh] overflow-y-auto overscroll-contain">
             {suggestions.map((product, index) => {
               const image = primaryImage(product);
-              const price = priceOf(product);
+              const price = productPriceView(product);
               return (
               <button
                 key={product.id}
@@ -113,9 +113,11 @@ export function ProductSearch({ onNavigate }: { onNavigate?: () => void }) {
                   <span className="block truncate text-sm text-brand-primary">{product.name}</span>
                   <span className="block text-xs text-gray-500">{product.isDemo ? `Demo · ${product.categoryName}` : product.categoryName}</span>
                 </span>
-                <span className="shrink-0 text-xs font-bold text-brand-primary">
-                  {price.isFromPrice ? "From " : ""}{formatKES(price.price)}
-                </span>
+                {price && (
+                  <span className="shrink-0 text-xs font-bold text-brand-primary">
+                    {price.isFromPrice ? "From " : ""}{formatKES(price.price)}
+                  </span>
+                )}
               </button>
               );
             })}

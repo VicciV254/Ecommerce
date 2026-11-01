@@ -3,7 +3,7 @@ import { Link, navigate } from "../router";
 import { useAuth, type User } from "../contexts/AuthContext";
 import { ordersAPI, type Order } from "../api/orders";
 import { describeApiError } from "../api/errors";
-import { formatKES } from "../utils/format";
+import { formatDateTime, formatKES } from "../utils/format";
 import { useStorefront } from "../store/StorefrontContext";
 import CancelOrderModal from "../components/CancelOrderModal";
 import ReturnOrderModal from "../components/ReturnOrderModal";
@@ -48,6 +48,28 @@ function paymentLabel(order: Order) {
 
 function deliveryAddress(order: Order) {
   return order.address ? `${order.address.street}, ${order.address.city}, ${order.address.county}` : "Not provided";
+}
+
+/** Stock-hold state of a quote-based order; legacy orders have none to show. */
+function reservationNote(order: Order) {
+  if (!order.quoteId) return null;
+  switch (order.reservationStatus) {
+    case "HELD":
+      return order.reservationExpiresAt
+        ? `Items held until ${formatDateTime(order.reservationExpiresAt)} while payment is pending.`
+        : "Items are held while payment is pending.";
+    case "EXPIRED":
+      return "The hold expired before payment, so the items were released.";
+    case "RELEASED":
+      return "The items were released when this order was cancelled.";
+    default:
+      return null;
+  }
+}
+
+/** A refund is only offered for money actually received. */
+function cancelLabel(order: Order) {
+  return order.paymentStatus === "PAID" ? "Cancel & Refund" : "Cancel Order";
 }
 
 function customerName(user: User | null) {
@@ -126,7 +148,8 @@ function printReceipt(order: Order, user: User | null, brandName: string, logoUr
             </table>
             <div class="totals">
               <p><span>Subtotal</span><strong>${formatKES(order.subtotal)}</strong></p>
-              <p><span>Tax</span><strong>${formatKES(order.tax)}</strong></p>
+              <p><span>Discount</span><strong>-${formatKES(order.discount)}</strong></p>
+              <p><span>${order.pricingSnapshot ? `VAT (${order.pricingSnapshot.vatRate}%)` : "Tax"}</span><strong>${formatKES(order.tax)}</strong></p>
               <p><span>Delivery</span><strong>${formatKES(order.shippingCost)}</strong></p>
               <p class="grand"><span>Total</span><span>${formatKES(order.total)}</span></p>
             </div>
@@ -317,6 +340,8 @@ export default function AccountOrders() {
                   ))}
                 </div>
 
+                {reservationNote(order) && <p className="mt-3 text-xs text-charcoal">{reservationNote(order)}</p>}
+
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-light-gray pt-4">
                   <div>
                     <p className="text-xs text-gray-500">Payment: {paymentLabel(order)}</p>
@@ -334,7 +359,7 @@ export default function AccountOrders() {
                     </button>
                     {canCancel && (
                       <button type="button" disabled={actionLoading === `${order.id}-cancel`} onClick={() => cancelOrder(order)} className="rounded-sm border border-error px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-error hover:bg-error hover:text-white disabled:opacity-50">
-                        Cancel & Refund
+                        {cancelLabel(order)}
                       </button>
                     )}
                     {canPickup && (
@@ -376,7 +401,12 @@ export default function AccountOrders() {
               <p><strong>Email:</strong> {user?.email ?? ""}</p>
               <p><strong>Delivery:</strong> {deliveryAddress(selected)}</p>
               <p><strong>Payment:</strong> {paymentLabel(selected)}</p>
+              <p><strong>Subtotal:</strong> {formatKES(selected.subtotal)}</p>
+              <p><strong>Discount:</strong> -{formatKES(selected.discount)}</p>
+              <p><strong>{selected.pricingSnapshot ? `VAT (${selected.pricingSnapshot.vatRate}%)` : "Tax"}:</strong> {formatKES(selected.tax)}</p>
+              <p><strong>Delivery fee:</strong> {formatKES(selected.shippingCost)}</p>
               <p><strong>Total:</strong> {formatKES(selected.total)}</p>
+              {reservationNote(selected) && <p>{reservationNote(selected)}</p>}
             </div>
             <div className="mt-6 grid gap-2 sm:grid-cols-2">
               <button type="button" onClick={() => navigate(`/track?order=${encodeURIComponent(selected.orderNumber)}`)} className="rounded-sm bg-brand-primary py-3 text-xs font-bold uppercase tracking-wider text-white hover:bg-brand-secondary hover:text-brand-primary">
@@ -387,7 +417,7 @@ export default function AccountOrders() {
               </button>
               {["PENDING", "PROCESSING"].includes(selected.status) && (
                 <button type="button" disabled={actionLoading === `${selected.id}-cancel`} onClick={() => cancelOrder(selected)} className="rounded-sm border border-error py-3 text-xs font-bold uppercase tracking-wider text-error hover:bg-error hover:text-white disabled:opacity-50">
-                  Cancel & Refund
+                  {cancelLabel(selected)}
                 </button>
               )}
               {selected.status === "READY_FOR_PICKUP" && !selected.pickedUpAt && (

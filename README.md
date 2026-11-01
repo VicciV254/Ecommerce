@@ -1,9 +1,9 @@
 # Apex Cart
 
 Apex Cart is a React/Vite storefront and Express/Prisma administration
-application under an incremental overhaul. Catalog data is database-backed;
-checkout remains deliberately paused until trusted quotes and verified
-payment processing are implemented.
+application under an incremental overhaul. Catalog prices and checkout
+quotes are server-owned; pending-order reservations are explicitly opt-in.
+Verified payment processing is not enabled yet.
 
 ---
 
@@ -87,8 +87,12 @@ npm run test:e2e
 The frontend check runs TypeScript, ESLint, component tests and the bundle.
 The backend check generates Prisma Client, then runs ESLint and Node tests.
 Browser checks start with a 390px mobile viewport, followed by desktop. They
-use an automatically managed loopback Vite server and fixture API/media
-responses, not the live site. The fixtures also cover newly opened tabs.
+build a production frontend with a loopback fixture API URL, then use an
+automatically managed Vite preview server and fixture API/media responses,
+not the live site. The port-scoped build is kept under `.cache/`; ordinary
+development still uses `npm run dev`. This avoids development-module loading
+overhead during browser checks without changing interaction assertions or
+their timeouts. The fixtures also cover newly opened tabs.
 Interaction checks include narrow-phone/tablet drawer resizing, keyboard
 search, modifier-click navigation, nested dialogs, focus restoration and
 feedback inside active dialogs. Native dialog behavior is checked in the
@@ -157,10 +161,10 @@ products, users, orders and existing staff credentials. See
 
 ## Development contracts
 
-- Pass raw catalog products to `ProductCard`; it applies display stock and
-  discounts once. Standalone product details and search suggestions use the
-  same display helper. The base price remains separate from the displayed
-  discount; this is not yet server-authoritative checkout pricing.
+- Pass canonical products to `ProductCard`. Cards, detail and search use
+  each variant's server-generated `pricing` projection and available stock;
+  the browser does not recalculate discounts. Base prices remain separate
+  for staff editing, and missing price projections are an explicit error.
 - Customer credentials are attached per request, never as a sticky Axios
   default. Concurrent customer 401s share a bounded refresh and each request
   retries at most once. Staff headers and public sign-in failures do not use
@@ -187,24 +191,45 @@ products, users, orders and existing staff credentials. See
   keep content viewport-bounded, and put feedback in the active dialog.
   The shared `Toast` follows the active dialog layer.
 
-The storefront checkout is temporarily paused until server-authoritative
-pricing and verified payment processing replace the legacy visual-payment
-flow. Its cart action is disabled, and `POST /api/orders/checkout` returns
-HTTP 503 before creating an address, order, item or tracking event. The
-database-cart order API always creates pending orders, ignoring any
-customer-supplied payment or fulfilment status.
-Cancellation restores only the saved order-item variants; stock, its audit
-log and the cancellation commit together. Incomplete allocations require
-review rather than guessing a replacement SKU.
+## Checkout and pricing
 
-Browsing, cart editing and existing order history remain available. The
-checkout pause is deliberate and is not controlled by `ENABLE_MPESA`:
-enabling a provider alone cannot make the old client-trusted flow safe.
-Reintroduce checkout only with the planned trusted quote/order and verified
-payment lifecycle. Legacy amount-only M-Pesa endpoints are also unavailable
-until that lifecycle is implemented. Demo products cannot create commercial
-orders, and demo records are excluded from live inventory/sales metrics and
-operational order processing.
+The cart requests a quote using only variant IDs, quantities, an owned
+address, delivery choice and optional coupon. The server calculates
+**16% VAT added to discounted merchandise**, delivery and the total using
+decimal arithmetic. The compatibility profile retains KES 200 standard/
+pickup delivery, KES 500 same-day delivery and nearest-KES-10 automatic
+offer rounding. Final delivery coverage and commercial policy still need
+merchant review; the versioned server profile can change without adding
+client-side pricing rules. See [Backend setup](backend/SETUP.md).
+
+Quotes expire after 10 minutes by default. Price, address or delivery
+changes require a new quote and visible customer review. Coupon and delivery
+choices persist with the account-scoped cart. Percentage and fixed coupons
+compete with existing offers rather than stacking on the same merchandise;
+a fixed coupon is deducted once from its eligible basket.
+
+`ENABLE_ORDER_RESERVATIONS=false` is the default. Set it explicitly in an
+isolated development environment to exercise **Reserve Order**. Both
+`POST /api/orders` and `/api/orders/checkout` now accept only `{quoteId}` and
+an `Idempotency-Key` header. Client totals, payment status and ownership
+claims are rejected, not used as input. Creation atomically stores immutable
+price/address/item snapshots and holds the exact variants for 15 minutes.
+On-hand and reserved units are separate; staff cannot reduce on-hand stock
+below reserved stock.
+
+An unknown response retains the same quote and request key across retries
+and reloads. Only a verified server order removes the matching cart units;
+new additions remain. Cancellation and expiry release the hold once.
+Unpaid reservations do not count as sales or progress to fulfilment.
+Existing orders retain their saved allocation semantics, and incomplete
+allocations require review rather than a guessed replacement SKU.
+
+Payments remain unavailable: reserving an order neither sends an M-Pesa
+prompt nor marks it paid. Demo orders require a separate
+`ALLOW_DEMO_ORDERS=true` opt-in in development/test, remain labelled demo,
+and are excluded from live reporting; production rejects that mode.
+Legacy amount-only M-Pesa handlers remain unavailable until verified,
+order-linked payment processing is implemented.
 
 ## Tech Stack
 

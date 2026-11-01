@@ -13,6 +13,15 @@ export const userSessionSelect = {
   emailVerified: true,
 };
 
+export const addressSummarySelect = {
+  id: true,
+  street: true,
+  city: true,
+  county: true,
+  postalCode: true,
+  isDefault: true,
+};
+
 export function userAccessError(user) {
   if (user.isDisabled) {
     return { error: 'This account has been disabled. Please contact support.' };

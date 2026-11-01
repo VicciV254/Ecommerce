@@ -1,6 +1,7 @@
 import { expect, test as base, type Page, type Route } from "@playwright/test";
 import type { User } from "../../src/api/auth";
 import type { CatalogProduct, CatalogSnapshot, CatalogStock, StorefrontDraft } from "../../src/api/catalog";
+import type { Quote } from "../../src/api/orders";
 import {
   fixtureProduct,
   fixtureSnapshot,
@@ -9,6 +10,7 @@ import {
   fixtureVariant,
   linenShirt,
 } from "../../src/test-support/catalogFixtures";
+import { fixtureQuote } from "../../src/test-support/checkoutFixtures";
 import { STORAGE_KEYS, shopperStateKey } from "../../src/utils/storage";
 import { E2E_ORIGIN } from "../browser-config";
 
@@ -38,6 +40,19 @@ export const order = {
   items: [{ id: "browser-item", productId: linenShirt.id, variantId: "var-linen-m-white", productName: "Linen Short-Sleeve Shirt", productPrice: 1000, quantity: 1, subtotal: 1000 }],
 };
 
+const browserAddress = customer.addresses![0];
+
+/**
+ * A server quote for the signed-in browser customer's saved address. Amounts are the explicit fixture
+ * values (see `checkoutFixtures`); browser tests never price anything themselves.
+ */
+export function browserQuote(overrides: Partial<Quote> = {}): Quote {
+  return fixtureQuote({
+    address: { id: browserAddress.id, street: browserAddress.street, city: browserAddress.city, county: browserAddress.county, postalCode: null },
+    ...overrides,
+  });
+}
+
 /** Public catalog: a demo-mode snapshot served exactly as the API contract describes. */
 export const publicSnapshot: CatalogSnapshot = fixtureSnapshot();
 
@@ -51,7 +66,8 @@ export const adminSnapshot: CatalogSnapshot = { ...publicSnapshot, mode: "admin"
 export const adminStocks: CatalogStock[] = adminSnapshot.products.flatMap((product) => product.variants.map((variant) => ({
   id: `stock-${variant.id}`, variantId: variant.id, sku: variant.sku, attributes: variant.attributes,
   productId: product.id, productName: product.name, categoryId: product.categoryId, isDemo: product.isDemo,
-  quantity: variant.stock, maxStock: variant.maxStock, minThreshold: variant.minThreshold,
+  quantity: variant.onHand, reserved: variant.reserved, available: variant.stock,
+  maxStock: variant.maxStock, minThreshold: variant.minThreshold,
   status: variant.stock === 0 ? "OUT_OF_STOCK" : variant.stock <= variant.minThreshold ? "LOW_STOCK" : "IN_STOCK",
 })));
 
@@ -144,6 +160,14 @@ export async function signInStaff(page: Page) {
   }, { admin: staff, keys: STORAGE_KEYS, token: STAFF_TOKEN, origin: ORIGIN });
 }
 
-export function shopperState(page: Page): Promise<{ cart: CartLine[]; wishlist: string[] }> {
+export type StoredShopper = {
+  cart: CartLine[];
+  wishlist: string[];
+  couponCode?: string | null;
+  pendingOrder?: { quoteId: string; idempotencyKey: string } | null;
+  acknowledgedOrderIds?: string[];
+};
+
+export function shopperState(page: Page): Promise<StoredShopper> {
   return page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? "null"), shopperStateKey(customer.id));
 }

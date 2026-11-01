@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import prisma from '../config/database.js';
 import { catalogStockSchema, idSchema } from '../utils/catalogValidation.js';
-import { httpError, serializable, stockDto, stockInclude, stockStatus } from '../services/catalogService.js';
+import { availableStock, httpError, serializable, stockDto, stockInclude, stockStatus } from '../services/catalogService.js';
+import { expireReservations } from '../services/inventoryService.js';
 
 const stockWhere = { variant: { is: { isActive: true, product: { is: { deletedAt: null } } } } };
 async function findStock(db, variantId) {
@@ -10,13 +11,17 @@ async function findStock(db, variantId) {
   return stock;
 }
 export const getAllStock = async (_req, res, next) => {
-  try { res.json({ stocks: (await prisma.stock.findMany({ where: stockWhere, include: stockInclude, orderBy: { id: 'asc' } })).map(stockDto) }); }
+  try {
+    await expireReservations();
+    res.json({ stocks: (await prisma.stock.findMany({ where: stockWhere, include: stockInclude, orderBy: { id: 'asc' } })).map(stockDto) });
+  }
   catch (error) { next(error); }
 };
 export const getLowStock = async (_req, res, next) => {
   try {
+    await expireReservations();
     const rows = await prisma.stock.findMany({ where: stockWhere, include: stockInclude });
-    res.json({ stocks: rows.filter((item) => item.quantity > 0 && item.quantity <= item.minThreshold).map(stockDto) });
+    res.json({ stocks: rows.filter((item) => availableStock(item) > 0 && availableStock(item) <= item.minThreshold).map(stockDto) });
   } catch (error) { next(error); }
 };
 export const getProductStock = async (req, res, next) => {
@@ -24,25 +29,28 @@ export const getProductStock = async (req, res, next) => {
 };
 async function setStock(db, variantId, input, adminId, action) {
   const current = await findStock(db, variantId);
+  if (input.quantity < current.reserved) throw httpError(409, 'On-hand quantity cannot be lower than reserved units', 'STOCK_RESERVED');
   const threshold = input.minThreshold ?? current.minThreshold;
   const updated = await db.stock.update({ where: { id: current.id }, data: {
-    ...input, status: stockStatus(input.quantity, threshold),
+    ...input, status: stockStatus(input.quantity - current.reserved, threshold),
     ...(input.quantity > current.quantity && { lastRestocked: new Date() }),
   }, include: stockInclude });
   await db.stockLog.create({ data: {
-    stockId: current.id, previousStock: current.quantity,
-    newStock: input.quantity, action, adminId,
+    stockId: current.id, previousStock: availableStock(current),
+    newStock: input.quantity - current.reserved, action, adminId,
   } });
   return stockDto(updated);
 }
 export const updateStock = async (req, res, next) => {
   try {
+    await expireReservations();
     const input = catalogStockSchema.parse(req.body);
     res.json(await serializable((db) => setStock(db, req.params.variantId, input, req.admin.id, 'set')));
   } catch (error) { next(error); }
 };
 export const bulkUpdateStock = async (req, res, next) => {
   try {
+    await expireReservations();
     const { updates } = z.object({ updates: z.array(catalogStockSchema.extend({ variantId: idSchema })).min(1).max(100) }).strict().parse(req.body);
     if (new Set(updates.map((item) => item.variantId)).size !== updates.length) throw httpError(400, 'Bulk stock updates must identify distinct variants');
     const stocks = await serializable(async (db) => {
