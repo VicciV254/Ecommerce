@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { Container } from "../components/ui";
 import { PasswordInput } from "../components/PasswordInput";
 import { ConfirmModal, Toast } from "../components/Modal";
+import { StaffPaymentPanel } from "../components/PaymentPanel";
 import { navigate } from "../router";
 import { adminAPI, type AdminOrder, type AdminUser, type DashboardMetrics, type SalesReport, type Subscription } from "../api/admin";
 import { describeApiError } from "../api/errors";
@@ -23,6 +24,8 @@ type Tab = (typeof TABS)[number];
 const TOAST_MS = 2500;
 const RECENT_ORDER_LIMIT = 8;
 const REPORT_PREVIEW_LIMIT = 12;
+/** Staff roles the server lets request an M-Pesa status check; viewers may only read payments. */
+const PAYMENT_CHECK_ROLES = ["ADMIN", "SUPER_ADMIN"];
 
 export default function Admin() {
   const [admin, setAdmin] = useState<AdminSession | null>(readAdminSession);
@@ -173,7 +176,7 @@ function AdminDashboard({ admin, onLogout }: { admin: AdminSession; onLogout: ()
 
         {tab === "Dashboard" && <DashboardPanel activeDiscounts={activeDiscounts} />}
         {tab === "Analytics" && <AnalyticsPanel />}
-        {tab === "Orders" && <OrdersManager showToast={showToast} />}
+        {tab === "Orders" && <OrdersManager showToast={showToast} canCheckPayments={PAYMENT_CHECK_ROLES.includes(admin.role)} />}
         {tab === "Users" && <UsersManager showToast={showToast} />}
         {tab === "Promotions" && <PromotionsManager showToast={showToast} />}
         {tab === "Storefront" && <StorefrontManager showToast={showToast} onDirtyChange={setStorefrontDirty} />}
@@ -533,8 +536,31 @@ function AnalyticsPanel() {
   );
 }
 
-function OrdersManager({ showToast }: { showToast: (message: string) => void }) {
+/** One order's M-Pesa record, loaded only while expanded so a long order list never loads or polls every order. */
+function OrderPayments({ orderId, orderNumber, open, canCheck, onToggle }: {
+  orderId: string;
+  orderNumber: string;
+  open: boolean;
+  canCheck: boolean;
+  onToggle: () => void;
+}) {
+  const regionId = `order-payments-${orderId}`;
+  return (
+    <div className="mt-4 border-t border-light-gray pt-4">
+      <button type="button" aria-expanded={open} aria-controls={regionId} onClick={onToggle}
+        className="min-h-11 rounded-sm border border-brand-primary px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-brand-primary hover:bg-brand-primary hover:text-white">
+        M-Pesa payments<span className="sr-only"> for {orderNumber}</span>
+      </button>
+      <div id={regionId} className={open ? "mt-3" : undefined}>
+        {open && <StaffPaymentPanel orderId={orderId} canCheck={canCheck} />}
+      </div>
+    </div>
+  );
+}
+
+function OrdersManager({ showToast, canCheckPayments }: { showToast: (message: string) => void; canCheckPayments: boolean }) {
   const [orders, setOrders] = useState<AdminOrder[]>([]);
+  const [paymentsFor, setPaymentsFor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
   const [deliveryMethod, setDeliveryMethod] = useState("");
@@ -612,7 +638,7 @@ function OrdersManager({ showToast }: { showToast: (message: string) => void }) 
     {error && <div className="rounded-lg bg-error/10 p-4 text-sm font-semibold text-error shadow-sm">{error}</div>}
     {loading && <div className="rounded-lg bg-white p-6 text-sm text-gray-500 shadow-sm">Loading orders...</div>}
     {!loading && orders.length === 0 && <div className="rounded-lg bg-white p-6 text-sm text-gray-500 shadow-sm">No orders match these filters.</div>}
-    {orders.map((order) => <div key={order.id} className="rounded-lg bg-white p-5 shadow-sm"><div className="flex flex-wrap justify-between gap-4 border-b border-light-gray pb-4"><div><p className="font-mono text-sm font-bold text-brand-primary">{order.orderNumber}</p><p className="mt-1 text-xs text-gray-500">{order.user?.firstName} {order.user?.lastName} - {order.user?.email}</p><p className="mt-1 text-xs text-gray-500">Ordered {dateTime(order.createdAt)} - {deliveryLabel(order.deliveryMethod)}</p></div><div className="text-right"><p className="font-display text-lg text-brand-primary">{formatKES(order.total)}</p><p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{statusLabel(order.status)} / {order.paymentStatus}</p></div></div><div className="mt-4 grid gap-4 lg:grid-cols-[1fr_260px]"><div><p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Items</p><div className="mt-2 space-y-1 text-xs text-charcoal">{(order.items ?? []).map((item) => <p key={item.id}>{item.quantity} x {item.productName} - {formatKES(item.subtotal)}</p>)}</div><p className="mt-4 text-[10px] font-bold uppercase tracking-wider text-gray-400">Timeline</p><div className="mt-2 space-y-2">{(order.trackingHistory ?? []).map((event) => <div key={event.id} className="rounded-sm bg-off-white p-3 text-xs"><p className="font-bold text-brand-primary">{event.description}</p><p className="text-gray-500">{event.location || "No location"} - {dateTime(event.createdAt)}</p></div>)}</div></div><div><label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400">Update Stage</label><select value={order.status} onChange={(e) => updateStage(order, e.target.value)} disabled={updating === order.id} className="mt-2 w-full rounded-sm border border-light-gray px-3 py-2 text-xs">{(!order.status || order.status !== "AWAITING_REFUND") ? ORDER_STATUSES.map((s) => <option key={s} value={s}>{statusLabel(s)}</option>) : <option value="AWAITING_REFUND">Awaiting Refund</option>}</select>{order.status === "AWAITING_REFUND" && <button onClick={() => approveRefund(order)} disabled={updating === order.id} className="mt-3 w-full rounded-sm bg-success px-3 py-2 text-[10px] font-bold uppercase text-white hover:bg-green-600 disabled:opacity-50">Approve Refund</button>}<div className="mt-3 rounded-sm bg-light-pink p-3 text-[11px] text-charcoal"><p className="font-bold text-brand-primary">Delivery guide:</p><p>Store Pickup: Pickup Desk</p><p>Same-Day: Mombasa CBD Hub</p><p>Standard: Mombasa Main Station</p></div></div></div></div>)}
+    {orders.map((order) => <div key={order.id} className="rounded-lg bg-white p-5 shadow-sm"><div className="flex flex-wrap justify-between gap-4 border-b border-light-gray pb-4"><div><p className="font-mono text-sm font-bold text-brand-primary">{order.orderNumber}</p><p className="mt-1 text-xs text-gray-500">{order.user?.firstName} {order.user?.lastName} - {order.user?.email}</p><p className="mt-1 text-xs text-gray-500">Ordered {dateTime(order.createdAt)} - {deliveryLabel(order.deliveryMethod)}</p></div><div className="text-right"><p className="font-display text-lg text-brand-primary">{formatKES(order.total)}</p><p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{statusLabel(order.status)} / {order.paymentStatus}</p></div></div><div className="mt-4 grid gap-4 lg:grid-cols-[1fr_260px]"><div><p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Items</p><div className="mt-2 space-y-1 text-xs text-charcoal">{(order.items ?? []).map((item) => <p key={item.id}>{item.quantity} x {item.productName} - {formatKES(item.subtotal)}</p>)}</div><p className="mt-4 text-[10px] font-bold uppercase tracking-wider text-gray-400">Timeline</p><div className="mt-2 space-y-2">{(order.trackingHistory ?? []).map((event) => <div key={event.id} className="rounded-sm bg-off-white p-3 text-xs"><p className="font-bold text-brand-primary">{event.description}</p><p className="text-gray-500">{event.location || "No location"} - {dateTime(event.createdAt)}</p></div>)}</div></div><div><label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400">Update Stage</label><select value={order.status} onChange={(e) => updateStage(order, e.target.value)} disabled={updating === order.id} className="mt-2 w-full rounded-sm border border-light-gray px-3 py-2 text-xs">{(!order.status || order.status !== "AWAITING_REFUND") ? ORDER_STATUSES.map((s) => <option key={s} value={s}>{statusLabel(s)}</option>) : <option value="AWAITING_REFUND">Awaiting Refund</option>}</select>{order.status === "AWAITING_REFUND" && <button onClick={() => approveRefund(order)} disabled={updating === order.id} className="mt-3 w-full rounded-sm bg-success px-3 py-2 text-[10px] font-bold uppercase text-white hover:bg-green-600 disabled:opacity-50">Approve Refund</button>}<div className="mt-3 rounded-sm bg-light-pink p-3 text-[11px] text-charcoal"><p className="font-bold text-brand-primary">Delivery guide:</p><p>Store Pickup: Pickup Desk</p><p>Same-Day: Mombasa CBD Hub</p><p>Standard: Mombasa Main Station</p></div></div></div><OrderPayments orderId={order.id} orderNumber={order.orderNumber} open={paymentsFor === order.id} canCheck={canCheckPayments} onToggle={() => setPaymentsFor((current) => (current === order.id ? null : order.id))} /></div>)}
   </div>;
 }
 

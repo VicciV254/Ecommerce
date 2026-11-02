@@ -2,8 +2,9 @@
 
 Apex Cart is a React/Vite storefront and Express/Prisma administration
 application under an incremental overhaul. Catalog prices and checkout
-quotes are server-owned; pending-order reservations are explicitly opt-in.
-Verified payment processing is not enabled yet.
+quotes are server-owned; order reservations and the order-linked M-Pesa
+integration are separately opt-in. Real provider verification and production
+activation remain required before accepting customer payments.
 
 ---
 
@@ -224,12 +225,25 @@ Unpaid reservations do not count as sales or progress to fulfilment.
 Existing orders retain their saved allocation semantics, and incomplete
 allocations require review rather than a guessed replacement SKU.
 
-Payments remain unavailable: reserving an order neither sends an M-Pesa
-prompt nor marks it paid. Demo orders require a separate
-`ALLOW_DEMO_ORDERS=true` opt-in in development/test, remain labelled demo,
-and are excluded from live reporting; production rejects that mode.
-Legacy amount-only M-Pesa handlers remain unavailable until verified,
-order-linked payment processing is implemented.
+Reserving an order neither sends an M-Pesa prompt nor marks it paid.
+The separate payment action submits only its saved order ID and phone number;
+it cannot choose the charge amount. Accepted STK prompts remain pending, and
+unknown outcomes cannot trigger a second automatic charge. Only correlated
+receipt evidence plus an authenticated provider status query finalizes
+payment and inventory. Late payments stay in staff review without reopening
+cancelled orders. See [M-Pesa setup and boundaries](backend/SETUP.md#order-linked-m-pesa).
+
+Payments remain **off by default**. Sandbox uses explicitly allowed test
+numbers and demo orders only; live mode requires separate production
+enablement and provider onboarding. Fractional-KES totals are rejected for
+M-Pesa, never silently rounded. Local test doubles do not prove a real
+Safaricom sandbox transaction or production readiness. No M-Pesa PIN is
+collected by the application.
+
+Sandbox STK tests may involve real funds. [Safaricom's FAQ](https://developer.safaricom.co.ke/faqs)
+describes reversal of STK test funds; the application does not guarantee
+refund timing. Obtain explicit recipient and amount approval before a test
+prompt rather than assuming sandbox means no debit.
 
 ## Tech Stack
 

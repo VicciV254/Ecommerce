@@ -159,8 +159,8 @@ export default function AccountProfile() {
           </div>
         </div>
         <div className="rounded-md border border-brand-secondary/30 bg-light-pink p-4">
-          <h3 className="text-sm font-semibold text-brand-primary">Checkout Preferences</h3>
-          <p className="mt-1 text-xs text-gray-500">Payments are visual in this demo. No payment credentials are stored.</p>
+          <h3 className="text-sm font-semibold text-brand-primary">M-Pesa Payments</h3>
+          <p className="mt-1 text-xs text-gray-500">Payment availability and status are shown on each order. Enter your M-Pesa PIN only in the prompt on your phone, never on this website.</p>
         </div>
         {message && (
           <p className={`text-sm ${message.includes('success') ? 'text-green-600' : 'text-red-600'}`}>
@@ -174,5 +174,4 @@ export default function AccountProfile() {
     </div>
   );
 }
-
 

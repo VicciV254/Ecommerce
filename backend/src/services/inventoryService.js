@@ -4,6 +4,13 @@ import { availableStock, httpError, stockStatus } from './catalogService.js';
 import { orderDto, orderInclude } from '../utils/orderDto.js';
 
 export const customerOrderWhere = () => demoOrdersEnabled() ? {} : { isDemo: false };
+export const isInventoryConflict = (error) => error.code === 'P2034' ||
+  (error.code === 'P2010' && ['40001', '40P01'].includes(error.meta?.code));
+
+export async function lockOrderInventory(db, orderId) {
+  // Every release/finalization locks the order before touching its stock rows.
+  await db.$queryRaw`SELECT id FROM "Order" WHERE id = ${orderId} FOR UPDATE`;
+}
 
 async function adjustItems(db, items, action) {
   for (const item of [...items].sort((a, b) => a.variantId?.localeCompare(b.variantId ?? '') ?? 0)) {
@@ -45,6 +52,7 @@ export const reserveOrderItems = (db, items) => adjustItems(db, items, 'reserve'
 
 // P4 must call this inside its verified-payment transaction, never on STK acceptance.
 export async function commitOrderReservation(db, orderId, now = new Date()) {
+  await lockOrderInventory(db, orderId);
   const order = await db.order.findUnique({ where: { id: orderId }, include: { items: true } });
   if (!order) throw httpError(404, 'Order not found');
   if (order.reservationStatus === 'COMMITTED') return order;
@@ -82,6 +90,7 @@ async function releaseInTransaction(db, order, expired, reason, location = 'Cust
 export async function cancelOrderReservation(userId, orderId, reason, location) {
   try {
     const result = await prisma.$transaction(async (db) => {
+      await lockOrderInventory(db, orderId);
       const order = await db.order.findFirst({ where: { id: orderId, userId, ...customerOrderWhere() }, include: orderInclude });
       if (!order) throw httpError(404, 'Order not found');
       const expired = order.reservationStatus === 'HELD' && order.reservationExpiresAt <= new Date();
@@ -89,11 +98,21 @@ export async function cancelOrderReservation(userId, orderId, reason, location) 
     }, { isolationLevel: 'Serializable', timeout: 20_000 });
     return { ...result, order: orderDto(result.order) };
   } catch (error) {
-    if (error.code !== 'P2034') throw error;
+    if (!isInventoryConflict(error)) throw error;
     const order = await prisma.order.findFirst({ where: { id: orderId, userId, ...customerOrderWhere() }, include: orderInclude });
     if (order && ['RELEASED', 'EXPIRED'].includes(order.reservationStatus)) return { order: orderDto(order), changed: false };
     throw httpError(409, 'Inventory changed concurrently. Retry cancellation.', 'ORDER_RETRY');
   }
+}
+
+export async function expireOrderReservation(db, orderId, now = new Date()) {
+  await lockOrderInventory(db, orderId);
+  const order = await db.order.findUnique({ where: { id: orderId }, include: orderInclude });
+  if (order?.reservationStatus === 'HELD' && order.paymentStatus === 'PENDING' &&
+    order.status === 'PENDING' && order.reservationExpiresAt <= now) {
+    return (await releaseInTransaction(db, order, true)).order;
+  }
+  return order;
 }
 
 export async function expireReservations(now = new Date()) {
@@ -104,12 +123,13 @@ export async function expireReservations(now = new Date()) {
   for (const candidate of candidates) {
     try {
       await prisma.$transaction(async (db) => {
+        await lockOrderInventory(db, candidate.id);
         const order = await db.order.findUnique({ where: { id: candidate.id }, include: orderInclude });
         if (!order || order.reservationStatus !== 'HELD' || order.reservationExpiresAt > now || order.paymentStatus !== 'PENDING') return;
         await releaseInTransaction(db, order, true);
       }, { isolationLevel: 'Serializable', timeout: 20_000 });
     } catch (error) {
-      if (error.code !== 'P2034' && error.code !== 'ORDER_RETRY') throw error;
+      if (!isInventoryConflict(error) && error.code !== 'ORDER_RETRY') throw error;
       console.info('Reservation changed concurrently during expiry; it will be checked again', { orderId: candidate.id });
     }
   }

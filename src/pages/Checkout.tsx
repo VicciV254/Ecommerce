@@ -252,7 +252,7 @@ function CheckoutContent({ user }: { user: User }) {
             {sending ? "Reserving…" : "Reserve Order"}
           </button>
           <p id="reserve-help" className="mt-2 text-xs text-charcoal">
-            Creates an unpaid order and holds these items for a limited time. No payment is taken on this page.
+            Creates an unpaid order and holds these items for a limited time. Reserving does not charge you; any M-Pesa payment requires a separate confirmation.
           </p>
         </section>
       </div>

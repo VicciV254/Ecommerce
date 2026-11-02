@@ -1,12 +1,15 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import type { Address } from "../api/auth";
+import type { PaymentOrderSummary } from "../api/mpesa";
 import { MAX_QUOTE_ITEMS, type DeliveryMethod, type Order, type Quote } from "../api/orders";
 import { Link } from "../router";
 import { describeVariant } from "../store/catalogModel";
 import { DELIVERY_LABELS, DELIVERY_METHODS, normalizeCouponCode } from "../store/checkoutModel";
+import { withPaymentSummary } from "../store/paymentModel";
 import type { CheckoutQuote } from "../store/useCheckoutQuote";
 import type { SubmissionState } from "../store/useOrderSubmission";
 import { formatDateTime, formatKES } from "../utils/format";
+import { PaymentPanel } from "./PaymentPanel";
 
 /** Quote errors shown beside the choice that caused them rather than in the totals. */
 export const CHOICE_ERRORS = { address: "ADDRESS_UNAVAILABLE", delivery: "DELIVERY_UNAVAILABLE", coupon: "COUPON_INVALID" } as const;
@@ -294,6 +297,12 @@ function lapsedReason(order: Order) {
     : "It was cancelled, so the items were released.";
 }
 
+function placedStatus(order: Order) {
+  if (order.paymentStatus === "PENDING") return "Pending · not paid";
+  if (order.paymentStatus === "PAID") return "Payment received";
+  return `Payment ${order.paymentStatus.toLowerCase()}`;
+}
+
 /** Outcome of an earlier or failed request; placed orders get their own panel. */
 export function SubmissionNotice({ state, actions }: { state: SubmissionState; actions?: ReactNode }) {
   switch (state.status) {
@@ -323,26 +332,35 @@ export function SubmissionNotice({ state, actions }: { state: SubmissionState; a
   }
 }
 
-/** A real pending order from the server: number, unpaid status and how long the items are held. */
-export function PlacedOrderPanel({ order, remainingItems }: { order: Order; remainingItems: number }) {
+/** A real pending order from the server: number, payment status, how long the items are held, and M-Pesa payment. */
+export function PlacedOrderPanel({ order: placed, remainingItems }: { order: Order; remainingItems: number }) {
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => { heading.current?.focus(); }, []);
-  const unpaid = order.paymentStatus === "PENDING";
+  /** The payment service's latest view of this order, so this summary never contradicts the payment below. */
+  const [summary, setSummary] = useState<PaymentOrderSummary | null>(null);
+  const order = summary ? withPaymentSummary(placed, summary) : placed;
+  const paid = order.paymentStatus === "PAID";
+  const lapsed = ["RELEASED", "EXPIRED"].includes(order.reservationStatus ?? "");
   return (
-    <section aria-labelledby="order-placed-title" className="mx-auto mt-8 max-w-xl rounded-lg bg-white p-6 shadow-sm sm:p-8">
-      <h1 id="order-placed-title" ref={heading} tabIndex={-1} className="font-display text-2xl text-brand-primary">Order reserved</h1>
+    <section aria-labelledby="order-placed-title" className="mx-auto mt-8 max-w-xl rounded-lg bg-white p-6 shadow-sm sm:p-8 md:max-w-3xl">
+      <h1 id="order-placed-title" ref={heading} tabIndex={-1} className="font-display text-2xl text-brand-primary">{lapsed ? "Order no longer reserved" : "Order reserved"}</h1>
       <dl className="mt-5 space-y-3 text-sm">
         <div className="flex flex-wrap justify-between gap-2"><dt className="text-gray-600">Order number</dt><dd className="font-mono font-bold text-brand-primary">{order.orderNumber}</dd></div>
-        <div className="flex flex-wrap justify-between gap-2"><dt className="text-gray-600">Status</dt><dd className="font-semibold">{unpaid ? "Pending · not paid" : `Payment ${order.paymentStatus.toLowerCase()}`}</dd></div>
+        <div className="flex flex-wrap justify-between gap-2"><dt className="text-gray-600">Status</dt><dd className="font-semibold">{placedStatus(order)}</dd></div>
         <div className="flex flex-wrap justify-between gap-2"><dt className="text-gray-600">Order total</dt><dd>{formatKES(order.total)}</dd></div>
         {order.reservationStatus === "HELD" && order.reservationExpiresAt && (
           <div className="flex flex-wrap justify-between gap-2"><dt className="text-gray-600">Items held until</dt><dd className="font-semibold">{formatDateTime(order.reservationExpiresAt)}</dd></div>
         )}
       </dl>
       <p className="mt-5 text-sm text-charcoal">
-        No payment has been taken. Online payment is not available yet; if the order is not paid while your items are held,
-        the hold ends and they are released. You can review or cancel this order in your order history.
+        {paid
+          ? "Payment has been received for this order. Its payment details and next steps are shown below."
+          : lapsed ? "This order's hold has ended. Do not approve an outstanding payment prompt; check its status below or in your order history."
+          : "Payment has not been confirmed for this order yet. Check its status below before requesting another prompt. An unpaid reservation can expire; you can review or cancel it in your order history."}
       </p>
+      <div className="mt-5">
+        <PaymentPanel orderId={placed.id} onOrderChange={setSummary} />
+      </div>
       {remainingItems > 0 && (
         <p className="mt-3 text-sm text-charcoal">
           Your cart still has {remainingItems} {remainingItems === 1 ? "item" : "items"} that were not part of this order.

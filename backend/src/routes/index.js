@@ -33,11 +33,11 @@ router.use(compression());
 
 // Logging
 if (process.env.NODE_ENV !== 'test') {
-  router.use(morgan('combined'));
+  router.use(morgan('combined', { skip: (req) => req.path.toLowerCase().startsWith('/mpesa') }));
 }
 
 // Rate limiting
-router.use(generalLimiter);
+router.use((req, res, next) => req.path.toLowerCase().startsWith('/mpesa/callback') ? next() : generalLimiter(req, res, next));
 
 // Health check
 router.get('/health', (req, res) => {

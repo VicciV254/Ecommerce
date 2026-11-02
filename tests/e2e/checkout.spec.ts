@@ -1,5 +1,6 @@
-import { browserQuote, expect, linenCartLine, shopperState, signInCustomer, test } from "./fixtures";
+import { browserQuote, expect, linenCartLine, servePaymentOverview, shopperState, signInCustomer, test, watchPaymentWrites } from "./fixtures";
 import { fixturePendingOrder, linenLine } from "../../src/test-support/checkoutFixtures";
+import { PAYMENT_MESSAGES } from "../../src/test-support/paymentFixtures";
 
 const REQUEST_KEY = /^[A-Za-z0-9:_-]{16,128}$/;
 /** SAVE10 beats the automatic 10% offer here: KES 850 + KES 136 VAT + KES 200 delivery. */
@@ -23,13 +24,14 @@ test("a cart quote with a coupon is reviewed and reserved as one unpaid pending 
     return route.fulfill({ status: 201, json: browserQuote(body.couponCode === "SAVE10" ? couponTotals : {}) });
   });
   const placed: { key: string | undefined; body: unknown }[] = [];
+  const reserved = fixturePendingOrder(browserQuote(couponTotals));
   await context.route("**/api/orders", async (route) => {
     if (route.request().method() !== "POST") return route.fallback();
     placed.push({ key: route.request().headers()["idempotency-key"], body: route.request().postDataJSON() });
-    return route.fulfill({ status: 201, json: fixturePendingOrder(browserQuote(couponTotals)) });
+    return route.fulfill({ status: 201, json: reserved });
   });
-  const payments: string[] = [];
-  page.on("request", (request) => { if (new URL(request.url()).pathname.startsWith("/api/mpesa")) payments.push(request.url()); });
+  await servePaymentOverview(context, reserved);
+  const paymentWrites = watchPaymentWrites(page);
 
   await page.goto("/#/cart");
   const summary = page.getByRole("region", { name: "Order Summary" });
@@ -58,7 +60,12 @@ test("a cart quote with a coupon is reviewed and reserved as one unpaid pending 
   await expect.poll(() => shopperState(page)).toMatchObject({
     cart: [], couponCode: null, pendingOrder: null, acknowledgedOrderIds: ["order-quote-coupon"],
   });
-  expect(payments).toEqual([]);
+  // Payments are switched off in this test: shown safely, and nothing starts a payment on its own.
+  const payment = page.getByRole("region", { name: "Pay with M-Pesa" });
+  await expect(payment.getByText(PAYMENT_MESSAGES.disabled)).toBeVisible();
+  await expect(payment.getByRole("button", { name: /Send/ })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Order reserved" })).toBeFocused();
+  expect(paymentWrites).toEqual([]);
   await page.getByRole("link", { name: "View or cancel in your orders" }).click();
   await expect(page).toHaveURL(/#\/account\/orders$/);
 });
@@ -70,6 +77,7 @@ test("saved and printed receipts explain the stored discount and VAT without rec
   await context.route("**/api/orders?*", (route) => route.fulfill({
     json: { orders: [order], pagination: { page: 1, limit: 100, total: 1, pages: 1 } },
   }));
+  await servePaymentOverview(context, order);
   await page.goto("/#/account/orders");
   await page.getByRole("button", { name: "Details", exact: true }).click();
   const receipt = page.getByRole("dialog", { name: "Receipt Details" });
@@ -78,6 +86,7 @@ test("saved and printed receipts explain the stored discount and VAT without rec
   await expect(receipt).toContainText("VAT (16%): KES 136");
   await expect(receipt).toContainText("Delivery fee: KES 200");
   await expect(receipt).toContainText("Total: KES 1,186");
+  await expect(receipt.getByRole("region", { name: "Pay with M-Pesa" })).toContainText(PAYMENT_MESSAGES.disabled);
   const [printed] = await Promise.all([
     page.waitForEvent("popup"),
     receipt.getByRole("button", { name: "Print Receipt", exact: true }).click(),
@@ -103,6 +112,7 @@ test("a lost order response is retried with the same key and settled after reloa
     ? route.fulfill({ json: browserQuote({ consumed: true, orderId: "order-quote-1" }) })
     : route.abort("failed"));
   await context.route("**/api/orders/order-quote-1", (route) => route.fulfill({ json: fixturePendingOrder(browserQuote()) }));
+  await servePaymentOverview(context, fixturePendingOrder(browserQuote()));
 
   await page.goto("/#/checkout");
   await page.getByRole("button", { name: "Reserve Order" }).click();
@@ -135,6 +145,7 @@ test("a changed total must be explicitly reviewed before a new reservation is se
   await signInCustomer(page, [linenCartLine]);
   let repriced = false;
   await context.route("**/api/orders/quotes", (route) => route.fulfill({ status: 201, json: browserQuote(repriced ? repricedTotals : {}) }));
+  await servePaymentOverview(context, fixturePendingOrder(browserQuote(repricedTotals)));
   const posts: { key: string | undefined; quoteId: string }[] = [];
   await context.route("**/api/orders", async (route) => {
     if (route.request().method() !== "POST") return route.fallback();

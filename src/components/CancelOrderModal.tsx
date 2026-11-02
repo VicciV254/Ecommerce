@@ -1,5 +1,5 @@
 import { useId, useState } from 'react';
-import { ordersAPI } from '../api/orders';
+import { ordersAPI, type Order } from '../api/orders';
 import { describeApiError } from '../api/errors';
 import toast from 'react-hot-toast';
 import { ModalDialog } from './Modal';
@@ -8,7 +8,7 @@ interface CancelOrderModalProps {
   isOpen: boolean;
   onClose: () => void;
   orderId: string;
-  onOrderCancelled: () => void;
+  onOrderCancelled: (order: Order) => void;
 }
 
 export default function CancelOrderModal({ isOpen, onClose, orderId, onOrderCancelled }: CancelOrderModalProps) {
@@ -28,9 +28,9 @@ export default function CancelOrderModal({ isOpen, onClose, orderId, onOrderCanc
     setIsSubmitting(true);
     setErrorMessage('');
     try {
-      await ordersAPI.cancel(orderId, { reason });
+      const { data } = await ordersAPI.cancel(orderId, { reason });
       toast.success('Order cancelled successfully');
-      onOrderCancelled();
+      onOrderCancelled(data);
       onClose();
       setReason('');
     } catch (error) {

@@ -22,6 +22,11 @@ The real `.env` is ignored by Git and excluded from container builds.
 | `ENABLE_ORDER_RESERVATIONS` | Permit pending-order inventory holds; defaults to `false`, never enables payment |
 | `ALLOW_DEMO_ORDERS` | Additional development/test-only opt-in for demo orders, separate from catalog visibility |
 | `CHECKOUT_POLICY_JSON` | Optional complete validated pricing profile; empty uses `src/config/checkoutPolicy.js` defaults |
+| `ENABLE_MPESA` | Enables the order-linked Daraja integration only when all merchant, callback, limit and environment checks pass |
+| `MPESA_LIVE_PAYMENTS_ENABLED` | Additional gate for the production API; defaults to `false`, but does not guarantee sandbox tests are money-free |
+| `MPESA_MAX_AMOUNT` | Required approved whole-KES per-attempt limit; no implicit monetary limit |
+| `MPESA_SANDBOX_ALLOWED_PHONES` | Required sandbox recipient allowlist, supplied privately |
+| `MPESA_ALLOW_DEMO_SANDBOX` | Additional development/test sandbox opt-in; commercial orders are not paid by sandbox responses |
 | `ADMIN_EMAIL`, `ADMIN_USERNAME`, `ADMIN_PASSWORD` | Private initial staff credentials for local initialization |
 
 Keep signing secrets in the local environment or an approved secret store,
@@ -45,10 +50,10 @@ instead of being disguised as invalid tokens or anonymous sessions.
 
 `POST /api/orders` and `POST /api/orders/checkout` share one strict
 quote-based pending-order service. Neither accepts client totals, ownership
-or payment-status claims. Creation requires explicit reservation enablement;
-M-Pesa and refund processing for these orders remain unavailable until the
-verified provider lifecycle is implemented. A reservation is not payment
-or permission to fulfil an order.
+or payment-status claims. Creation requires explicit reservation enablement.
+M-Pesa has a separate order-linked attempt lifecycle and enablement gate;
+refund execution is not implemented. A reservation or STK acknowledgement
+is not payment or permission to fulfil an order.
 
 External image-host, email and payment settings may remain empty/disabled
 for local checks. Do not pull or replace live Vercel/Neon credentials just
@@ -107,9 +112,9 @@ listener, stops scheduled jobs and disconnects Prisma. SIGINT/SIGTERM use
 the same cleanup.
 
 Set `BACKGROUND_JOBS_ENABLED=true` only in an intentional operational
-environment. It enables reservation expiry every 60 seconds, the existing
-auto-stage job every 10 seconds, refund notification every 60 seconds and
-optional image-host session work.
+environment. It enables payment reconciliation every 15 seconds, reservation
+expiry every 60 seconds, the existing auto-stage job every 10 seconds, refund
+notification every 60 seconds and optional image-host session work.
 These services can mutate orders and send messages; they are not health
 checks. A job does not overlap its previous invocation. `NODE_ENV=test`
 always prevents background startup, even if the opt-in flag is set.
@@ -296,6 +301,152 @@ stock for a new held order. Physical allocation is committed only through
 the internal `commitOrderReservation` operation inside a future verified
 payment transaction. A late payment after expiry returns
 `RESERVATION_EXPIRED` for review; it does not acquire stock again.
-The operation has no customer route and is not proof that the M-Pesa
-integration has been completed. New-order emails explicitly state that
-payment is pending and include the reservation expiry and stored discount.
+The operation has no customer route and is called only by verified payment
+finalization. New-order emails explicitly state that payment is pending and
+include the reservation expiry and stored discount.
+
+## Order-linked M-Pesa
+
+`ENABLE_MPESA=false` remains the default. The integration uses the existing
+Axios client to call Safaricom's OAuth, STK Push and STK Query endpoints. It
+does not install another commerce platform or payment SDK. Local automated
+checks use an explicitly injected provider double; `NODE_ENV=test` rejects
+the real network transport even if credential variables were supplied.
+`MPESA_SANDBOX_SIMULATE=true` is rejected, not treated as payment success.
+
+**Sandbox STK is not a guaranteed money-free dry run.**
+[Safaricom's FAQ](https://developer.safaricom.co.ke/faqs), under "Is there a
+refund to the test funds for STK push?", describes test-fund reversal at
+6 a.m. the next day. Treat a handset test as a possible debit: agree the
+authorized recipient and amount before sending a prompt, and verify the
+provider's current test terms. The application cannot guarantee reversal
+timing. A published sample phone number is not proof of a reachable test
+recipient.
+
+Before an **approved sandbox run**, configure the following privately:
+
+- `MPESA_ENVIRONMENT=sandbox`, the merchant consumer key/secret, shortcode,
+  passkey and applicable `MPESA_TRANSACTION_TYPE`.
+- `MPESA_CALLBACK_URL`: a public HTTPS URL ending in `/api/mpesa/callback`.
+  Each attempt appends a random ID and unguessable callback key; do not
+  log that complete URL in a proxy, CDN, access log, screenshot or error.
+  The database stores only a hash of the callback key.
+- `MPESA_MAX_AMOUNT`, the separately approved test limit, and
+  `MPESA_SANDBOX_ALLOWED_PHONES`, the agreed recipient list.
+- `MPESA_ALLOW_DEMO_SANDBOX=true` plus the ordinary local demo/order flags.
+  Sandbox settlement is accepted only for demo orders. A sandbox response
+  cannot mark a commercial order paid, and a demo order cannot use live mode.
+
+Live mode additionally requires `NODE_ENV=production`,
+`MPESA_ENVIRONMENT=production` and `MPESA_LIVE_PAYMENTS_ENABLED=true`.
+Onboarding, merchant eligibility, amount limits, callbacks and real receipt
+correlation still require an actual authorized provider verification.
+Setting flags is not proof of production readiness and does not authorize a
+test charge. Never enter a PIN or provider secret in the storefront or chat.
+
+STK amounts use the exact saved order total. Positive fractional-KES totals
+return `MPESA_AMOUNT_UNSUPPORTED`; the application never rounds the order or
+changes its VAT to make it chargeable. The commercial rounding/payment policy
+must be agreed separately if cent totals should be supported.
+
+| Route | Purpose |
+|---|---|
+| `GET /api/mpesa/orders/:orderId/payments` | Owner's attempt list, current order state and server-calculated initiation availability; no provider call |
+| `POST /api/mpesa/stk-push` | `{orderId, phone}` and `Idempotency-Key`; create/replay one durable attempt using the order's amount |
+| `GET /api/mpesa/payments/:id` | Owner-only safe attempt status |
+| `POST /api/mpesa/payments/:id/query` | Reconcile the existing attempt; never sends another STK prompt |
+| `POST /api/mpesa/callback/:id/:key` | Correlated provider evidence ingestion; acknowledges only after database persistence |
+| `GET /api/mpesa/admin/orders/:orderId/payments` | Staff/viewer read-only overview with masked phone and safe reason codes |
+| `POST /api/mpesa/admin/payments/:id/query` | ADMIN/SUPER_ADMIN reconciliation; not force-paid/refund approval |
+
+The former uncorrelated `/mpesa/callback` endpoint stays unavailable. Callback
+requests have a 32 KiB JSON limit, a separate rate limit and a per-attempt
+evidence cap. Application access logging omits M-Pesa URLs (including
+case-variant paths), and database/provider errors are reduced to safe codes;
+full provider payloads, credentials and callback keys must not be logged.
+
+Each attempt is recorded before the provider request. An accepted prompt
+remains pending. Network timeout, missing provider IDs or lost response
+persistence remains unknown; the same customer/request key returns that
+attempt without sending another prompt. A new key cannot bypass an unresolved
+attempt. New prompts following confirmed failure need an explicit customer
+action, a cooldown and the server's attempt limit.
+The browser keeps a normalized phone and request key in account/order-scoped
+storage only while resolving an unknown submission. If that browser never
+returns, this local intent can remain until its site data is removed; the
+database remains the payment authority. No PIN or callback key is stored in
+the browser.
+
+Callbacks are **not assumed to carry a Daraja signature**. The per-attempt
+URL is a correlation credential, not a claim that Safaricom signs the body.
+Callback evidence alone never settles an order. Finalization requires a
+successful authenticated STK query matching the attempt's provider IDs,
+plus matching callback amount, phone, unique receipt and transaction-date
+evidence. Missing receipt evidence, conflicting results/IDs or receipt reuse
+stays in review. An STK query acknowledgement without a final result is not
+success; unrecognized results remain unknown instead of enabling another
+charge.
+Turning off new M-Pesa requests does not discard evidence arriving for an
+already-issued correlated callback; it remains durable for later authorized
+reconciliation.
+
+Successful verification persists the receipt, payment state, stock commitment
+and order history atomically. It does not advance fulfilment. Duplicate or
+reordered callbacks cannot repeat stock or payment effects. A verified payment
+after cancellation/expiry records received money and review status without
+reopening the order or reacquiring inventory. A conflicting callback cannot
+downgrade a previously confirmed payment. Refund handling and notification
+delivery remain later operational work, not fabricated money movement.
+Payment finalization, cancellation and expiry lock the order before its stock
+rows to avoid opposite-lock-order deadlocks. A payment review blocks
+fulfilment/pickup shortcuts. The payment overview expires overdue holds
+without calling the provider; the UI stops inviting PIN approval for inactive
+orders and refreshes the open receipt immediately after cancellation.
+
+Reconciliation persists a lease/cooldown and works after restart. Its optional
+job processes at most five due attempts per tick and has a bounded automatic
+query count; customer/staff checks use the same guarded service. An unknown
+initiation with no provider reference is not safely replayable upstream and
+may require merchant portal review. No callback retry guarantee is assumed.
+Without an approved scheduler, the owner/staff can explicitly check pending
+attempts; the deployment's durable worker arrangement remains a release gate.
+
+Public protocol references: [Daraja portal](https://developer.safaricom.co.ke/apis)
+and [Safaricom's official Node examples](https://github.com/safaricom/mpesa-node-library).
+The official examples are reference material, not an installed SDK. Some old
+documentation links currently return 404, and the public portal did not
+establish current callback-authentication guarantees during implementation.
+Verify the precise merchant/environment contract in an authorized sandbox
+flow before enabling production.
+
+### Isolated local sandbox callback
+
+For a local sandbox tunnel, use the separate callback-only listener instead
+of forwarding the main API port. It mounts the same bounded callback
+validation/persistence route but rejects storefront, health, authentication,
+staff and payment-initiation routes. It binds only to `127.0.0.1`.
+
+The private environment file must set `NODE_ENV=development`,
+`MPESA_ENVIRONMENT=sandbox`, `MPESA_LIVE_PAYMENTS_ENABLED=false`,
+`BACKGROUND_JOBS_ENABLED=false` and `ENABLE_SANDBOX_CALLBACK=true`. Both
+database URLs must identify the same approved loopback development database.
+`SANDBOX_CALLBACK_PORT` defaults to 4285. Keep `ENABLE_MPESA=false` while
+preparing credentials and callback reachability.
+
+```bash
+node --env-file=/absolute/private/sandbox.env backend/scripts/start-sandbox-callback.js
+```
+
+Use the provider's normal user-level ngrok credential store, with a separate
+sandbox overlay that disables local request inspection and agent logs. Point
+the tunnel only at the callback listener, never the main API or database.
+Verify that `/api/health`, `/api/catalog`, `/api/admin` and `/api/auth/login`
+are unavailable through the public endpoint. A synthetic invalid callback
+key can verify handler reachability without creating a payment.
+
+Ngrok necessarily handles the public callback traffic; disabling local
+inspection is not a guarantee about the provider's own operational metadata.
+Keep the generated environment and database credentials outside the working
+tree with owner-only permissions. Do not copy real credentials into docs,
+commands shown in chat, or `.env.example`. The actual sandbox database volume
+must survive service stops; verification databases are separate and disposable.

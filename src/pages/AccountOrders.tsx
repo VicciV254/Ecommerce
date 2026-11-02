@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, navigate } from "../router";
 import { useAuth, type User } from "../contexts/AuthContext";
+import type { PaymentOrderSummary } from "../api/mpesa";
 import { ordersAPI, type Order } from "../api/orders";
 import { describeApiError } from "../api/errors";
 import { formatDateTime, formatKES } from "../utils/format";
+import { withPaymentSummary } from "../store/paymentModel";
 import { useStorefront } from "../store/StorefrontContext";
 import CancelOrderModal from "../components/CancelOrderModal";
 import ReturnOrderModal from "../components/ReturnOrderModal";
 import { ConfirmModal, ModalDialog } from "../components/Modal";
+import { PaymentPanel } from "../components/PaymentPanel";
 import { ErrorPanel, LoadingPanel } from "../components/ui";
 
 const ORDER_PAGE_LIMIT = 100;
@@ -175,6 +178,10 @@ function canReturn(order: Order) {
 
 export default function AccountOrders() {
   const { user } = useAuth();
+  return <AccountOrdersContent key={user?.id ?? "guest"} user={user} />;
+}
+
+function AccountOrdersContent({ user }: { user: User | null }) {
   const { brandName, storefront, mediaById } = useStorefront();
   const logoId = storefront?.settings.brand.logoMediaId;
   const logoUrl = (logoId && mediaById.get(logoId)?.url) || null;
@@ -218,13 +225,23 @@ export default function AccountOrders() {
     setSelected((current) => (current?.id === order.id ? order : current));
   };
 
+  /** Keeps the list and the open receipt in step with the payment service, without reloading every order. */
+  const applyPaymentSummary = useCallback((summary: PaymentOrderSummary) => {
+    setOrders((current) => {
+      if (current.status !== "ready") return current;
+      const orders = current.orders.map((item) => withPaymentSummary(item, summary));
+      return orders.some((item, index) => item !== current.orders[index]) ? { status: "ready", orders } : current;
+    });
+    setSelected((current) => (current ? withPaymentSummary(current, summary) : current));
+  }, []);
+
   const cancelOrder = (order: Order) => {
     setOrderToCancel(order);
     setCancelModalOpen(true);
   };
 
-  const handleOrderCancelled = () => {
-    void loadOrders();
+  const handleOrderCancelled = (order: Order) => {
+    applyUpdatedOrder(order);
     setActionMessage("Order cancelled successfully");
   };
 
@@ -387,7 +404,7 @@ export default function AccountOrders() {
 
       {selected && (
         <ModalDialog open label="Receipt Details" onClose={() => setSelected(null)}>
-          <div className="relative max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-lg bg-white p-6 shadow-xl">
+          <div className="relative max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-lg bg-white p-6 shadow-xl md:max-w-2xl">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h3 className="font-display text-xl text-brand-primary">Receipt Details</h3>
@@ -408,6 +425,12 @@ export default function AccountOrders() {
               <p><strong>Total:</strong> {formatKES(selected.total)}</p>
               {reservationNote(selected) && <p>{reservationNote(selected)}</p>}
             </div>
+            {/* Only quote-based orders can be paid online; one panel, for the open receipt only. */}
+            {selected.quoteId && (
+              <div className="mt-5">
+                <PaymentPanel key={selected.status} orderId={selected.id} onOrderChange={applyPaymentSummary} headingLevel={4} />
+              </div>
+            )}
             <div className="mt-6 grid gap-2 sm:grid-cols-2">
               <button type="button" onClick={() => navigate(`/track?order=${encodeURIComponent(selected.orderNumber)}`)} className="rounded-sm bg-brand-primary py-3 text-xs font-bold uppercase tracking-wider text-white hover:bg-brand-secondary hover:text-brand-primary">
                 Track Order

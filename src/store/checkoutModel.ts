@@ -51,6 +51,10 @@ const RESERVATION_STATUSES: readonly ReservationStatus[] = ["HELD", "COMMITTED",
 
 export const isDeliveryMethod = (value: unknown): value is DeliveryMethod =>
   DELIVERY_METHODS.some((method) => method === value);
+export const isOrderStatus = (value: unknown): value is OrderStatus => ORDER_STATUSES.some((status) => status === value);
+export const isPaymentStatus = (value: unknown): value is PaymentStatus => PAYMENT_STATUSES.some((status) => status === value);
+export const isReservationStatus = (value: unknown): value is ReservationStatus =>
+  RESERVATION_STATUSES.some((status) => status === value);
 
 function isQuoteLine(value: unknown): value is QuoteLine {
   return isRecord(value) && isId(value.productId) && isId(value.variantId) && isString(value.productName) &&
@@ -95,8 +99,7 @@ function isOrderItem(value: unknown): value is OrderItem {
 /** Validates a quote-based order (creation, replay or `GET /orders/:id`) before it changes the cart. */
 export function parseOrder(data: unknown): Order {
   if (!isRecord(data) || !isId(data.id) || !isId(data.orderNumber) || !isId(data.quoteId)) throw new CheckoutFormatError("order");
-  if (!ORDER_STATUSES.some((status) => status === data.status) || !PAYMENT_STATUSES.some((status) => status === data.paymentStatus) ||
-    !RESERVATION_STATUSES.some((status) => status === data.reservationStatus) ||
+  if (!isOrderStatus(data.status) || !isPaymentStatus(data.paymentStatus) || !isReservationStatus(data.reservationStatus) ||
     !(data.reservationExpiresAt === null || isTimestamp(data.reservationExpiresAt))) {
     throw new CheckoutFormatError("order status");
   }
@@ -231,8 +234,11 @@ export type OrderIntent = {
 
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9:_-]{16,128}$/;
 
+/** The server's accepted request-key form for order and payment requests. */
+export const isIdempotencyKey = (value: unknown): value is string => isString(value) && IDEMPOTENCY_KEY.test(value);
+
 export function isOrderIntent(value: unknown): value is OrderIntent {
-  return isRecord(value) && isId(value.quoteId) && isString(value.idempotencyKey) && IDEMPOTENCY_KEY.test(value.idempotencyKey) &&
+  return isRecord(value) && isId(value.quoteId) && isIdempotencyKey(value.idempotencyKey) &&
     isString(value.signature) && isMoney(value.total) && isTimestamp(value.createdAt);
 }
 

@@ -1,7 +1,8 @@
-import { expect, test as base, type Page, type Route } from "@playwright/test";
+import { expect, test as base, type BrowserContext, type Page, type Route } from "@playwright/test";
 import type { User } from "../../src/api/auth";
 import type { CatalogProduct, CatalogSnapshot, CatalogStock, StorefrontDraft } from "../../src/api/catalog";
-import type { Quote } from "../../src/api/orders";
+import type { PaymentOverview } from "../../src/api/mpesa";
+import type { Order, Quote } from "../../src/api/orders";
 import {
   fixtureProduct,
   fixtureSnapshot,
@@ -11,6 +12,7 @@ import {
   linenShirt,
 } from "../../src/test-support/catalogFixtures";
 import { fixtureQuote } from "../../src/test-support/checkoutFixtures";
+import { fixturePaymentOverview } from "../../src/test-support/paymentFixtures";
 import { STORAGE_KEYS, shopperStateKey } from "../../src/utils/storage";
 import { E2E_ORIGIN } from "../browser-config";
 
@@ -105,6 +107,8 @@ async function respond(route: Route, url: URL) {
       ? route.fulfill({ json: customer })
       : route.fulfill({ status: 401, json: { error: "Invalid token" } });
   }
+  // The payment service knows only the orders a test serves with `servePaymentOverview`.
+  if (url.pathname.startsWith("/api/mpesa/")) return route.fulfill({ status: 404, json: { error: "Order not found.", code: "ORDER_NOT_FOUND" } });
   return route.fulfill({ status: 503, json: { error: "No live API is available in this browser test" } });
 }
 
@@ -151,13 +155,36 @@ export async function signInCustomer(page: Page, cart: CartLine[] = []) {
   }, { user: customer, lines: cart, keys: STORAGE_KEYS, shopperKey: shopperStateKey(customer.id), token: CUSTOMER_TOKEN, origin: ORIGIN });
 }
 
-export async function signInStaff(page: Page) {
+export async function signInStaff(page: Page, role = staff.role) {
   await page.context().addInitScript(({ admin, keys, token, origin }) => {
     if (location.origin !== origin) return;
     localStorage.setItem(keys.adminToken, token);
     localStorage.setItem(keys.adminRefreshToken, "browser-only-staff-refresh");
     localStorage.setItem(keys.adminUser, JSON.stringify(admin));
-  }, { admin: staff, keys: STORAGE_KEYS, token: STAFF_TOKEN, origin: ORIGIN });
+  }, { admin: { ...staff, role }, keys: STORAGE_KEYS, token: STAFF_TOKEN, origin: ORIGIN });
+}
+
+/**
+ * Serves one order's customer payment overview as the API reports it: payments switched off unless the
+ * test passes another overview, or a function choosing one per request. Writes fall through to the test.
+ */
+export async function servePaymentOverview(
+  context: BrowserContext, order: Order, overview: PaymentOverview | (() => PaymentOverview) = fixturePaymentOverview(order),
+) {
+  await context.route(`**/api/mpesa/orders/${encodeURIComponent(order.id)}/payments`, (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({ json: typeof overview === "function" ? overview() : overview })
+      : route.fallback());
+}
+
+/** Requests that could start or settle a payment: anything but a read of the payment API. */
+export function watchPaymentWrites(page: Page) {
+  const writes: string[] = [];
+  page.on("request", (request) => {
+    const { pathname } = new URL(request.url());
+    if (pathname.startsWith("/api/mpesa") && request.method() !== "GET") writes.push(`${request.method()} ${pathname}`);
+  });
+  return writes;
 }
 
 export type StoredShopper = {

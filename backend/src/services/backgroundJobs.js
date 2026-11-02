@@ -2,6 +2,7 @@ import autoStageService from './autoStageService.js';
 import refundNotificationService from './refundNotificationService.js';
 import { startImageHostServices } from './imageHostService.js';
 import inventoryService from './inventoryService.js';
+import paymentService from './paymentService.js';
 
 export function startBackgroundJobs() {
   const enabled = process.env.BACKGROUND_JOBS_ENABLED ?? 'false';
@@ -15,6 +16,7 @@ export function startBackgroundJobs() {
 
   const stopImages = startImageHostServices();
   const jobs = [
+    { name: 'Payment reconciliation', interval: 15_000, run: () => paymentService.reconcileDuePayments() },
     { name: 'Reservation expiry', interval: 60_000, run: () => inventoryService.expireReservations() },
     { name: 'Auto-stage', interval: 10_000, run: () => autoStageService.processAutoStages() },
     { name: 'Refund notification', interval: 60_000, run: () => refundNotificationService.processPendingRefundNotifications() },

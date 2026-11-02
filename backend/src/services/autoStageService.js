@@ -11,6 +11,7 @@ export const autoStageService = {
         where: {
           isDemo: false,
           OR: [{ quoteId: null }, { paymentStatus: 'PAID', reservationStatus: 'COMMITTED' }],
+          payments: { none: { reviewCode: { not: null } } },
           autoStageEnabled: true,
           autoStagePaused: false,
           status: {

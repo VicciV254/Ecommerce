@@ -50,19 +50,56 @@ model SiteSetting {
 }
 
 model MpesaPayment {
-  id                String   @id @default(cuid())
-  checkoutRequestId String   @unique
-  merchantRequestId String?
-  orderNumber       String?
-  phone             String
-  amount            Decimal  @db.Decimal(14, 2)
-  status            String   @default("PENDING")
-  resultCode        Int?
-  resultDesc        String?
-  receiptNumber     String?
-  rawCallback       Json?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                 String              @id @default(cuid())
+  checkoutRequestId  String?             @unique
+  merchantRequestId  String?
+  orderNumber        String?
+  orderId            String?
+  order              Order?              @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  environment        String?
+  merchantShortcode  String?
+  merchantIdentity   String?
+  idempotencyKey     String?
+  requestHash        String?
+  callbackKeyHash    String?
+  reference          String?             @unique
+  phone              String
+  amount             Decimal             @db.Decimal(14, 2)
+  status             String              @default("INITIATING")
+  resultCode         Int?
+  resultDesc         String?
+  receiptNumber      String?
+  rawCallback        Json?
+  queryEvidence      Json?
+  reviewCode         String?
+  lastErrorCode      String?
+  providerVerifiedAt DateTime?
+  confirmedAt        DateTime?
+  nextReconcileAt    DateTime?
+  reconcileCount     Int                 @default(0)
+  reconcileLease     String?
+  leaseExpiresAt     DateTime?
+  events             MpesaPaymentEvent[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  @@unique([orderId, idempotencyKey])
+  @@unique([environment, receiptNumber])
+  @@index([status, nextReconcileAt])
+  @@index([orderId, createdAt])
+}
+
+model MpesaPaymentEvent {
+  id          String       @id @default(cuid())
+  paymentId   String
+  payment     MpesaPayment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  source      String
+  fingerprint String
+  details     Json
+  createdAt   DateTime     @default(now())
+
+  @@unique([paymentId, fingerprint])
+  @@index([paymentId, createdAt])
 }
 
 model Address {
@@ -388,6 +425,7 @@ model Order {
   userId                       String
   user                         User              @relation(fields: [userId], references: [id])
   items                        OrderItem[]
+  payments                     MpesaPayment[]
   subtotal                     Decimal           @db.Decimal(14, 2)
   discount                     Decimal           @default(0) @db.Decimal(14, 2)
   tax                          Decimal           @db.Decimal(14, 2)

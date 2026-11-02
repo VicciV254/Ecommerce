@@ -8,6 +8,12 @@ import { cancellationSchema, orderInputSchema } from "../utils/checkoutValidatio
 import { orderDto } from "../utils/orderDto.js";
 import { userSummarySelect } from "../utils/account.js";
 
+async function requireReviewedPayment(order) {
+  if (order.quoteId && await prisma.mpesaPayment.count({ where: { orderId: order.id, reviewCode: { not: null } } })) {
+    throw httpError(409, "This order has payment evidence requiring staff review before fulfilment.", "PAYMENT_REVIEW_REQUIRED");
+  }
+}
+
 export const quoteOrder = async (req, res, next) => {
   try { res.status(201).json(await createQuote(req.user.id, req.body)); } catch (error) { next(error); }
 };
@@ -131,6 +137,7 @@ export const pickupOrder = async (req, res, next) => {
     if (order.quoteId && (order.paymentStatus !== "PAID" || order.reservationStatus !== "COMMITTED")) {
       throw httpError(409, "Pickup requires verified payment and committed inventory.", "ORDER_UNPAID");
     }
+    await requireReviewedPayment(order);
     if (["CANCELLED", "RETURNED"].includes(order.status)) {
       return res
         .status(400)
@@ -378,6 +385,7 @@ export const updateOrderStatus = async (req, res, next) => {
     if (existingOrder.quoteId && (existingOrder.paymentStatus !== 'PAID' || existingOrder.reservationStatus !== 'COMMITTED')) {
       throw httpError(409, 'Order progression requires verified payment and committed inventory.', 'ORDER_UNPAID');
     }
+    await requireReviewedPayment(existingOrder);
 
     // Prevent status updates for cancelled orders awaiting refund
     if (existingOrder.status === 'AWAITING_REFUND' && status !== 'CANCELLED') {

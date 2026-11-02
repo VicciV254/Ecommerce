@@ -1,121 +1,87 @@
-import '../config/environment.js';
 import axios from 'axios';
+import { initiationResponseSchema, queryResponseSchema } from '../utils/mpesaValidation.js';
 
-function baseUrl() {
-  return process.env.MPESA_ENVIRONMENT === 'production'
-    ? 'https://api.safaricom.co.ke'
-    : 'https://sandbox.safaricom.co.ke';
-}
-
-function requireMpesaConfig() {
-  const required = ['MPESA_CONSUMER_KEY', 'MPESA_CONSUMER_SECRET', 'MPESA_SHORTCODE', 'MPESA_PASSKEY', 'MPESA_CALLBACK_URL'];
-  const missing = required.filter((key) => !process.env[key] || String(process.env[key]).startsWith('your_'));
-  if (missing.length > 0 || process.env.ENABLE_MPESA !== 'true') {
-    const error = new Error(
-      process.env.ENABLE_MPESA !== 'true'
-        ? 'M-Pesa is disabled. Set ENABLE_MPESA=true.'
-        : `Missing M-Pesa configuration: ${missing.join(', ')}`
-    );
-    error.statusCode = 503;
-    throw error;
+export class DarajaError extends Error {
+  constructor(code, uncertain) {
+    super(uncertain ? 'M-Pesa did not return a confirmed outcome. Do not initiate another payment.' : 'M-Pesa could not start this request.');
+    this.name = 'DarajaError';
+    this.code = code;
+    this.uncertain = uncertain;
   }
 }
 
-function timestamp() {
-  const d = new Date();
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+const transportOptions = {
+  timeout: 15_000, maxRedirects: 0, maxContentLength: 64 * 1024, maxBodyLength: 64 * 1024,
+  validateStatus: (status) => status >= 200 && status < 300,
+};
+
+function timestamp(now = new Date()) {
+  return now.toISOString().replace(/\D/g, '').slice(0, 14);
 }
 
-export function normalizePhone(phone) {
-  const digits = String(phone).replace(/\D/g, '');
-  if (digits.startsWith('254')) return digits;
-  if (digits.startsWith('0')) return `254${digits.slice(1)}`;
-  if (digits.length === 9) return `254${digits}`;
-  return digits;
+function checkedTransport(http) {
+  if (process.env.NODE_ENV === 'test' && http === axios) throw new DarajaError('PROVIDER_TEST_NETWORK_BLOCKED', false);
+  return http;
 }
 
-export async function getAccessToken() {
-  requireMpesaConfig();
-  const auth = Buffer.from(`${process.env.MPESA_CONSUMER_KEY}:${process.env.MPESA_CONSUMER_SECRET}`).toString('base64');
-  const { data } = await axios.get(`${baseUrl()}/oauth/v1/generate?grant_type=client_credentials`, {
-    headers: { Authorization: `Basic ${auth}` },
-    timeout: 20000,
-  });
-  return data.access_token;
-}
-
-export async function requestStkPush({ phone, amount, accountReference, transactionDesc }) {
-  if (process.env.MPESA_ENVIRONMENT === 'sandbox' && process.env.MPESA_SANDBOX_SIMULATE === 'true') {
-    const id = `ws_CO_${Date.now()}`;
-    return {
-      MerchantRequestID: `sandbox_${Date.now()}`,
-      CheckoutRequestID: id,
-      ResponseCode: '0',
-      ResponseDescription: 'Sandbox simulation accepted',
-      CustomerMessage: 'Sandbox simulation accepted. No real STK prompt is sent.',
-    };
+async function accessToken(config, http) {
+  try {
+    const auth = Buffer.from(`${config.consumerKey}:${config.consumerSecret}`).toString('base64');
+    const { data } = await http.get(`${config.baseUrl}/oauth/v1/generate?grant_type=client_credentials`, {
+      ...transportOptions, headers: { Authorization: `Basic ${auth}` },
+    });
+    if (typeof data?.access_token !== 'string' || data.access_token.length < 8 || data.access_token.length > 4096) throw new Error('Invalid token');
+    return data.access_token;
+  } catch {
+    // Never retain Axios errors: they contain Authorization, passkeys and callback URLs.
+    throw new DarajaError('PROVIDER_AUTH_UNAVAILABLE', false);
   }
+}
 
-  const token = await getAccessToken();
+function passwordFields(config) {
   const ts = timestamp();
-  const shortcode = process.env.MPESA_SHORTCODE;
-  const password = Buffer.from(`${shortcode}${process.env.MPESA_PASSKEY}${ts}`).toString('base64');
-
-  const { data } = await axios.post(
-    `${baseUrl()}/mpesa/stkpush/v1/processrequest`,
-    {
-      BusinessShortCode: shortcode,
-      Password: password,
-      Timestamp: ts,
-      TransactionType: process.env.MPESA_TRANSACTION_TYPE || 'CustomerPayBillOnline',
-      Amount: Math.max(1, Math.round(Number(amount))),
-      PartyA: normalizePhone(phone),
-      PartyB: shortcode,
-      PhoneNumber: normalizePhone(phone),
-      CallBackURL: process.env.MPESA_CALLBACK_URL,
-      AccountReference: accountReference || 'No Maneno',
-      TransactionDesc: transactionDesc || 'No Maneno Bazaar order',
-    },
-    {
-      headers: { Authorization: `Bearer ${token}` },
-      timeout: 30000,
-    }
-  );
-
-  return data;
+  return { BusinessShortCode: config.shortcode, Password: Buffer.from(`${config.shortcode}${config.passkey}${ts}`).toString('base64'), Timestamp: ts };
 }
 
-export async function queryStk(checkoutRequestId) {
-  if (process.env.MPESA_ENVIRONMENT === 'sandbox' && process.env.MPESA_SANDBOX_SIMULATE === 'true') {
-    return {
-      ResponseCode: '0',
-      ResponseDescription: 'Sandbox simulation query accepted',
-      MerchantRequestID: `sandbox_${Date.now()}`,
-      CheckoutRequestID: checkoutRequestId,
-      ResultCode: '0',
-      ResultDesc: 'Sandbox simulation complete',
-    };
+export async function requestStkPush(config, { phone, amount, callbackUrl, accountReference }, transport = axios) {
+  const http = checkedTransport(transport);
+  const token = await accessToken(config, http);
+  try {
+    const { data } = await http.post(`${config.baseUrl}/mpesa/stkpush/v1/processrequest`, {
+      ...passwordFields(config), TransactionType: config.transactionType,
+      Amount: amount, PartyA: phone, PartyB: config.shortcode, PhoneNumber: phone,
+      CallBackURL: callbackUrl, AccountReference: accountReference, TransactionDesc: 'Apex Cart',
+    }, { ...transportOptions, headers: { Authorization: `Bearer ${token}` } });
+    const parsed = initiationResponseSchema.safeParse(data);
+    if (!parsed.success) throw new DarajaError('PROVIDER_RESPONSE_INVALID', true);
+    return parsed.data.ResponseCode === 0
+      ? { accepted: true, checkoutRequestId: parsed.data.CheckoutRequestID, merchantRequestId: parsed.data.MerchantRequestID }
+      : { accepted: false };
+  } catch (error) {
+    if (error instanceof DarajaError) throw error;
+    const refused = axios.isAxiosError(error) && [400, 401, 403, 404, 422].includes(error.response?.status);
+    throw new DarajaError(refused ? 'PROVIDER_REJECTED' : 'PROVIDER_OUTCOME_UNKNOWN', !refused);
   }
-
-  const token = await getAccessToken();
-  const ts = timestamp();
-  const shortcode = process.env.MPESA_SHORTCODE;
-  const password = Buffer.from(`${shortcode}${process.env.MPESA_PASSKEY}${ts}`).toString('base64');
-
-  const { data } = await axios.post(
-    `${baseUrl()}/mpesa/stkpushquery/v1/query`,
-    {
-      BusinessShortCode: shortcode,
-      Password: password,
-      Timestamp: ts,
-      CheckoutRequestID: checkoutRequestId,
-    },
-    {
-      headers: { Authorization: `Bearer ${token}` },
-      timeout: 30000,
-    }
-  );
-
-  return data;
 }
+
+export async function queryStk(config, checkoutRequestId, transport = axios) {
+  const http = checkedTransport(transport);
+  const token = await accessToken(config, http);
+  try {
+    const { data } = await http.post(`${config.baseUrl}/mpesa/stkpushquery/v1/query`, {
+      ...passwordFields(config), CheckoutRequestID: checkoutRequestId,
+    }, { ...transportOptions, headers: { Authorization: `Bearer ${token}` } });
+    const parsed = queryResponseSchema.safeParse(data);
+    if (!parsed.success || parsed.data.ResponseCode !== 0) throw new DarajaError('PROVIDER_QUERY_PENDING', true);
+    return {
+      checkoutRequestId: parsed.data.CheckoutRequestID,
+      merchantRequestId: parsed.data.MerchantRequestID,
+      resultCode: parsed.data.ResultCode,
+    };
+  } catch (error) {
+    if (error instanceof DarajaError) throw error;
+    throw new DarajaError('PROVIDER_QUERY_UNAVAILABLE', true);
+  }
+}
+
+export default { initiate: requestStkPush, query: queryStk };

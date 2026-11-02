@@ -3,7 +3,7 @@ import { AxiosError, AxiosHeaders } from "axios";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { User } from "../api/auth";
-import type { QuoteRequest } from "../api/orders";
+import type { Order, QuoteRequest } from "../api/orders";
 import { buildCategoryTree } from "../store/catalogModel";
 import type { CatalogValue } from "../store/CatalogContext";
 import type { OrderIntent } from "../store/checkoutModel";
@@ -18,6 +18,7 @@ import {
   officeAddress,
   poloLine,
 } from "../test-support/checkoutFixtures";
+import { fixtureConfirmedAttempt, fixturePaymentOverview } from "../test-support/paymentFixtures";
 import { shopperStateKey } from "../utils/storage";
 import Cart from "./Cart";
 import Checkout from "./Checkout";
@@ -26,10 +27,12 @@ const mocks = vi.hoisted(() => ({
   user: null as User | null,
   catalog: null as CatalogValue | null,
   orders: { createQuote: vi.fn(), getQuote: vi.fn(), placeOrder: vi.fn(), getOrder: vi.fn() },
+  payments: { getOverview: vi.fn(), requestPrompt: vi.fn(), checkAttempt: vi.fn() },
 }));
 vi.mock("../contexts/AuthContext", () => ({ useAuth: () => ({ user: mocks.user }) }));
 vi.mock("../store/CatalogContext", () => ({ useCatalog: () => mocks.catalog }));
 vi.mock("../api/orders", async (importOriginal) => ({ ...await importOriginal<typeof import("../api/orders")>(), checkoutAPI: mocks.orders }));
+vi.mock("../api/mpesa", () => ({ paymentsAPI: mocks.payments, staffPaymentsAPI: {} }));
 
 const WAIT = { timeout: 3000 };
 const customerA: User = { id: "customer-a", email: "a@example.test", firstName: "Ada", lastName: "Customer", addresses: [homeAddress, officeAddress] };
@@ -73,6 +76,10 @@ async function reserveButton() {
   return button;
 }
 
+/** Orders the payment service knows; each is served with payments switched off unless a test says otherwise. */
+const paymentOrders = new Map<string, Order>();
+const servePayments = (...orders: Order[]) => { for (const placed of orders) paymentOrders.set(placed.id, placed); };
+
 beforeEach(() => {
   mocks.user = customerA;
   const snapshot = fixtureSnapshot({ mode: "live" });
@@ -81,8 +88,15 @@ beforeEach(() => {
     productsById: new Map(snapshot.products.map((product) => [product.id, product])),
     categories: buildCategoryTree(snapshot.categories), designers: [], discounts: [], reload: vi.fn(),
   };
-  for (const fn of Object.values(mocks.orders)) fn.mockReset();
+  for (const fn of [...Object.values(mocks.orders), ...Object.values(mocks.payments)]) fn.mockReset();
   mocks.orders.createQuote.mockResolvedValue({ data: fixtureQuote() });
+  paymentOrders.clear();
+  servePayments(fixturePendingOrder(fixtureQuote()), fixturePendingOrder(poloQuote));
+  mocks.payments.getOverview.mockImplementation(async (orderId: string) => {
+    const placed = paymentOrders.get(orderId);
+    if (!placed) throw apiError(404, { code: "ORDER_NOT_FOUND", error: "Order not found." });
+    return { data: fixturePaymentOverview(placed) };
+  });
 });
 
 describe("checkout reservation", () => {
@@ -122,6 +136,52 @@ describe("checkout reservation", () => {
     expect(screen.getByRole("link", { name: "View or cancel in your orders" }).getAttribute("href")).toBe("#/account/orders");
     await persisted("customer-a", { cart: [linen, polo], pendingOrder: null, acknowledgedOrderIds: ["order-quote-1"] });
     expect(screen.getByText("Your cart still has 2 items that were not part of this order.")).toBeTruthy();
+    // Payments are switched off here: that is shown safely and nothing is requested without the customer.
+    expect(await screen.findByText("M-Pesa payment unavailable", undefined, WAIT)).toBeTruthy();
+    expect(mocks.payments.getOverview).toHaveBeenCalledWith("order-quote-1");
+    expect(screen.queryByRole("button", { name: /Send/ })).toBeNull();
+    expect(mocks.payments.requestPrompt).not.toHaveBeenCalled();
+    expect(screen.getByText("Pending · not paid")).toBeTruthy();
+  });
+
+  it("updates the reservation summary when the payment service reports the order paid", async () => {
+    seed("customer-a", [linen]);
+    const placed = fixturePendingOrder(fixtureQuote());
+    mocks.orders.placeOrder.mockResolvedValue({ data: placed });
+    const paid = { ...placed, paymentStatus: "PAID" as const, reservationStatus: "COMMITTED" as const, reservationExpiresAt: null };
+    mocks.payments.getOverview.mockResolvedValue({ data: fixturePaymentOverview(paid, {
+      environment: "production", reasonCode: "ORDER_NOT_PAYABLE", message: "This order is not awaiting payment on an active reservation.",
+      attempts: [fixtureConfirmedAttempt(placed)],
+    }) });
+    render(tree(<Checkout />));
+    fireEvent.click(await reserveButton());
+
+    expect(await screen.findByRole("heading", { name: "Order reserved" }, WAIT)).toBeTruthy();
+    expect(await screen.findByText("Payment received", undefined, WAIT)).toBeTruthy();
+    expect(screen.getByText("Payment confirmed")).toBeTruthy();
+    expect(screen.getByText("SBX1234567")).toBeTruthy();
+    expect(screen.queryByText("Pending · not paid")).toBeNull();
+    expect(screen.queryByText(/No payment has been taken/)).toBeNull();
+    expect(screen.queryByText("Items held until")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Send/ })).toBeNull();
+    expect(mocks.payments.requestPrompt).not.toHaveBeenCalled();
+  });
+
+  it("does not claim no money was taken when received funds still need order attribution review", async () => {
+    seed("customer-a", [linen]);
+    const placed = fixturePendingOrder(fixtureQuote());
+    mocks.orders.placeOrder.mockResolvedValue({ data: placed });
+    mocks.payments.getOverview.mockResolvedValue({ data: fixturePaymentOverview(placed, {
+      environment: "production", reasonCode: "PAYMENT_EXISTS", message: "Staff review is required",
+      attempts: [fixtureConfirmedAttempt(placed, { status: "REVIEW", reviewRequired: true, reasonCode: "ORDER_AMOUNT_CHANGED" })],
+    }) });
+    render(tree(<Checkout />));
+    fireEvent.click(await reserveButton());
+    expect(await screen.findByText("Payment received: staff review needed", undefined, WAIT)).toBeTruthy();
+    expect(screen.getByText(/Payment has not been confirmed for this order yet/)).toBeTruthy();
+    expect(screen.queryByText(/No payment has been taken/)).toBeNull();
+    expect(screen.queryByRole("button", { name: /Send.*M-Pesa/ })).toBeNull();
+    expect(mocks.payments.requestPrompt).not.toHaveBeenCalled();
   });
 
   it("keeps the same request key after a lost response and finishes with one order", async () => {
@@ -185,6 +245,7 @@ describe("checkout reservation", () => {
       discount: 0, discountedSubtotal: 1000, tax: 160, total: 1360,
     });
     mocks.orders.createQuote.mockResolvedValueOnce({ data: fixtureQuote() }).mockResolvedValue({ data: changed });
+    servePayments(fixturePendingOrder(changed));
     mocks.orders.placeOrder.mockRejectedValueOnce(apiError(409, {
       error: "Prices, delivery or the address changed. Request and review a new quote.", code: "QUOTE_CHANGED",
     }));

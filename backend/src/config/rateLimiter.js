@@ -29,3 +29,11 @@ export const apiLimiter = rateLimit({
     error: 'Too many API requests, please slow down.',
   },
 });
+
+export const mpesaCallbackLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 600,
+  message: { error: 'Callback request limit reached.', code: 'CALLBACK_RATE_LIMIT' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});

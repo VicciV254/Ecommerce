@@ -9,6 +9,7 @@ import { assertAuthConfigured } from './config/auth.js';
 export async function startServer({
   port = Number(process.env.PORT || 5000),
   host = process.env.HOST || '0.0.0.0',
+  application = app,
 } = {}) {
   if (!Number.isInteger(port) || port < 0 || port > 65535) {
     throw new Error('PORT must be an integer from 0 to 65535');
@@ -44,7 +45,7 @@ export async function startServer({
 
   try {
     await prisma.$connect();
-    server = app.listen(port, host);
+    server = application.listen(port, host);
     await once(server, 'listening');
     stopJobs = startBackgroundJobs();
     process.once('SIGINT', onSignal);
