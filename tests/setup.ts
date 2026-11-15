@@ -13,6 +13,15 @@ if (typeof HTMLDialogElement.prototype.close !== "function") {
   };
 }
 
+// jsdom does no layout, so sizes never change and observers have nothing to report; browser tests cover resizing.
+if (typeof globalThis.ResizeObserver !== "function") {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}
+
 afterEach(() => {
   cleanup();
   localStorage.clear();

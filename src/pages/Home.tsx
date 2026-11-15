@@ -4,7 +4,7 @@ import { StorefrontSections } from "../components/StorefrontSections";
 import { useStorefront } from "../store/StorefrontContext";
 
 export default function Home() {
-  const { status, error, storefront, mediaById, reload } = useStorefront();
+  const { status, error, storefront, mediaById, reload, brandName } = useStorefront();
 
   if (status === "loading") {
     return <Container className="py-16"><LoadingPanel label="Loading the storefront…" /></Container>;
@@ -23,6 +23,8 @@ export default function Home() {
 
   return (
     <div className="pb-8">
+      {/* The page's one H1; the published sections below carry the visible headings. */}
+      <h1 className="sr-only">{brandName}</h1>
       <Container className="pt-6"><DemoCatalogNotice /></Container>
       <StorefrontSections settings={storefront.settings} mediaById={mediaById} />
     </div>

@@ -115,7 +115,7 @@ describe("StorefrontSections", () => {
     expect(source.getAttribute("srcset")).toBe("https://media.example.test/hero.jpg%202000w,%20https://elsewhere.example/x.jpg");
   });
 
-  it("sizes department artwork to the tile grid and keeps the missing-image fallback", () => {
+  it("sizes department artwork to the rail tiles and keeps the missing-image fallback", () => {
     state.catalog = {
       ...catalogWith([linenShirt]),
       categories: buildCategoryTree(fixtureCategories.map((category) =>
@@ -128,8 +128,8 @@ describe("StorefrontSections", () => {
     const [phones, fashion] = within(screen.getByRole("list", { name: "Shop by department" })).getAllByRole("link");
     expect(within(phones).getByRole("img", { name: "No department image" })).toBeTruthy();
     const tile = fashion.querySelector("img")!;
-    expect(tile.getAttribute("sizes")).toBe(
-      "(min-width: 1440px) 266px, (min-width: 1024px) calc(20vw - 22.4px), (min-width: 640px) calc(33.34vw - 24px), calc(50vw - 22px)");
+    // Rail tiles: 42% of the rail on phones, 22% from 768px, 15% from 1280px.
+    expect(tile.getAttribute("sizes")).toBe("(min-width: 1440px) 208px, (min-width: 1280px) 15vw, (min-width: 768px) 22vw, 42vw");
     expect(tile.getAttribute("srcset")!.split(", ").map((entry) => entry.split(" ")[1])).toEqual(["240w", "320w", "480w", "640w", "960w"]);
     expect([tile.getAttribute("loading"), tile.getAttribute("alt")]).toEqual(["lazy", ""]);
     expect(tile.getAttribute("class")).toContain("group-hover:scale-110");
@@ -181,6 +181,67 @@ describe("StorefrontSections", () => {
     render(<StorefrontSections settings={fixtureStorefrontSettings()} mediaById={mediaById} />);
     expect(screen.getAllByRole("heading", { name: "Products are unavailable" })).toHaveLength(1);
     expect(screen.queryByRole("heading", { name: "Featured products" })).toBeNull();
+  });
+});
+
+describe("published composition", () => {
+  type Section = StorefrontSettings["sections"][number];
+  const section = (id: string, type: Section["type"], title: string, extra: Partial<Section> = {}): Section =>
+    ({ id, type, title, enabled: true, productIds: [], categoryIds: [], campaignId: null, ...extra });
+  const departments = section("departments", "departments", "Shop by department");
+  const featured = section("featured", "featured", "Featured products");
+  const picks = section("picks", "products", "Staff picks", { productIds: [poloShirt.id, linenShirt.id] });
+  const hero = section("hero", "campaign", "Hero", { campaignId: "launch" });
+  const later = section("later", "campaign", "Later", { campaignId: "later" });
+  const campaigns = [campaign(), campaign({ id: "later", title: "Later offer", layout: "split" })];
+  /** Section headings and campaign regions in document order. */
+  const outline = () => [...document.querySelectorAll("h2")].map((heading) => heading.textContent?.replace(/View all.*/, ""));
+
+  it("follows the published order exactly, and a reorder changes the page", () => {
+    const { rerender } = render(<StorefrontSections settings={fixtureStorefrontSettings({ sections: [hero, featured, departments, later], campaigns })} mediaById={mediaById} />);
+    expect(outline()).toEqual(["Workspace week", "Featured products", "Shop by department", "Later offer"]);
+    rerender(<StorefrontSections settings={fixtureStorefrontSettings({ sections: [departments, later, featured, hero], campaigns })} mediaById={mediaById} />);
+    expect(outline()).toEqual(["Shop by department", "Later offer", "Featured products", "Workspace week"]);
+  });
+
+  it("renders nothing at all for a hidden section, with no fallback in its place", () => {
+    const sections = [hero, { ...departments, enabled: false }, { ...featured, enabled: false }, picks];
+    const { container } = render(<StorefrontSections settings={fixtureStorefrontSettings({ sections, campaigns })} mediaById={mediaById} />);
+    expect(outline()).toEqual(["Workspace week", "Staff picks"]);
+    expect(screen.queryByRole("list", { name: "Shop by department" })).toBeNull();
+    // Hero section, then the product section's container: no empty wrapper is left where the hidden ones were.
+    expect(container.children).toHaveLength(2);
+  });
+
+  it("makes the first campaign shoppers see the hero and later campaigns compact bands with their conditions", () => {
+    const art = fixtureImage({ id: "media-band", url: "https://res.cloudinary.com/apex-test/image/upload/v7/apex-cart/storefront/band.jpg" });
+    const bandCampaigns = [campaigns[0], { ...campaigns[1], desktopMediaId: art.id, mobileMediaId: null }];
+    const media = new Map([...mediaById, [art.id, art]]);
+    render(<StorefrontSections settings={fixtureStorefrontSettings({ sections: [featured, hero, later], campaigns: bandCampaigns })} mediaById={media} />);
+    expect(screen.getByRole("heading", { name: "Workspace week" }).className).toContain("type-display");
+    const band = screen.getByRole("region", { name: "Later offer" });
+    expect(within(band).getByRole("heading", { name: "Later offer" }).className).toContain("type-h3");
+    expect(within(band).getByText("While stocks last.")).toBeTruthy();
+    expect(band.querySelector("picture img")?.getAttribute("sizes")).toBe("(min-width: 90rem) 459px, (min-width: 48rem) 33vw, 100vw");
+  });
+
+  it("shows 4, 6 then 8 products by breakpoint and links the rest through View all", () => {
+    const many = Array.from({ length: 10 }, (_, index) => ({ ...linenShirt, id: `featured-${index}`, name: `Featured ${index}` }));
+    state.catalog = catalogWith(many);
+    render(<StorefrontSections settings={fixtureStorefrontSettings({ sections: [featured, { ...picks, productIds: many.map((product) => product.id) }] })} mediaById={mediaById} />);
+    const items = within(screen.getByRole("list", { name: "Featured products" })).getAllByRole("listitem");
+    expect(items.map((item) => item.className.replace("min-w-0", "").trim())).toEqual([
+      "", "", "", "", "hidden md:block", "hidden md:block", "hidden xl:block", "hidden xl:block",
+    ]);
+    expect(screen.getByRole("link", { name: /View all\s*Featured products/ }).getAttribute("href")).toBe("#/shop?featured=1");
+    expect(screen.getByRole("link", { name: /View all\s*Staff picks/ }).getAttribute("href")).toBe("#/shop");
+  });
+
+  it("keeps each catalog section's place while the catalog loads", () => {
+    state.catalog = catalogWith([], "loading");
+    render(<StorefrontSections settings={fixtureStorefrontSettings({ sections: [departments, featured] })} mediaById={mediaById} />);
+    expect(screen.getAllByRole("status").map((status) => status.textContent)).toEqual(["Loading shop by department…", "Loading featured products…"]);
+    expect(document.querySelectorAll(".product-grid > div")).toHaveLength(8);
   });
 });
 

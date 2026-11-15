@@ -116,6 +116,24 @@
   line-height: 1.5rem;
 }
 
+/*
+ * Product grids: up to 2 columns on phones, 3 from 768px and 4 from 1280px, but never narrower than 9rem a card.
+ * Where that minimum does not fit (narrow phones with enlarged text) the grid drops a column instead of squeezing cards.
+ */
+@utility product-grid {
+  --grid-columns: 2;
+  --grid-gap: 0.75rem;
+  --grid-min: 9rem;
+  display: grid;
+  gap: var(--grid-gap);
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(min(100%, max(var(--grid-min), (100% - (var(--grid-columns) - 1) * var(--grid-gap)) / var(--grid-columns))), 1fr)
+  );
+  @media (width >= 48rem) { --grid-columns: 3; }
+  @media (width >= 80rem) { --grid-columns: 4; }
+}
+
 /* Focus ring colour for a subtree: gold on navy surfaces, info blue on light panels nested inside them. */
 @utility on-navy {
   --focus-ring: var(--color-gold-400);
@@ -162,8 +180,11 @@ body:has(dialog.modal-frame[open]) {
   overflow: hidden;
 }
 
-/* One focus indicator, unlayered so it also replaces `outline-none`: a 3px ring outside a 2px gap. */
-:where(a, button, input, select, textarea, summary):focus-visible {
+/*
+ * One focus indicator, unlayered so it also replaces `outline-none`: a 3px ring outside a 2px gap. It also marks
+ * headings and regions that receive focus on route entry or a level change (`tabindex="-1"`).
+ */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: var(--focus-ring-offset);
 }

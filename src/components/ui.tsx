@@ -34,13 +34,18 @@ export function SampleImageLabel({ className = "" }: { className?: string }) {
   );
 }
 
-export function MissingImage({ label = "Image not yet available" }: { label?: string }) {
+/** `iconOnly` keeps the label for assistive technology but leaves room for a caption laid over the lower part. */
+export function MissingImage({ label = "Image not yet available", iconOnly = false }: { label?: string; iconOnly?: boolean }) {
   return (
-    <div role="img" aria-label={label} className="flex h-full w-full flex-col items-center justify-center gap-1 bg-warm-beige p-3 text-center text-gray-500">
+    <div
+      role="img"
+      aria-label={label}
+      className={`flex h-full w-full flex-col items-center gap-1 bg-warm-beige p-3 text-center text-gray-500 ${iconOnly ? "justify-start pt-[30%]" : "justify-center"}`}
+    >
       <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-7 w-7">
         <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0 0 22.5 18.75V5.25A2.25 2.25 0 0 0 20.25 3H3.75A2.25 2.25 0 0 0 1.5 5.25v13.5A2.25 2.25 0 0 0 3.75 21Z" />
       </svg>
-      <span className="text-[10px] font-semibold uppercase tracking-wider">{label}</span>
+      {!iconOnly && <span className="text-[10px] font-semibold uppercase tracking-wider">{label}</span>}
     </div>
   );
 }
@@ -318,12 +323,12 @@ export function SectionTitle({
   action?: ReactNode;
 }) {
   return (
-    <div className="mb-8 flex items-end justify-between gap-4">
-      <div>
-        <h2 className="font-display text-2xl uppercase tracking-[0.08em] text-brand-primary sm:text-3xl">
+    <div className="mb-5 flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
+      <div className="min-w-0">
+        <h2 className="type-h2 break-words text-navy-900">
           {children}
         </h2>
-        {subtitle && <p className="mt-1 text-sm text-gray-500">{subtitle}</p>}
+        {subtitle && <p className="mt-1 text-sm text-muted">{subtitle}</p>}
       </div>
       {action}
     </div>

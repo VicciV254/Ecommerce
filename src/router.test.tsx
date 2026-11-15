@@ -1,7 +1,7 @@
 import { createRef } from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { Link, useRoute } from "./router";
+import { Link, navigate, useRoute, useRouteState } from "./router";
 
 beforeEach(() => { window.location.hash = ""; });
 
@@ -96,5 +96,63 @@ describe("retired routes", () => {
       expect(window.location.hash).toBe(hash);
       unmount();
     }
+  });
+});
+
+function NavigationProbe() {
+  const { route, kind, previous } = useRouteState();
+  return <p>{`${kind} ${route} from ${previous ?? "nowhere"}`}</p>;
+}
+
+describe("navigation kinds and history entries", () => {
+  let scrollTo: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => { scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => undefined); });
+
+  it("pushes an entry for navigate() and starts the new page at the top", async () => {
+    render(<NavigationProbe />);
+    expect(screen.getByText("load / from nowhere")).toBeTruthy();
+    const entries = window.history.length;
+    act(() => navigate("/shop?cat=fashion"));
+    await screen.findByText("push /shop?cat=fashion from /");
+    expect(window.history.length).toBe(entries + 1);
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: "instant" });
+  });
+
+  it("replaces the current entry in place, keeping the scroll position", async () => {
+    render(<NavigationProbe />);
+    act(() => navigate("/shop"));
+    await screen.findByText("push /shop from /");
+    scrollTo.mockClear();
+    const entries = window.history.length;
+    act(() => navigate("/shop?sort=price-asc", { replace: true }));
+    expect(screen.getByText("replace /shop?sort=price-asc from /shop")).toBeTruthy();
+    expect(window.location.hash).toBe("#/shop?sort=price-asc");
+    expect(window.history.length).toBe(entries);
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it("reports Back as a traversal to the earlier route", async () => {
+    render(<NavigationProbe />);
+    act(() => navigate("/shop?page=2"));
+    await screen.findByText("push /shop?page=2 from /");
+    act(() => navigate("/product/prod-linen-shirt"));
+    await screen.findByText("push /product/prod-linen-shirt from /shop?page=2");
+    act(() => window.history.back());
+    await screen.findByText("traverse /shop?page=2 from /product/prod-linen-shirt");
+  });
+
+  it("adds nothing for a push to the current address", async () => {
+    render(<NavigationProbe />);
+    act(() => navigate("/about"));
+    await screen.findByText("push /about from /");
+    const entries = window.history.length;
+    scrollTo.mockClear();
+    act(() => navigate("/about"));
+    expect(window.history.length).toBe(entries);
+    expect(scrollTo).not.toHaveBeenCalled();
+    // An address change made outside navigate() (typed, or by another script) counts as a traversal.
+    act(() => { window.location.hash = "#/contact"; });
+    await screen.findByText("traverse /contact from /about");
   });
 });

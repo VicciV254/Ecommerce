@@ -155,13 +155,16 @@ async function scrollSettled(page: Page) {
   }));
 }
 
+/** The bottom edge of the sticky chrome: the brand row, plus the phone search row while it sticks too. */
+const stickyBottom = (page: Page) => page.evaluate(() =>
+  Math.max(...[...document.querySelectorAll("[data-sticky-header]")].map((element) => element.getBoundingClientRect().bottom)));
+
 /**
  * Scrolls so `target` sits wholly behind the sticky header (or wholly above the viewport), focuses `from` without
  * scrolling, then moves focus to `target` with the keyboard. Returns how far the target's top ends below the header.
  */
 async function moveFocusPastHeader(page: Page, from: Locator, target: Locator, key: FocusKey, placement: Placement) {
-  const header = page.getByRole("banner");
-  const headerBottom = await header.evaluate((element) => element.getBoundingClientRect().bottom);
+  const headerBottom = await stickyBottom(page);
   await target.evaluate((element, above) => {
     const rect = element.getBoundingClientRect();
     window.scrollBy({ top: above ? rect.bottom + 8 : rect.top - 4, behavior: "instant" });
@@ -174,12 +177,11 @@ async function moveFocusPastHeader(page: Page, from: Locator, target: Locator, k
   await expect(target).toBeFocused();
   await scrollSettled(page);
   const end = (await target.boundingBox())!;
-  const headerBox = (await header.boundingBox())!;
   expect(end.y + end.height, "target ends inside the viewport").toBeLessThanOrEqual(page.viewportSize()!.height);
-  return Math.round(end.y - (headerBox.y + headerBox.height));
+  return Math.round(end.y - await stickyBottom(page));
 }
 
-/** Stands for the last tab stop in the sticky header, whichever controls the current width shows. */
+/** Stands for the last tab stop in the sticky chrome (the phone search row, or else the header), whichever the width shows. */
 const LAST_HEADER_STOP = "the header's last control";
 const SHOP_CARD = { route: "/#/shop", height: 700, key: "Shift+Tab", from: "Choose options for Linen Short-Sleeve Shirt", to: "Linen Short-Sleeve Shirt" } as const;
 const ABOUT = { route: "/#/about", key: "Shift+Tab", from: "Track an order", to: "Browse products" } as const;
@@ -191,6 +193,9 @@ const FOCUS_MOVES: Record<"phone" | "desktop", FocusMove[]> = {
     { ...CONTACT, width: 390, height: 844 },
     { ...OUT_OF_HEADER, width: 390, height: 844 },
     { ...ABOUT, ...NARROW_PHONE, textSize: "200%" },
+    // The listing under the taller phone chrome (brand and search rows), and in landscape where only the brand row sticks.
+    { ...SHOP_CARD, width: 390, height: 844 },
+    { ...SHOP_CARD, width: 667, height: 375 },
   ],
   desktop: [
     { ...ABOUT, width: 1280, height: 900 },
@@ -203,7 +208,7 @@ const FOCUS_MOVES: Record<"phone" | "desktop", FocusMove[]> = {
 
 /** A named link or labelled field in the page content, or the header's last visible tab stop. */
 function focusStop(page: Page, name: string) {
-  if (name === LAST_HEADER_STOP) return page.getByRole("banner").locator("a[href]:visible, button:visible").last();
+  if (name === LAST_HEADER_STOP) return page.locator("[data-sticky-header]").locator("a[href]:visible, button:visible").last();
   const main = page.getByRole("main");
   return main.getByRole("link", { name, exact: true }).or(main.getByLabel(name, { exact: true }));
 }
@@ -230,31 +235,25 @@ test("focus and typing inside the sticky header never scroll the page", async ({
   const focusWithoutScrolling = (locator: Locator) => locator.evaluate((element) => (element as HTMLElement).focus({ preventScroll: true }));
   await page.evaluate((top) => window.scrollTo({ top, behavior: "instant" }), SCROLLED);
 
-  await focusWithoutScrolling(page.getByRole("main").getByRole("link").first());
+  // On phones the department shortcuts scroll with the page between the sticky search row and the content.
+  const start = isMobile
+    ? page.getByRole("navigation", { name: "Department shortcuts" }).getByRole("link").first()
+    : page.getByRole("main").getByRole("link").first();
+  await focusWithoutScrolling(start);
   for (let step = 0; step < 4; step += 1) {
     await page.keyboard.press("Shift+Tab");
     expect(await scrollY(), `Shift+Tab ${step + 1} into the header`).toBe(SCROLLED);
   }
   await expect(page.getByRole("banner").locator(":focus")).toHaveCount(1);
 
-  const menu = page.getByRole("button", { name: "Menu", exact: true });
-  if (isMobile) {
-    await focusWithoutScrolling(menu);
-    await page.keyboard.press("Enter");
-    await expect(page.getByRole("dialog", { name: "Navigation menu" })).toBeVisible();
-  }
   const search = page.getByRole("combobox", { name: "Search products" });
   await focusWithoutScrolling(search);
   await page.keyboard.type("shirt");
-  await page.keyboard.press("ArrowDown");
-  await page.keyboard.press("ArrowDown");
   await expect(page.getByRole("option").first()).toBeVisible();
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowDown");
   expect(await scrollY(), "typing and arrowing through suggestions").toBe(SCROLLED);
   await page.keyboard.press("Escape");
-  if (isMobile) {
-    await page.keyboard.press("Tab");
-    await page.keyboard.press("Escape");
-    await expect(menu).toBeFocused();
-  }
-  expect(await scrollY(), "after closing the suggestions and the drawer").toBe(SCROLLED);
+  await expect(page.getByRole("listbox")).toHaveCount(0);
+  expect(await scrollY(), "after closing the suggestions").toBe(SCROLLED);
 });

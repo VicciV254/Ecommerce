@@ -10,6 +10,7 @@ import { Header } from "./components/Header";
 import { Footer } from "./components/Footer";
 import Home from "./pages/Home";
 import Shop from "./pages/Shop";
+import Departments from "./pages/Departments";
 import ProductDetail from "./pages/ProductDetail";
 import Cart from "./pages/Cart";
 import Checkout from "./pages/Checkout";
@@ -40,6 +41,9 @@ function Router() {
       break;
     case "shop":
       page = <Shop route={route} />;
+      break;
+    case "departments":
+      page = <Departments />;
       break;
     case "product":
       page = <ProductDetail id={parts[1] ?? ""} />;
@@ -129,7 +133,8 @@ function Router() {
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
-      <main key={route} className="flex-1 animate-fade-in">
+      {/* The listing keeps its page across its own URL changes, so focus and scroll survive filtering. */}
+      <main key={root === "shop" ? "/shop" : route} className="flex-1 animate-fade-in">
         {page}
       </main>
       {!isAdmin && <Footer />}

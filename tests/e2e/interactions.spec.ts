@@ -18,16 +18,14 @@ import {
 import { linenPair } from "../../src/test-support/checkoutFixtures";
 import { fixtureDeliveredOrder } from "../../src/test-support/orderFixtures";
 
-test("search supports arrow selection and Escape before dismissing its mobile drawer", async ({ page, isMobile }) => {
+test("search suggestions take arrow selection, and Escape closes the list before clearing the text", async ({ page }) => {
   await page.goto("/#/shop");
   await expect(page.getByRole("heading", { name: "All Products", exact: true })).toBeVisible();
-  const menu = page.getByRole("button", { name: "Menu", exact: true });
-  if (isMobile) {
-    await menu.focus();
-    await page.keyboard.press("Enter");
-  }
+  // Phones show the search below the brand row, so it is never only inside the drawer.
   const input = page.getByRole("combobox", { name: "Search products" });
   await input.fill("Linen Short-Sleeve Shirt");
+  // Suggestions follow a short pause in typing.
+  await expect(page.getByRole("listbox", { name: "Search suggestions" })).toBeVisible();
   await input.press("ArrowDown");
   const first = page.getByRole("option").first();
   await expect(first).toContainText("Linen Short-Sleeve Shirt");
@@ -35,12 +33,13 @@ test("search supports arrow selection and Escape before dismissing its mobile dr
   await expect(input).toHaveAttribute("aria-activedescendant", (await first.getAttribute("id"))!);
   await input.press("Escape");
   await expect(page.getByRole("listbox")).toHaveCount(0);
-  if (isMobile) await expect(page.getByRole("dialog", { name: "Navigation menu" })).toBeVisible();
+  await expect(input).toHaveValue("Linen Short-Sleeve Shirt");
+  await input.press("ArrowDown");
+  await expect(page.getByRole("listbox")).toBeVisible();
   await input.press("ArrowDown");
   await input.press("Enter");
   await expect(page).toHaveURL(/#\/product\/prod-linen-shirt$/);
   await expect(page.getByRole("heading", { name: "Linen Short-Sleeve Shirt", exact: true })).toBeVisible();
-  if (isMobile) await expect(menu).toBeFocused();
 });
 
 test("icon links have names and desktop modifier-click opens a separate tab", async ({ page, context, isMobile }) => {
@@ -78,7 +77,8 @@ test("mobile drawers contain focus, restore it, and adapt from narrow phones to 
   await page.locator('header a[href="#/cart"]').evaluate((element: HTMLAnchorElement) => element.focus());
   await expect(close).toBeFocused();
   await page.keyboard.press("Shift+Tab");
-  await expect(dialog.locator("a").last()).toBeFocused();
+  // The drawer ends with the department list, whose entries open their groups.
+  await expect(dialog.locator("a, button").last()).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(close).toBeFocused();
   await page.keyboard.press("Escape");
@@ -108,7 +108,7 @@ test("mobile drawers contain focus, restore it, and adapt from narrow phones to 
   await page.keyboard.press("Enter");
   const filters = page.getByRole("dialog", { name: "Product filters" });
   await expect(filters.getByRole("button", { name: "Close filters" })).toBeFocused();
-  await expect(filters.getByRole("slider")).toHaveAccessibleName(/price/i);
+  await expect(filters.getByRole("textbox", { name: "Minimum price" })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(filterButton).toBeFocused();
   await filterButton.click();

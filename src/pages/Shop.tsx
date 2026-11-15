@@ -1,66 +1,32 @@
-import { useMemo, useState } from "react";
-import type { CatalogCategory, CatalogProduct } from "../api/catalog";
-import { Breadcrumb, Container, DemoCatalogNotice, ErrorPanel, LoadingPanel, ProductCard } from "../components/ui";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
+import type { CatalogCategory, CatalogDesigner } from "../api/catalog";
+import { ActiveFilterChips, FilterPanel, applyListingChange } from "../components/ListingFilters";
 import { ModalDialog } from "../components/Modal";
-import { Link, parseRoute } from "../router";
+import { Breadcrumb, Container, DemoCatalogNotice, ErrorPanel, ProductCard } from "../components/ui";
+import { Link, parseRoute, useRouteState, type RouteState } from "../router";
 import { useCatalog } from "../store/CatalogContext";
-import { activeVariants, inCategory, optionLabel, productPriceView } from "../store/catalogModel";
-import { COLOR_MAP } from "../utils/colors";
-import { searchProducts } from "../utils/search";
+import { CLEAR_FILTERS, LISTING_PAGE_SIZE, activeFilters, buildListing, type ActiveFilter, type Listing } from "../store/listingModel";
+import { LISTING_SORTS, changeListing, listingRoute, parseListingQuery, type ListingQuery } from "../store/listingQuery";
+import { recallListingScroll, rememberListingScroll } from "../store/listingScroll";
 
-const PER_PAGE = 12;
-const PRICE_STEP = 100;
+/** From this width the filters sit beside the results; below it they open in a sheet. */
+const SIDEBAR_QUERY = "(min-width: 1280px)";
+/** Page links shown on each side of the current page before the rest are shortened to an ellipsis. */
+const PAGE_WINDOW = 1;
+const SKELETON_CARDS = 12;
 
-const SORTS = [
-  { value: "featured", label: "Featured" },
-  { value: "price-asc", label: "Price: Low → High" },
-  { value: "price-desc", label: "Price: High → Low" },
-  { value: "rating", label: "Customer rating" },
-] as const;
-type Sort = (typeof SORTS)[number]["value"];
-type Selections = Record<string, string[]>;
-
-function shopRoute(params: { cat?: string; q?: string; designer?: string }) {
-  const query = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) if (value) query.set(key, value);
-  const text = query.toString();
-  return text ? `/shop?${text}` : "/shop";
-}
-
-/** Option names and values offered by the products in scope, in first-seen order. */
-function facetsFor(products: readonly CatalogProduct[]) {
-  const facets = new Map<string, string[]>();
-  for (const product of products) {
-    for (const variant of activeVariants(product)) {
-      for (const [key, value] of Object.entries(variant.attributes)) {
-        const values = facets.get(key) ?? [];
-        if (!values.includes(value)) values.push(value);
-        facets.set(key, values);
-      }
-    }
-  }
-  return [...facets];
-}
-
-/** A product matches when one active SKU satisfies every selected option. */
-function matchesSelections(product: CatalogProduct, selections: Selections) {
-  const chosen = Object.entries(selections).filter(([, values]) => values.length);
-  if (!chosen.length) return true;
-  return activeVariants(product).some((variant) =>
-    chosen.every(([key, values]) => values.includes(variant.attributes[key] ?? "")));
-}
+const primaryAction =
+  "inline-flex min-h-[44px] items-center justify-center rounded-sm bg-navy-900 px-5 text-sm font-semibold text-white transition-colors duration-(--motion-feedback) hover:bg-gold-500 hover:text-navy-900";
+const outlineAction =
+  "inline-flex min-h-[44px] items-center justify-center gap-2 rounded-sm border border-navy-900 px-4 text-sm font-semibold text-navy-900 transition-colors duration-(--motion-feedback) hover:bg-navy-900 hover:text-white";
 
 export default function Shop({ route }: { route: string }) {
   const catalog = useCatalog();
-  const { params } = parseRoute(route);
-  const catSlug = params.get("cat") ?? "";
-  const designerParam = params.get("designer") ?? "";
-  const q = params.get("q") ?? "";
+  const query = useMemo(() => parseListingQuery(parseRoute(route).params), [route]);
 
-  if (catalog.status === "loading") {
-    return <Container className="py-16"><LoadingPanel label="Loading products…" /></Container>;
-  }
+  if (catalog.status === "loading") return <ListingSkeleton />;
   if (catalog.status === "error") {
+    // Retrying reloads the catalog only; the address, and with it the search and filters, stays as it is.
     return (
       <Container className="py-16">
         <ErrorPanel title="Products are unavailable" message={catalog.error ?? "The catalog could not be loaded."} onRetry={catalog.reload} />
@@ -68,290 +34,299 @@ export default function Shop({ route }: { route: string }) {
     );
   }
 
-  const category = catSlug ? catalog.categories.bySlug.get(catSlug) : undefined;
-  const designer = designerParam
-    ? catalog.designers.find((item) => item.slug === designerParam || item.id === designerParam)
+  const category = query.cat ? catalog.categories.bySlug.get(query.cat) : undefined;
+  const designer = query.designer
+    ? catalog.designers.find((item) => item.slug === query.designer || item.id === query.designer)
     : undefined;
-  if ((catSlug && !category) || (designerParam && !designer)) {
+  if ((query.cat && !category) || (query.designer && !designer)) {
     return (
       <Container className="py-16">
         <ErrorPanel
-          title={catSlug && !category ? "Category not found" : "Designer not found"}
+          title={query.cat && !category ? "Category not found" : "Designer not found"}
           message="This link does not match anything in the current catalog. It may have been renamed, hidden or removed."
         >
-          <Link to="/shop" className="rounded-sm bg-brand-primary px-6 py-2.5 text-xs font-bold uppercase tracking-wider text-white hover:bg-brand-secondary hover:text-brand-primary">
-            View All Products
-          </Link>
+          <Link to="/shop" className={primaryAction}>View All Products</Link>
         </ErrorPanel>
       </Container>
     );
   }
 
-  return <ShopListing key={route} category={category} designerId={designer?.id} designerName={designer?.name} q={q} designerParam={designerParam} />;
+  return <ShopListing query={query} category={category} designer={designer} />;
 }
 
-function ShopListing({ category, designerId, designerName, designerParam, q }: {
-  category?: CatalogCategory; designerId?: string; designerName?: string; designerParam: string; q: string;
-}) {
+function ShopListing({ query, category, designer }: { query: ListingQuery; category?: CatalogCategory; designer?: CatalogDesigner }) {
   const catalog = useCatalog();
-  const [sort, setSort] = useState<Sort>("featured");
-  const [selections, setSelections] = useState<Selections>({});
-  const [maxPrice, setMaxPrice] = useState<number | null>(null);
-  const [page, setPage] = useState(1);
+  const navigation = useRouteState();
+  const heading = useRef<HTMLHeadingElement>(null);
+  const results = useRef<HTMLDivElement>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const path = useMemo(() => (category ? catalog.categories.path(category.id) : []), [catalog.categories, category]);
+  // Specification filters come from the department and any narrower category that names its own keys.
+  const specKeys = useMemo(() => [...new Set(path.flatMap((item) => item.attributeKeys))], [path]);
+  const listing = useMemo(
+    () => buildListing(catalog.products, query, { category, designerId: designer?.id, specKeys }),
+    [catalog.products, query, category, designer, specKeys],
+  );
+  useListingEntry(navigation, heading, results);
 
-  const scoped = useMemo(() => {
-    const base = q ? searchProducts(q, catalog.products) : catalog.products;
-    return base.filter((product) =>
-      (!category || inCategory(product, category.id)) && (!designerId || product.designerId === designerId));
-  }, [catalog.products, q, category, designerId]);
+  const applied = listing.applied;
+  const filters = activeFilters(applied, designer?.name);
+  const clearable = filters.filter((filter) => filter.id !== "q").length;
+  const total = listing.results.length;
+  const closeFilters = () => setShowFilters(false);
 
-  const prices = useMemo(() => new Map(scoped.flatMap((product) => {
-    const price = productPriceView(product);
-    return price ? [[product.id, price.price] as const] : [];
-  })), [scoped]);
-  const priceCeiling = Math.max(PRICE_STEP, Math.ceil(Math.max(0, ...prices.values()) / PRICE_STEP) * PRICE_STEP);
-  const priceLimit = maxPrice ?? priceCeiling;
-  const facets = useMemo(() => facetsFor(scoped), [scoped]);
-
-  const filtered = useMemo(() => {
-    const list = scoped.filter((product) =>
-      (prices.get(product.id) ?? 0) <= priceLimit && matchesSelections(product, selections));
-    const price = (product: CatalogProduct) => prices.get(product.id) ?? 0;
-    if (sort === "price-asc") return [...list].sort((a, b) => price(a) - price(b));
-    if (sort === "price-desc") return [...list].sort((a, b) => price(b) - price(a));
-    if (sort === "rating") return [...list].sort((a, b) => b.rating - a.rating || b.reviewsCount - a.reviewsCount);
-    return list;
-  }, [scoped, prices, priceLimit, selections, sort]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
-  const current = Math.min(page, totalPages);
-  const pageItems = filtered.slice((current - 1) * PER_PAGE, current * PER_PAGE);
-
-  const toggleOption = (key: string, value: string) => {
-    setSelections((existing) => {
-      const values = existing[key] ?? [];
-      return { ...existing, [key]: values.includes(value) ? values.filter((item) => item !== value) : [...values, value] };
-    });
-    setPage(1);
-  };
-  const clearAll = () => {
-    setSelections({});
-    setMaxPrice(null);
-    setPage(1);
-  };
-
-  const path = category ? catalog.categories.path(category.id) : [];
-  const children = category ? catalog.categories.children(category.id) : catalog.categories.roots;
-  const scopeParams = { q, designer: designerParam };
-
-  const filterPanel = (
-    <div className="space-y-7">
-      <nav aria-label="Departments">
-        <h2 className="mb-3 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">
-          {category ? category.name : "Departments"}
-        </h2>
-        {category && (
-          <Link to={shopRoute({ ...scopeParams, cat: path.length > 1 ? path[path.length - 2].slug : undefined })} className="mb-2 block text-xs font-semibold text-ocean-blue hover:underline">
-            ← {path.length > 1 ? path[path.length - 2].name : "All departments"}
-          </Link>
-        )}
-        {children.length > 0 ? (
-          <ul className="space-y-1.5">
-            {children.map((child) => (
-              <li key={child.id}>
-                <Link to={shopRoute({ ...scopeParams, cat: child.slug })} className="flex justify-between gap-2 text-sm text-charcoal hover:text-brand-secondary">
-                  <span>{child.name}</span>
-                  <span className="text-xs text-gray-500">{child.productCount}</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-xs text-gray-500">No sub-categories.</p>
-        )}
-      </nav>
-
-      {catalog.designers.length > 0 && (
-        <nav aria-label="Designers">
-          <h2 className="mb-3 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Designers</h2>
-          <ul className="space-y-1.5">
-            {designerId && (
-              <li>
-                <Link to={shopRoute({ q, cat: category?.slug })} className="text-xs font-semibold text-ocean-blue hover:underline">← All designers</Link>
-              </li>
-            )}
-            {catalog.designers.map((item) => (
-              <li key={item.id}>
-                <Link
-                  to={shopRoute({ q, cat: category?.slug, designer: item.slug })}
-                  aria-current={item.id === designerId ? "true" : undefined}
-                  className={`text-sm hover:text-brand-secondary ${item.id === designerId ? "font-bold text-brand-primary" : "text-charcoal"}`}
-                >
-                  {item.name}
-                  {item.isDemo && <span className="ml-1 text-[10px] font-bold uppercase text-ocean-blue">Demo</span>}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </nav>
-      )}
-
-      <div>
-        <h2 className="mb-3 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Price Range</h2>
-        <input
-          type="range"
-          aria-label="Maximum price"
-          min={0}
-          max={priceCeiling}
-          step={PRICE_STEP}
-          value={priceLimit}
-          onChange={(event) => { setMaxPrice(Number(event.target.value)); setPage(1); }}
-          className="w-full accent-brand-secondary"
-        />
-        <p className="mt-1 text-xs text-gray-500">KES 0 — KES {priceLimit.toLocaleString("en-KE")}</p>
-      </div>
-
-      {facets.map(([key, values]) => (
-        <fieldset key={key}>
-          <legend className="mb-3 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">{optionLabel(key)}</legend>
-          <div className="flex flex-wrap gap-1.5">
-            {values.map((value) => {
-              const selected = (selections[key] ?? []).includes(value);
-              const swatch = key === "color" ? COLOR_MAP[value] : undefined;
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  aria-pressed={selected}
-                  aria-label={swatch ? value : undefined}
-                  title={value}
-                  onClick={() => toggleOption(key, value)}
-                  style={swatch ? { background: swatch } : undefined}
-                  className={swatch
-                    ? `h-7 w-7 rounded-full border-2 ${selected ? "border-brand-primary ring-2 ring-brand-secondary/50 ring-offset-1" : "border-gray-300"}`
-                    : `rounded-sm border px-2.5 py-1.5 text-[11px] font-medium ${selected ? "border-brand-primary bg-brand-primary text-white" : "border-light-gray text-charcoal hover:border-brand-accent"}`}
-                >
-                  {swatch ? null : value}
-                </button>
-              );
-            })}
-          </div>
-        </fieldset>
-      ))}
-
-      <button
-        type="button"
-        onClick={clearAll}
-        className="w-full rounded-sm border border-brand-primary py-2 text-[11px] font-bold uppercase tracking-[0.12em] text-brand-primary transition-colors hover:bg-brand-primary hover:text-white"
-      >
-        Clear All Filters
-      </button>
-    </div>
+  const title = designer?.name ?? category?.name ?? (applied.q ? `Results for "${applied.q}"` : applied.featured ? "Featured products" : "All Products");
+  const crumbs = category
+    ? [
+      { label: "Shop", to: "/shop" },
+      ...path.map((item, index) => ({ label: item.name, to: index < path.length - 1 ? listingRoute({ cat: item.slug }) : undefined })),
+    ]
+    : [{ label: "Shop" }];
+  const panel = (onNavigate?: () => void) => (
+    <FilterPanel listing={listing} query={applied} category={category} categories={catalog.categories} designers={catalog.designers} onNavigate={onNavigate} />
   );
 
-  const heading = designerName ?? category?.name ?? (q ? `Results for "${q}"` : "All Products");
-  const crumbs = [
-    { label: "Shop", to: "/shop" },
-    ...path.map((item, index) => ({ label: item.name, to: index < path.length - 1 ? shopRoute({ cat: item.slug }) : undefined })),
-  ];
-
   return (
-    <Container className="py-8">
-      <Breadcrumb items={category ? crumbs : [{ label: "Shop" }]} />
+    <Container className="py-6 md:py-8">
+      <Breadcrumb items={crumbs} />
       <div className="mt-4"><DemoCatalogNotice /></div>
-      <div className="mt-5 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl uppercase tracking-wider text-brand-primary sm:text-3xl">{heading}</h1>
-          <p className="mt-1 text-xs text-gray-500">{filtered.length} {filtered.length === 1 ? "product" : "products"} found</p>
+      <div className="mt-5 flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
+        <div className="min-w-0">
+          <h1 ref={heading} tabIndex={-1} className="type-h1 break-words text-navy-900">{title}</h1>
+          <p aria-live="polite" className="mt-1 text-sm text-muted">{total} {total === 1 ? "product" : "products"} found</p>
         </div>
-        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
-          <select
-            aria-label="Sort products"
-            value={sort}
-            onChange={(event) => {
-              setSort(SORTS.find((option) => option.value === event.target.value)?.value ?? "featured");
-              setPage(1);
-            }}
-            className="min-w-0 max-w-full rounded-sm border border-light-gray bg-white px-3 py-2 text-xs outline-none"
-          >
-            {SORTS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </select>
+        <div className="flex min-w-0 max-w-full flex-wrap items-end gap-3">
+          <label className="flex min-w-0 max-w-full flex-col text-sm font-semibold text-navy-900">
+            Sort by
+            <select
+              value={applied.sort}
+              onChange={(event) => applyListingChange(applied, {
+                sort: LISTING_SORTS.find((option) => option.value === event.target.value)?.value ?? "featured",
+              })}
+              className="mt-1 min-h-[44px] min-w-0 max-w-full rounded-sm border border-control bg-surface px-3 font-normal text-navy-900"
+            >
+              {LISTING_SORTS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </label>
           <button
             type="button"
-            onClick={() => setShowFilters((open) => !open)}
+            onClick={() => setShowFilters(true)}
             aria-haspopup="dialog"
             aria-expanded={showFilters}
-            className="flex items-center gap-1.5 rounded-sm border border-light-gray px-3 py-2 text-xs lg:hidden"
+            className={`${outlineAction} xl:hidden`}
           >
-            <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-3.5 w-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75" /></svg>
+            <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-5"><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75" /></svg>
             Filters
+            {clearable > 0 && (
+              <span className="rounded-full bg-navy-900 px-2 text-xs font-bold leading-5 text-white">
+                {clearable}<span className="sr-only"> active</span>
+              </span>
+            )}
           </button>
         </div>
       </div>
 
-      <div className="mt-6 flex gap-8">
-        <aside className="hidden w-60 shrink-0 lg:block">
-          <div className="sticky top-40">{filterPanel}</div>
-        </aside>
+      {/* With nothing to show, the empty state carries these chips instead, so they are never listed twice. */}
+      {filters.length > 0 && listing.page.length > 0 && (
+        <div className="mt-4">
+          <ActiveFilterChips filters={filters} query={applied} clearAll={clearable ? CLEAR_FILTERS : null} />
+        </div>
+      )}
 
-        {showFilters && (
-          <ModalDialog open={showFilters} label="Product filters" placement="end" dismissAt="(min-width: 1024px)" onClose={() => setShowFilters(false)}>
-            <div className="h-full w-80 max-w-full overflow-y-auto overscroll-contain bg-white p-6">
-              <div className="mb-5 flex items-center justify-between">
-                <h2 className="font-display text-lg">Filters</h2>
-                <button type="button" aria-label="Close filters" onClick={() => setShowFilters(false)} className="text-gray-500 hover:text-brand-primary">
-                  <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
-                </button>
-              </div>
-              {filterPanel}
-            </div>
-          </ModalDialog>
-        )}
-
-        <div className="min-w-0 flex-1">
-          {pageItems.length === 0 ? (
-            <div className="rounded-lg bg-white p-16 text-center shadow-sm">
-              <p className="font-display text-2xl text-brand-primary">No matching products</p>
-              <p className="mt-3 text-sm text-gray-500">
-                {scoped.length ? "Try adjusting your filters." : "Nothing is listed here yet. Try another department or search."}
-              </p>
-            </div>
-          ) : (
+      <div className="mt-6 xl:grid xl:grid-cols-[240px_minmax(0,1fr)] xl:gap-8">
+        <aside aria-label="Filters" className="hidden xl:block">{panel()}</aside>
+        <div ref={results} className="min-w-0">
+          {listing.page.length ? (
             <>
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
-                {pageItems.map((product) => <ProductCard key={product.id} product={product} />)}
-              </div>
-
-              {totalPages > 1 && (
-                <nav aria-label="Pagination" className="mt-10 flex flex-wrap items-center justify-center gap-1.5">
-                  <button type="button" disabled={current === 1} onClick={() => setPage(current - 1)} className="rounded-sm border border-light-gray px-3 py-2 text-xs disabled:opacity-30">
-                    ← Prev
-                  </button>
-                  {Array.from({ length: totalPages }, (_, index) => index + 1).map((number) => (
-                    <button
-                      key={number}
-                      type="button"
-                      aria-current={number === current ? "page" : undefined}
-                      onClick={() => setPage(number)}
-                      className={`h-8 w-8 rounded-sm text-xs ${number === current ? "bg-brand-primary text-white" : "border border-light-gray hover:bg-warm-beige"}`}
-                    >
-                      {number}
-                    </button>
-                  ))}
-                  <button type="button" disabled={current === totalPages} onClick={() => setPage(current + 1)} className="rounded-sm border border-light-gray px-3 py-2 text-xs disabled:opacity-30">
-                    Next →
-                  </button>
-                </nav>
-              )}
-
-              <p className="mt-4 text-center text-[11px] text-gray-500">
-                Showing {(current - 1) * PER_PAGE + 1}–{Math.min(current * PER_PAGE, filtered.length)} of {filtered.length} products
-              </p>
+              <ul aria-label="Products" className="product-grid">
+                {listing.page.map((product) => <li key={product.id} className="min-w-0"><ProductCard product={product} /></li>)}
+              </ul>
+              <Pagination listing={listing} query={applied} />
             </>
+          ) : (
+            <EmptyListing listing={listing} query={applied} filters={filters} category={category} clearable={clearable > 0} />
           )}
+        </div>
+      </div>
+
+      {showFilters && (
+        <ModalDialog open label="Product filters" placement="sheet" dismissAt={SIDEBAR_QUERY} onClose={closeFilters}>
+          <div className="on-light flex h-full w-full flex-col bg-surface text-navy-800 shadow-overlay animate-fade-in md:h-auto md:max-h-[min(90dvh,48rem)] md:max-w-lg md:rounded-lg">
+            <div className="flex items-center justify-between gap-3 border-b border-divider py-1 pl-5 pr-2">
+              <h2 className="type-h3 text-navy-900">Filters</h2>
+              <button type="button" aria-label="Close filters" onClick={closeFilters} className="flex size-[44px] items-center justify-center rounded-full text-navy-900 hover:bg-surface-soft">
+                <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5">{panel(closeFilters)}</div>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-divider px-5 py-3">
+              {clearable > 0 ? (
+                <button type="button" onClick={() => applyListingChange(applied, CLEAR_FILTERS)} className="inline-flex min-h-[44px] items-center px-1 text-sm font-semibold text-link underline underline-offset-4 hover:text-link-hover">
+                  Clear all
+                </button>
+              ) : <span />}
+              <button type="button" onClick={closeFilters} className={primaryAction}>
+                Show {total} {total === 1 ? "result" : "results"}
+              </button>
+            </div>
+            {/* Announces the live count inside the sheet, which makes the page behind it inert. */}
+            <p role="status" className="sr-only">{total} {total === 1 ? "product matches" : "products match"}</p>
+          </div>
+        </ModalDialog>
+      )}
+    </Container>
+  );
+}
+
+function EmptyListing({ listing, query, filters, category, clearable }: {
+  listing: Listing; query: ListingQuery; filters: readonly ActiveFilter[]; category?: CatalogCategory; clearable: boolean;
+}) {
+  const named = filters.map((filter) => filter.label).join("; ");
+  let message: string;
+  if (listing.scoped.length && filters.length) message = `Nothing here matches ${named}. Remove a filter or clear them all.`;
+  else if (query.q) message = `Nothing matches "${query.q}"${category ? ` in ${category.name}` : ""}. Check the spelling or try a broader search.`;
+  else if (filters.length) message = `Nothing matches ${named}.`;
+  else message = category ? `Nothing is listed in ${category.name} yet.` : "No products are listed yet.";
+  return (
+    <div className="rounded-lg border border-divider bg-surface p-6 text-center shadow-card md:p-10">
+      <h2 className="type-h3 text-navy-900">No matching products</h2>
+      <p className="mx-auto mt-2 max-w-xl break-words text-navy-800">{message}</p>
+      {filters.length > 0 && (
+        <div className="mt-5 flex justify-center">
+          <ActiveFilterChips filters={filters} query={query} clearAll={clearable ? CLEAR_FILTERS : null} />
+        </div>
+      )}
+      <div className="mt-5 flex flex-wrap justify-center gap-3">
+        {category && <Link to={changeListing(query, { cat: "" }).route} className={outlineAction}>Search all departments</Link>}
+        <Link to="/departments" className={outlineAction}>Browse departments</Link>
+      </div>
+    </div>
+  );
+}
+
+/** Page numbers to show: the first, the last and a window around the current page, with gaps marked by null. */
+function pageNumbers(current: number, count: number): (number | null)[] {
+  const pages: (number | null)[] = [];
+  for (let page = 1; page <= count; page += 1) {
+    if (page === 1 || page === count || Math.abs(page - current) <= PAGE_WINDOW) pages.push(page);
+    else if (pages[pages.length - 1] !== null) pages.push(null);
+  }
+  return pages;
+}
+
+function Pagination({ listing, query }: { listing: Listing; query: ListingQuery }) {
+  const { pageNumber: current, pageCount, results, page } = listing;
+  const start = (current - 1) * LISTING_PAGE_SIZE + 1;
+  const link = (number: number) => changeListing(query, { page: number }).route;
+  const pageLink = "flex min-h-[44px] min-w-[44px] items-center justify-center rounded-sm px-3 text-sm font-semibold transition-colors duration-(--motion-feedback)";
+  return (
+    <>
+      {pageCount > 1 && (
+        <nav aria-label="Pagination" className="mt-10 flex flex-wrap items-center justify-center gap-2">
+          {current > 1 && <Link to={link(current - 1)} className={`${pageLink} border border-control text-navy-900 hover:bg-surface-soft`}>Previous</Link>}
+          <ul className="flex flex-wrap items-center justify-center gap-1">
+            {pageNumbers(current, pageCount).map((number, index) => (
+              <li key={number ?? `gap-${index}`}>
+                {number === null ? (
+                  <span aria-hidden="true" className="px-1 text-muted">…</span>
+                ) : number === current ? (
+                  <span aria-current="page" className={`${pageLink} bg-navy-900 text-white`}>
+                    <span className="sr-only">Page </span>{number}
+                  </span>
+                ) : (
+                  <Link to={link(number)} className={`${pageLink} border border-control text-navy-900 hover:bg-surface-soft`}>
+                    <span className="sr-only">Page </span>{number}
+                  </Link>
+                )}
+              </li>
+            ))}
+          </ul>
+          {current < pageCount && <Link to={link(current + 1)} className={`${pageLink} border border-control text-navy-900 hover:bg-surface-soft`}>Next</Link>}
+        </nav>
+      )}
+      <p className="mt-4 text-center text-sm text-muted">
+        Showing {start}–{start + page.length - 1} of {results.length} {results.length === 1 ? "product" : "products"}
+      </p>
+    </>
+  );
+}
+
+/** Keeps the listing's layout while the catalog loads, without animation. */
+function ListingSkeleton() {
+  const bar = "rounded-sm bg-surface-soft";
+  return (
+    <Container className="py-6 md:py-8">
+      <p role="status" className="sr-only">Loading products…</p>
+      <div aria-hidden="true">
+        <div className={`h-4 w-40 ${bar}`} />
+        <div className={`mt-9 h-9 w-56 max-w-full ${bar}`} />
+        <div className={`mt-2 h-4 w-28 ${bar}`} />
+        <div className="mt-6 xl:grid xl:grid-cols-[240px_minmax(0,1fr)] xl:gap-8">
+          <div className="hidden space-y-3 xl:block">
+            {Array.from({ length: 6 }, (_, index) => <div key={index} className={`h-6 ${bar}`} />)}
+          </div>
+          <div className="product-grid">
+            {Array.from({ length: SKELETON_CARDS }, (_, index) => (
+              <div key={index} className="overflow-hidden rounded-lg bg-surface shadow-card">
+                <div className="aspect-square bg-surface-soft" />
+                <div className="space-y-2 p-4">
+                  <div className={`h-3 w-1/2 ${bar}`} />
+                  <div className={`h-4 w-3/4 ${bar}`} />
+                  <div className={`h-5 w-1/3 ${bar}`} />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </Container>
   );
+}
+
+/** Whether this document was reloaded or brought back by Back/Forward from another site. */
+function reopened() {
+  if (typeof performance.getEntriesByType !== "function") return false;
+  const [entry] = performance.getEntriesByType("navigation") as PerformanceNavigationTiming[];
+  return entry?.type === "reload" || entry?.type === "back_forward";
+}
+
+/** Focus left in the site header (the menu button after the drawer closed, the search field) stays where it is. */
+const focusInHeader = () => document.activeElement?.closest("[data-site-header]") != null;
+
+/**
+ * Route entry. Returning (Back/Forward, or a reload) puts the listing back where the shopper left it, with focus on
+ * the product they came back from; other entries start at the top with focus on the heading. Filter changes, which
+ * replace the entry, leave focus and scroll alone.
+ */
+function useListingEntry(navigation: RouteState, heading: RefObject<HTMLElement | null>, results: RefObject<HTMLElement | null>) {
+  const handled = useRef<RouteState | null>(null);
+  useLayoutEffect(() => {
+    if (handled.current === navigation) return;
+    handled.current = navigation;
+    const { kind, route, previous } = navigation;
+    if (kind === "replace") return;
+    const saved = kind === "traverse" || (kind === "load" && reopened()) ? recallListingScroll(route) : null;
+    if (saved !== null) window.scrollTo({ top: saved, behavior: "instant" as ScrollBehavior });
+    if (kind === "load" || focusInHeader()) return;
+    const card = saved !== null && previous
+      ? [...(results.current?.querySelectorAll<HTMLAnchorElement>("a[href]:not([tabindex='-1'])") ?? [])]
+        .find((link) => link.getAttribute("href") === `#${previous}`)
+      : undefined;
+    (card ?? heading.current)?.focus({ preventScroll: true });
+  }, [navigation, heading, results]);
+
+  useEffect(() => {
+    let frame = 0;
+    const save = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        if (window.location.hash === `#${navigation.route}`) rememberListingScroll(navigation.route, window.scrollY);
+      });
+    };
+    window.addEventListener("scroll", save, { passive: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", save);
+    };
+  }, [navigation.route]);
 }

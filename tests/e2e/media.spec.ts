@@ -276,7 +276,8 @@ test("only a campaign leading the page loads with high priority; a campaign furt
   await lower.scrollIntoViewIfNeeded();
   await expect.poll(() => lower.evaluate(loaded)).toBe(true);
   const lowerUrl = await lower.evaluate((element: HTMLImageElement) => element.currentSrc);
-  expect(lowerUrl).toBe(rendition(`apex-cart/storefront/lower-${viewport}`, isMobile ? 640 : 1280, "jpg"));
+  // A later campaign is a compact band: its artwork fills phones' width but only a third of the band from 768px.
+  expect(lowerUrl).toBe(rendition(`apex-cart/storefront/lower-${viewport}`, 640, "jpg"));
   expect(priorities.get(lowerUrl)).not.toBe("High");
   expect(requested.filter((url) => /\/apex-cart\/storefront\/(top|lower)-/.test(url)).sort()).toEqual([lowerUrl, topUrl].sort());
   await test.info().attach("campaign-priorities.json", {
