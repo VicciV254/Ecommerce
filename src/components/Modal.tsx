@@ -1,13 +1,23 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
+const PLACEMENTS = {
+  center: "items-center justify-center p-4",
+  end: "items-stretch justify-end p-0",
+  /** Full-height sheet on phones; a centred dialog from 768px. */
+  sheet: "items-stretch justify-center p-0 md:items-center md:p-4",
+} as const;
+
+/** Elements that can be Tab stops, including native disclosure summaries. */
+const TAB_STOP_SELECTOR = "a[href], button, input, select, textarea, summary, [tabindex]";
+
 export function ModalDialog({
   open, onClose, label, placement = "center", dismissAt, children,
 }: {
   open: boolean;
   onClose: () => void;
   label: string;
-  placement?: "center" | "end";
+  placement?: keyof typeof PLACEMENTS;
   dismissAt?: string;
   children: ReactNode;
 }) {
@@ -41,31 +51,28 @@ export function ModalDialog({
     <dialog
       ref={ref}
       aria-label={label}
-      className={`modal-frame fixed inset-0 m-0 h-dvh max-h-none w-screen max-w-none border-0 bg-transparent text-inherit backdrop:bg-black/50 open:flex ${
-        placement === "end" ? "items-stretch justify-end p-0" : "items-center justify-center p-4"
-      }`}
+      className={`modal-frame fixed inset-0 m-0 h-dvh max-h-none w-screen max-w-none border-0 bg-transparent text-inherit backdrop:bg-black/50 open:flex ${PLACEMENTS[placement]}`}
       onKeyDown={(event) => {
         if (
           event.key !== "Tab" || event.defaultPrevented ||
           !(event.target instanceof Element) || event.target.closest("dialog") !== event.currentTarget
         ) return;
         const dialog = event.currentTarget;
-        const controls = Array.from(dialog.querySelectorAll<HTMLElement>("a[href], button, input, select, textarea, [tabindex]"))
+        const focused = event.target;
+        const controls = Array.from(dialog.querySelectorAll<HTMLElement>(TAB_STOP_SELECTOR))
           .filter((element) => element.tabIndex >= 0 && !element.matches(":disabled") &&
             element.closest("dialog") === dialog && element.getClientRects().length > 0 &&
             getComputedStyle(element).visibility === "visible");
-        const first = controls[0];
-        const last = controls[controls.length - 1];
-        if (!first) {
+        if (!controls.length) {
           event.preventDefault();
           dialog.focus();
-        } else if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog)) {
-          event.preventDefault();
-          last.focus();
-        } else if (!event.shiftKey && document.activeElement === last) {
-          event.preventDefault();
-          first.focus();
+          return;
         }
+        // Wrap only past the last stop in the direction of travel; focus may also sit on the dialog or a region holding its controls.
+        const ahead = event.shiftKey ? Node.DOCUMENT_POSITION_PRECEDING : Node.DOCUMENT_POSITION_FOLLOWING;
+        if (controls.some((control) => focused.compareDocumentPosition(control) & ahead)) return;
+        event.preventDefault();
+        (event.shiftKey ? controls[controls.length - 1] : controls[0]).focus();
       }}
       onCancel={(event) => { event.preventDefault(); event.stopPropagation(); onClose(); }}
       onPointerDown={(event) => { backdropPress.current = event.target === event.currentTarget; }}

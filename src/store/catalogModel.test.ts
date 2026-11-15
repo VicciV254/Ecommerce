@@ -41,6 +41,23 @@ describe("catalog snapshot boundary", () => {
     const broken = { ...fixtureSnapshot(), products: [{ ...linenShirt, variants: [{ id: "missing-fields" }] }] };
     expect(() => parseCatalogSnapshot(broken, ["demo"])).toThrow(/products/);
   });
+
+  it("carries each product's return rule and the catalog's return terms, rejecting unknown or missing ones", () => {
+    const snapshot = fixtureSnapshot({ products: [{ ...linenShirt, returnRule: "UNOPENED_OR_FAULT" }] });
+    const parsed = parseCatalogSnapshot(snapshot, ["demo"]);
+    expect(parsed.products[0].returnRule).toBe("UNOPENED_OR_FAULT");
+    expect(parsed.returnPolicy).toEqual({
+      version: 1, windowDays: 7, deliveryFeeRefund: "MERCHANT_FAULT_ONLY", partialReturns: true, refundRounding: "UP_TO_WHOLE_KES",
+    });
+    const { returnRule: _rule, ...ruleless } = linenShirt;
+    const { returnPolicy: _policy, ...policyless } = snapshot;
+    expect(() => parseCatalogSnapshot({ ...snapshot, products: [ruleless] }, ["demo"])).toThrow(/products/);
+    expect(() => parseCatalogSnapshot({ ...snapshot, products: [{ ...linenShirt, returnRule: "EXCHANGE_ONLY" }] }, ["demo"])).toThrow(/products/);
+    expect(() => parseCatalogSnapshot(policyless, ["demo"])).toThrow(/return policy/);
+    expect(() => parseCatalogSnapshot({ ...snapshot, returnPolicy: { ...snapshot.returnPolicy, windowDays: 0 } }, ["demo"])).toThrow(/return policy/);
+    expect(() => parseCatalogSnapshot({ ...snapshot, returnPolicy: { ...snapshot.returnPolicy, deliveryFeeRefund: "SOMETIMES" } }, ["demo"]))
+      .toThrow(/return policy/);
+  });
 });
 
 describe("variant resolution", () => {

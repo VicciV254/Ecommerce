@@ -1,8 +1,14 @@
-import autoStageService from './autoStageService.js';
-import refundNotificationService from './refundNotificationService.js';
 import { startImageHostServices } from './imageHostService.js';
-import inventoryService from './inventoryService.js';
-import paymentService from './paymentService.js';
+import { runMaintenance } from './maintenanceService.js';
+
+/**
+ * Optional in-process runner for always-on hosts. Serverless deployments call the
+ * protected maintenance endpoint instead; both run the same durable, leased steps.
+ */
+const JOBS = [
+  { interval: 15_000, steps: ['payments'] },
+  { interval: 60_000, steps: ['reservations', 'notifications'] },
+];
 
 export function startBackgroundJobs() {
   const enabled = process.env.BACKGROUND_JOBS_ENABLED ?? 'false';
@@ -15,21 +21,13 @@ export function startBackgroundJobs() {
   }
 
   const stopImages = startImageHostServices();
-  const jobs = [
-    { name: 'Payment reconciliation', interval: 15_000, run: () => paymentService.reconcileDuePayments() },
-    { name: 'Reservation expiry', interval: 60_000, run: () => inventoryService.expireReservations() },
-    { name: 'Auto-stage', interval: 10_000, run: () => autoStageService.processAutoStages() },
-    { name: 'Refund notification', interval: 60_000, run: () => refundNotificationService.processPendingRefundNotifications() },
-  ];
-  const timers = jobs.map(({ name, interval, run }) => {
+  const timers = JOBS.map(({ interval, steps }) => {
     let running = false;
     return setInterval(async () => {
       if (running) return;
       running = true;
       try {
-        await run();
-      } catch (error) {
-        console.error(`${name} job failed:`, error);
+        await runMaintenance(steps);
       } finally {
         running = false;
       }

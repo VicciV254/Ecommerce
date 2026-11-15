@@ -358,13 +358,24 @@ const STAFF_STAGES: Record<AttemptStage, string> = {
 
 /**
  * Staff view of one order's M-Pesa attempts. Every staff role may read it; checks are offered only where
- * the attempt allows one and the role may request it. Staff cannot start, mark or refund payments here.
+ * the attempt allows one and the role may request it. Staff cannot start or mark payments here;
+ * `attemptActions` adds per-attempt controls supplied by the caller (for example, a review refund request).
  */
-export function StaffPaymentPanel({ orderId, canCheck, headingLevel = 4 }: { orderId: string; canCheck: boolean; headingLevel?: HeadingLevel }) {
-  return <StaffPayment key={orderId} orderId={orderId} canCheck={canCheck} level={headingLevel} />;
+export function StaffPaymentPanel({ orderId, canCheck, headingLevel = 4, attemptActions }: {
+  orderId: string;
+  canCheck: boolean;
+  headingLevel?: HeadingLevel;
+  attemptActions?: (attempt: PaymentAttempt) => ReactNode;
+}) {
+  return <StaffPayment key={orderId} orderId={orderId} canCheck={canCheck} level={headingLevel} attemptActions={attemptActions} />;
 }
 
-function StaffPayment({ orderId, canCheck, level }: { orderId: string; canCheck: boolean; level: HeadingLevel }) {
+function StaffPayment({ orderId, canCheck, level, attemptActions }: {
+  orderId: string;
+  canCheck: boolean;
+  level: HeadingLevel;
+  attemptActions?: (attempt: PaymentAttempt) => ReactNode;
+}) {
   const payment = useStaffPayment(orderId);
   const noteId = useId();
   const busy = payment.busy !== null;
@@ -393,7 +404,7 @@ function StaffPayment({ orderId, canCheck, level }: { orderId: string; canCheck:
           <ol aria-label="M-Pesa attempts, newest first" className="grid gap-3 @3xl:grid-cols-2">
             {overview.attempts.map((attempt) => (
               <StaffAttempt key={attempt.id} attempt={attempt} canCheck={canCheck} busy={busy} noteId={noteId}
-                onCheck={() => void payment.check(attempt)} />
+                onCheck={() => void payment.check(attempt)} extra={attemptActions?.(attempt)} />
             ))}
           </ol>
         ) : (
@@ -408,12 +419,13 @@ function StaffPayment({ orderId, canCheck, level }: { orderId: string; canCheck:
   return <PanelFrame title="M-Pesa payments" level={level} busy={payment.busy} notice={payment.notice}>{body}</PanelFrame>;
 }
 
-function StaffAttempt({ attempt, canCheck, busy, noteId, onCheck }: {
+function StaffAttempt({ attempt, canCheck, busy, noteId, onCheck, extra }: {
   attempt: PaymentAttempt;
   canCheck: boolean;
   busy: boolean;
   noteId: string;
   onCheck: () => void;
+  extra?: ReactNode;
 }) {
   const guidance = staffGuidance(attempt);
   return (
@@ -433,6 +445,7 @@ function StaffAttempt({ attempt, canCheck, busy, noteId, onCheck }: {
           Check with M-Pesa
         </ActionButton>
       )}
+      {extra}
     </li>
   );
 }

@@ -4,6 +4,7 @@ import {
   type CatalogDesigner,
   type CatalogDiscount,
   type CatalogProduct,
+  type CatalogReturnPolicy,
   type CatalogSnapshot,
 } from "../api/catalog";
 import { describeApiError } from "../api/errors";
@@ -30,10 +31,12 @@ export type CatalogValue = {
   categories: CategoryTree;
   designers: CatalogDesigner[];
   discounts: CatalogDiscount[];
+  /** Return terms for new orders; `null` until the snapshot has loaded. */
+  returnPolicy: CatalogReturnPolicy | null;
   reload: () => void;
 };
 
-const EMPTY: CatalogSnapshot = { version: 2, mode: "live", products: [], categories: [], designers: [], discounts: [] };
+const EMPTY: Omit<CatalogSnapshot, "returnPolicy"> = { version: 2, mode: "live", products: [], categories: [], designers: [], discounts: [] };
 
 const CatalogContext = createContext<CatalogValue | null>(null);
 
@@ -55,6 +58,7 @@ function useCatalogValue(state: LoadState, reload: () => void): CatalogValue {
     categories,
     designers: snapshot.designers,
     discounts: snapshot.discounts,
+    returnPolicy: state.status === "ready" ? state.snapshot.returnPolicy : null,
     reload,
   }), [state, snapshot, productsById, categories, reload]);
 }

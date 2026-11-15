@@ -16,7 +16,11 @@ The real `.env` is ignored by Git and excluded from container builds.
 | `JWT_SECRET`, `JWT_REFRESH_SECRET` | Distinct, unique signing secrets of at least 32 characters |
 | `HOST`, `PORT` | Local example binds `127.0.0.1:5000` |
 | `CORS_ORIGIN` | Comma-separated frontend origins, matching their actual host/port |
-| `BACKGROUND_JOBS_ENABLED` | Explicit opt-in to operational background services; defaults to `false` |
+| `FRONTEND_URL` | Public storefront origin used for links in customer emails |
+| `BACKGROUND_JOBS_ENABLED` | Opt-in in-process maintenance for always-on hosts; defaults to `false` |
+| `CRON_SECRET` | Bearer secret for `GET /api/internal/maintenance`; empty disables the endpoint |
+| `RETURN_POLICY_JSON` | Optional complete validated return policy; empty uses `src/config/returnPolicy.js` defaults |
+| `DEMO_NOTIFICATIONS_ENABLED` | Development/test-only opt-in to email customers about labelled demo orders |
 | `ALLOW_DEMO_CATALOG` | Show labelled demo catalog records outside production; defaults to `false` |
 | `ALLOW_DEMO_INITIALIZATION` | Explicit per-invocation consent for the local demo initializer |
 | `ENABLE_ORDER_RESERVATIONS` | Permit pending-order inventory holds; defaults to `false`, never enables payment |
@@ -51,8 +55,9 @@ instead of being disguised as invalid tokens or anonymous sessions.
 `POST /api/orders` and `POST /api/orders/checkout` share one strict
 quote-based pending-order service. Neither accepts client totals, ownership
 or payment-status claims. Creation requires explicit reservation enablement.
-M-Pesa has a separate order-linked attempt lifecycle and enablement gate;
-refund execution is not implemented. A reservation or STK acknowledgement
+M-Pesa has a separate order-linked attempt lifecycle and enablement gate.
+Refunds are recorded, not executed: staff send money outside the application,
+then confirm it with the M-Pesa reference. A reservation or STK acknowledgement
 is not payment or permission to fulfil an order.
 
 External image-host, email and payment settings may remain empty/disabled
@@ -111,18 +116,27 @@ entrypoint. `startServer()` returns a `close()` function that closes the
 listener, stops scheduled jobs and disconnects Prisma. SIGINT/SIGTERM use
 the same cleanup.
 
-Set `BACKGROUND_JOBS_ENABLED=true` only in an intentional operational
-environment. It enables payment reconciliation every 15 seconds, reservation
-expiry every 60 seconds, the existing auto-stage job every 10 seconds, refund
-notification every 60 seconds and optional image-host session work.
+Set `BACKGROUND_JOBS_ENABLED=true` only on an intentional always-on host.
+It runs due payment reconciliation every 15 seconds, reservation expiry and
+due email delivery every 60 seconds, and optional image-host session work.
 These services can mutate orders and send messages; they are not health
 checks. A job does not overlap its previous invocation. `NODE_ENV=test`
 always prevents background startup, even if the opt-in flag is set.
+
+Serverless hosts run the same bounded steps through
+`GET /api/internal/maintenance`. It returns 503 until `CRON_SECRET` is set
+(16+ characters, no whitespace) and 401 unless the request carries exactly
+`Authorization: Bearer <CRON_SECRET>`. `vercel.json` schedules it daily at
+03:00 UTC, which Vercel runs for production deployments only; a Hobby plan
+permits at most daily cron jobs. Each step is idempotent and reports only
+counts or an error code. Hosted cron execution with this multi-service
+configuration remains a release check.
 Catalog, quote, stock and order reads also process an expiry batch, so
 restarting a server does not lose held inventory. The batch is bounded to
 100 expired orders; repeated requests or job ticks drain a backlog.
-Quoted orders cannot auto-progress until payment is verified and inventory
-is committed. Final scheduler/runtime selection remains a release check.
+Orders never progress on a timer. Staff confirm processing, dispatch or
+pickup readiness, and delivery or collection after payment is verified and
+inventory is committed.
 
 Image uploads authenticate lazily when requested. Optional startup/session
 refresh runs only with background jobs enabled and configured image-host
@@ -219,7 +233,7 @@ remain separate operations.
 | `POST /api/orders/quotes` | Authenticated, versioned, expiring server quote from IDs and customer choices |
 | `GET /api/orders/quotes/:id` | Owner-only saved quote, including consumed/expired state for retry recovery |
 | `POST /api/orders`, `POST /api/orders/checkout` | `{quoteId}` plus `Idempotency-Key`; create or replay an unpaid order atomically |
-| `POST /api/orders/:id/cancel` | Owner cancellation; release reserved units once, with transactionally saved history |
+| `POST /api/orders/:id/cancel` | Owner cancellation before dispatch; releases or restocks units once; a paid order records a refund request |
 
 The old `/settings/admin-data`, `/settings/theme`, `/admin/init` and
 `/admin/orders/import-local` surfaces return HTTP 410. Catalog changes must
@@ -395,8 +409,9 @@ and order history atomically. It does not advance fulfilment. Duplicate or
 reordered callbacks cannot repeat stock or payment effects. A verified payment
 after cancellation/expiry records received money and review status without
 reopening the order or reacquiring inventory. A conflicting callback cannot
-downgrade a previously confirmed payment. Refund handling and notification
-delivery remain later operational work, not fabricated money movement.
+downgrade a previously confirmed payment. Confirmation queues the
+payment-confirmed email in the same transaction; refunds are separate records
+that staff confirm only after sending money (see below).
 Payment finalization, cancellation and expiry lock the order before its stock
 rows to avoid opposite-lock-order deadlocks. A payment review blocks
 fulfilment/pickup shortcuts. The payment overview expires overdue holds
@@ -408,8 +423,9 @@ job processes at most five due attempts per tick and has a bounded automatic
 query count; customer/staff checks use the same guarded service. An unknown
 initiation with no provider reference is not safely replayable upstream and
 may require merchant portal review. No callback retry guarantee is assumed.
-Without an approved scheduler, the owner/staff can explicitly check pending
-attempts; the deployment's durable worker arrangement remains a release gate.
+Customers and staff can explicitly check pending attempts. Always-on hosts
+can also run the optional job; serverless hosts rely on the daily maintenance
+endpoint as the backstop.
 
 Public protocol references: [Daraja portal](https://developer.safaricom.co.ke/apis)
 and [Safaricom's official Node examples](https://github.com/safaricom/mpesa-node-library).
@@ -450,3 +466,96 @@ Keep the generated environment and database credentials outside the working
 tree with owner-only permissions. Do not copy real credentials into docs,
 commands shown in chat, or `.env.example`. The actual sandbox database volume
 must survive service stops; verification databases are separate and disposable.
+
+## Fulfilment, returns, refunds and notifications
+
+Staff move orders explicitly with
+`POST /api/orders/admin/:id/actions` and
+`{ action, expectedStatus, reason?, trackingNumber? }` (ADMIN/SUPER_ADMIN).
+A stale `expectedStatus` returns `ORDER_CHANGED`; an action that is not valid
+for the current state returns `ACTION_NOT_ALLOWED`. Every step records the
+acting staff member, timestamp and history entry.
+
+| Action | Transition | Conditions |
+|---|---|---|
+| `START_PROCESSING` | PENDING -> PROCESSING | Paid, inventory committed, no open payment review |
+| `MARK_READY_FOR_PICKUP` | PROCESSING -> READY_FOR_PICKUP | Store pickup only |
+| `DISPATCH` | PROCESSING -> SHIPPED | Standard or same-day delivery; optional tracking number |
+| `CONFIRM_DELIVERY` | SHIPPED -> DELIVERED | Starts the return window |
+| `CONFIRM_PICKUP` | READY_FOR_PICKUP -> DELIVERED | Records collection; starts the return window |
+| `CANCEL` | PENDING, PROCESSING or READY_FOR_PICKUP -> CANCELLED | Reason required; a paid order records a refund request for the money not yet refunded |
+
+Customers can cancel only while an order is PENDING or PROCESSING, before
+dispatch or pickup readiness. Customers cannot mark an order collected or
+delivered.
+
+Public tracking (`GET /api/orders/track/:number`, no sign-in) lists only status
+changes with fixed wording. Refund amounts, M-Pesa references, locations and
+staff notes appear only in the signed-in customer's and staff views.
+
+### Return policy
+
+The default policy allows refund-only returns of selected items for 7 days
+after delivery or collection. Perishable groceries and innerwear can be
+returned only when faulty, damaged or wrong. Opened personal-care and hygiene
+items are returnable only for those reasons; other reasons require an unopened
+declaration that staff verify on receipt. Categories inherit the nearest
+explicit `returnRule` (`STANDARD`, `FAULT_ONLY` or `UNOPENED_OR_FAULT`).
+New orders snapshot the policy and each line's rule, so later edits do not
+change existing orders.
+
+Refunds cover accepted units at their discounted, VAT-inclusive price. The
+delivery fee is refunded only when staff confirm a merchant fault and no
+earlier refund included it. Amounts round up to whole KES and never exceed
+the money received. `RETURN_POLICY_JSON`, when supplied, replaces the whole
+policy and must match `src/config/returnPolicy.js`: `version`, `windowDays`
+(1-365), `deliveryFeeRefund` (`MERCHANT_FAULT_ONLY`, `ALWAYS` or `NEVER`),
+`partialReturns`, and the fixed `refundRounding`, `resolutions` and
+`refundMethod` values. Increase the version when changing it. Merchant
+confirmation of the published wording remains a release check.
+
+| Route | Contract |
+|---|---|
+| `POST /api/orders/:id/returns` | Owner request with `Idempotency-Key`; `{ reason, comment?, unopenedDeclared?, lines: [{ orderItemId, quantity }] }` |
+| `POST /api/orders/:id/returns/:returnId/cancel` | Owner withdrawal while the request is still REQUESTED |
+| `GET /api/orders/admin/returns` | Staff list, filterable by status |
+| `POST /api/orders/admin/returns/:returnId/decision` | Approve or reject; rejection requires a note |
+| `POST /api/orders/admin/returns/:returnId/receive` | Record received, restocked and refundable quantities; restocks once and requests the refund |
+| `GET /api/orders/admin/refunds` | Staff list, filterable by status |
+| `POST /api/orders/admin/refunds/:refundId/:action` | `approve`, `start`, `confirm`, `fail`, `unresolved`, `retry` or `cancel` with `expectedStatus` |
+| `POST /api/orders/admin/payments/:paymentId/refunds` | Refund request for money received on a payment under review |
+| `POST /api/orders/admin/:id/refunds` | Request money still owed again: `{ source: CANCELLATION, reason }` for a cancelled paid order, or `{ source: RETURN, returnId, reason }` for a received return; offered in the staff order's `refundRequestOptions` |
+
+Refunds move REQUESTED -> APPROVED -> PROCESSING -> CONFIRMED, FAILED or
+UNRESOLVED. Approval never means money was sent. Confirmation requires the
+unique M-Pesa reference (8-32 uppercase letters or digits) and only then
+updates the order to PARTIALLY_REFUNDED or REFUNDED. Cancelling a refund
+records that the money is not being sent through it; if it is still owed, staff
+can request it again from the order, capped at the paid balance that remains.
+
+### Customer email and staff attention
+
+Business transactions write durable notification rows; delivery happens after
+commit with a bounded wait. Failures remain visible and retry with backoff
+until the attempt limit, after which ADMIN/SUPER_ADMIN staff can retry with
+`POST /api/admin/notifications/:id/retry`. Delivery is at-least-once, so a
+customer could rarely receive a duplicate after a provider timeout. Emails use
+the existing SMTP/Gmail settings and `FRONTEND_URL` links; demo orders send no
+email unless `DEMO_NOTIFICATIONS_ENABLED=true` outside production.
+
+`GET /api/admin/attention` lists orders awaiting fulfilment, payment reviews,
+returns awaiting a decision or receipt, refunds needing action and failed
+emails. `POST /api/admin/attention/read` with `{ keys }` stores per-staff read
+state; reading never resolves the underlying work.
+
+### Upgrading existing data
+
+Migration `20261114120000_fulfilment_returns_refunds` stops with an error if
+any order or tracking event still uses the removed `AWAITING_REFUND` or
+`RETURNED` statuses, and applies none of its changes. Resolve those orders
+explicitly (a paid order cancelled this way then offers a refund request for
+the money still owed), mark the failed attempt with
+`npx prisma migrate resolve --rolled-back 20261114120000_fulfilment_returns_refunds`
+(from `backend/`, against the same database), then deploy again. The migration
+links each paid order to its confirmed payment and applies the approved
+category return rules by slug.

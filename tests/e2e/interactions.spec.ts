@@ -7,6 +7,7 @@ import {
   expect,
   linenCartLine,
   order,
+  orderPage,
   publishedStorefront,
   shopperState,
   signInCustomer,
@@ -15,6 +16,7 @@ import {
   test,
 } from "./fixtures";
 import { linenPair } from "../../src/test-support/checkoutFixtures";
+import { fixtureDeliveredOrder } from "../../src/test-support/orderFixtures";
 
 test("search supports arrow selection and Escape before dismissing its mobile drawer", async ({ page, isMobile }) => {
   await page.goto("/#/shop");
@@ -117,7 +119,7 @@ test("mobile drawers contain focus, restore it, and adapt from narrow phones to 
 
 test("receipt and cancellation dialogs preserve nested focus and expose a failed operation", async ({ page, context }) => {
   await signInCustomer(page);
-  await context.route("**/api/orders?*", (route) => route.fulfill({ json: { orders: [order], pagination: { page: 1, limit: 100, total: 1, pages: 1 } } }));
+  await context.route("**/api/orders?*", (route) => route.fulfill({ json: orderPage([order]) }));
   let capture!: (route: Route) => void;
   const pending = new Promise<Route>((resolve) => { capture = resolve; });
   await context.route("**/api/orders/browser-order/cancel", capture);
@@ -314,19 +316,34 @@ test("empty checkout retains the route back to shopping", async ({ page }) => {
   await expect(page).toHaveURL(/#\/shop$/);
 });
 
-test("return failure feedback stays in the active receipt dialog", async ({ page, context }) => {
+test("return failure feedback stays in the active return dialog and keeps the same request for a retry", async ({ page, context }) => {
   await signInCustomer(page);
-  await context.route("**/api/orders?*", (route) => route.fulfill({ json: { orders: [{ ...order, status: "DELIVERED" }], pagination: { page: 1, limit: 100, total: 1, pages: 1 } } }));
-  await context.route("**/api/orders/browser-order/return", (route) => route.fulfill({ status: 503, json: { error: "Return unavailable in this test" } }));
+  const delivered = fixtureDeliveredOrder(order);
+  await context.route("**/api/orders?*", (route) => route.fulfill({ json: orderPage([delivered]) }));
+  const keys: (string | undefined)[] = [];
+  await context.route("**/api/orders/browser-order/returns", (route) => {
+    keys.push(route.request().headers()["idempotency-key"]);
+    return route.fulfill({ status: 503, json: { error: "Return unavailable in this test" } });
+  });
   await page.goto("/#/account/orders");
   await page.getByRole("button", { name: "Details", exact: true }).click();
   const receipt = page.getByRole("dialog", { name: "Receipt Details" });
-  await receipt.getByRole("button", { name: "Return", exact: true }).click();
-  const returnForm = page.getByRole("dialog", { name: "Return Order", exact: true });
-  await returnForm.getByPlaceholder("Please explain why you want to return this order...").fill("Isolated return test");
-  await returnForm.getByRole("button", { name: "Submit Return" }).click();
+  await receipt.getByRole("button", { name: "Request a Return", exact: true }).click();
+  const returnForm = page.getByRole("dialog", { name: "Request a return", exact: true });
+  await returnForm.getByRole("button", { name: "Return one more Linen Short-Sleeve Shirt" }).click();
+  await returnForm.getByRole("combobox", { name: "Reason for return" }).selectOption({ label: "Arrived damaged" });
+  await returnForm.getByRole("button", { name: "Submit return request" }).click();
+  // The outcome is unknown, so the message stays in the active dialog with the same request offered again.
+  await expect(returnForm.getByRole("alert")).toHaveText(/We could not confirm whether your return request was received\./);
+  await returnForm.getByRole("button", { name: "Retry the same request" }).click();
+  await expect.poll(() => keys.length).toBe(2);
+  expect(keys[1]).toBe(keys[0]);
+  // Settled again (not sending), and still unresolved after the second unknown outcome.
+  await expect(returnForm.getByRole("button", { name: "Retry the same request" })).toHaveAttribute("aria-disabled", "false");
+  await expect(returnForm.getByRole("alert")).toHaveText(/We could not confirm whether your return request was received\./);
+  await page.keyboard.press("Escape");
   await expect(returnForm).toHaveCount(0);
-  await expect(receipt.getByRole("status")).toHaveText("Return unavailable in this test");
+  await expect(receipt).toBeVisible();
 });
 
 test("password visibility can be reached and changed using the keyboard", async ({ page }) => {

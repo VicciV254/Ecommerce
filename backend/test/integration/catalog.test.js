@@ -8,7 +8,7 @@ import { initializeDemo } from '../../src/services/demoInitializer.js';
 import { buildDemoCatalog } from '../../src/data/demoCatalog.js';
 import { categoryContext } from '../../src/services/catalogService.js';
 import defaults from '../../src/data/storefront-defaults.json' with { type: 'json' };
-import emailService from '../../src/services/emailService.js';
+import { mailer } from '../../src/services/notificationService.js';
 
 const initEnv = {
   ...process.env, ALLOW_DEMO_INITIALIZATION: 'true',
@@ -22,7 +22,7 @@ const firstRoot = rows.categories.find((item) => !item.parentId);
 const copy = (value) => JSON.parse(JSON.stringify(value));
 
 before(async () => {
-  mock.method(emailService, 'sendOrderConfirmation', async () => ({ success: true }));
+  mock.method(mailer, 'send', async () => ({ provider: 'test', messageId: 'test-message' }));
   process.env.ALLOW_DEMO_CATALOG = 'true';
   process.env.ENABLE_ORDER_RESERVATIONS = 'true';
   const started = await startServer({ host: '127.0.0.1', port: 0 });
@@ -220,8 +220,9 @@ test('production visibility and real analytics exclude demo data even when the p
   assert.equal((await call(`/orders/${demoOrder.id}`, { token: customerToken })).status, 404);
   assert.equal((await call(`/orders/track/${demoOrder.orderNumber}`, { token: null })).status, 404);
   assert.ok((await call('/orders', { token: customerToken })).data.orders.every((item) => !item.isDemo));
-  assert.equal((await call('/orders/admin/auto-stage/bulk', { method: 'POST', body: { orderIds: [demoOrder.id], enabled: false } })).status, 200);
-  assert.equal((await prisma.order.findUnique({ where: { id: demoOrder.id } })).autoStageEnabled, demoOrder.autoStageEnabled);
+  const demoAction = await call(`/orders/admin/${demoOrder.id}/actions`, { method: 'POST', body: { action: 'START_PROCESSING', expectedStatus: 'PENDING' } });
+  assert.equal(demoAction.status, 404);
+  assert.equal((await prisma.order.findUnique({ where: { id: demoOrder.id } })).status, 'PENDING');
   const previous = process.env.NODE_ENV;
   try {
     process.env.NODE_ENV = 'production';

@@ -1,4 +1,5 @@
 import api from "./client";
+import type { DeliveryFeeRefund, ReturnRule } from "./orders";
 import { staffRequest } from "./staffSession";
 
 export type MediaAsset = {
@@ -66,6 +67,8 @@ export type CatalogProduct = {
   isActive: boolean;
   isFeatured: boolean;
   isDemo: boolean;
+  /** Effective return rule from the product's category path. */
+  returnRule: ReturnRule;
   images: MediaAsset[];
   variants: CatalogVariant[];
   stock: number;
@@ -115,6 +118,15 @@ export type CatalogDiscount = {
   isDemo: boolean;
 };
 
+/** Public return terms for new orders; each order keeps the terms it was bought under. */
+export type CatalogReturnPolicy = {
+  version: number;
+  windowDays: number;
+  deliveryFeeRefund: DeliveryFeeRefund;
+  partialReturns: boolean;
+  refundRounding: "UP_TO_WHOLE_KES";
+};
+
 export type CatalogSnapshot = {
   version: 2;
   mode: "live" | "demo" | "admin";
@@ -122,6 +134,7 @@ export type CatalogSnapshot = {
   categories: CatalogCategory[];
   designers: CatalogDesigner[];
   discounts: CatalogDiscount[];
+  returnPolicy: CatalogReturnPolicy;
 };
 
 /** `quantity` is the on-hand count; the server rejects values below the reserved units. */

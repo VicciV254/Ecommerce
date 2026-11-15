@@ -1,8 +1,9 @@
-import { expect, test as base, type BrowserContext, type Page, type Route } from "@playwright/test";
+import { expect, test as base, type BrowserContext, type Locator, type Page, type Route } from "@playwright/test";
 import type { User } from "../../src/api/auth";
+import type { StaffOrder } from "../../src/api/admin";
 import type { CatalogProduct, CatalogSnapshot, CatalogStock, StorefrontDraft } from "../../src/api/catalog";
 import type { PaymentOverview } from "../../src/api/mpesa";
-import type { Order, Quote } from "../../src/api/orders";
+import type { CustomerOrder, Order, Quote } from "../../src/api/orders";
 import {
   fixtureProduct,
   fixtureSnapshot,
@@ -12,6 +13,7 @@ import {
   linenShirt,
 } from "../../src/test-support/catalogFixtures";
 import { fixtureQuote } from "../../src/test-support/checkoutFixtures";
+import { fixtureCustomerOrder } from "../../src/test-support/orderFixtures";
 import { fixturePaymentOverview } from "../../src/test-support/paymentFixtures";
 import { STORAGE_KEYS, shopperStateKey } from "../../src/utils/storage";
 import { E2E_ORIGIN } from "../browser-config";
@@ -34,13 +36,14 @@ export const customer: User = {
 
 export const staff = { id: "browser-admin", email: "admin@example.test", username: "Browser staff", role: "ADMIN" };
 
-export const order = {
-  id: "browser-order", orderNumber: "TEST-ORDER-1", user: customer,
+/** An unpaid legacy order as the customer order view reports it: it can still be cancelled. */
+export const order: CustomerOrder = fixtureCustomerOrder({
+  id: "browser-order", orderNumber: "TEST-ORDER-1",
   status: "PENDING", paymentStatus: "PENDING", paymentMethod: "MPESA", deliveryMethod: "STANDARD",
   subtotal: 1000, discount: 0, tax: 0, shippingCost: 0, total: 1000, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z",
   address: customer.addresses![0],
   items: [{ id: "browser-item", productId: linenShirt.id, variantId: "var-linen-m-white", productName: "Linen Short-Sleeve Shirt", productPrice: 1000, quantity: 1, subtotal: 1000 }],
-};
+});
 
 const browserAddress = customer.addresses![0];
 
@@ -97,6 +100,7 @@ async function respond(route: Route, url: URL) {
   if (url.pathname === "/api/admin/analytics/dashboard") {
     return route.fulfill({ json: { sales: { total: 0 }, orders: { total: 0, pending: 0, processing: 0, cancelled: 0, returned: 0 }, refunds: { total: 0 }, recentOrders: [] } });
   }
+  if (url.pathname === "/api/admin/attention") return route.fulfill({ json: { items: [] } });
   const productId = /^\/api\/products\/([^/]+)$/.exec(url.pathname)?.[1];
   if (productId) {
     const product = publicSnapshot.products.find((item) => item.id === decodeURIComponent(productId));
@@ -186,6 +190,65 @@ export function watchPaymentWrites(page: Page) {
   });
   return writes;
 }
+
+/** A customer order-history page, as `GET /orders` returns it. */
+export const orderPage = (orders: readonly Order[]) => ({ orders, pagination: { page: 1, limit: 100, total: orders.length, pages: 1 } });
+
+function paginate<T>(items: readonly T[], url: URL) {
+  const page = Math.max(1, Number(url.searchParams.get("page")) || 1);
+  const limit = Math.max(1, Number(url.searchParams.get("limit")) || 20);
+  return {
+    items: items.slice((page - 1) * limit, page * limit),
+    pagination: { page, limit, total: items.length, pages: Math.ceil(items.length / limit) },
+  };
+}
+
+/**
+ * Staff order reads as the API serves them: `/orders/admin/all` honours its status, payment and delivery
+ * filters and pages; returns and refunds lists are derived from the same orders. Writes fall through to the test.
+ */
+export async function serveStaffOrders(context: BrowserContext, orders: () => readonly StaffOrder[]) {
+  await context.route("**/api/orders/admin/**", (route) => {
+    const request = route.request();
+    if (request.method() !== "GET") return route.fallback();
+    if (request.headers().authorization !== `Bearer ${STAFF_TOKEN}`) return route.fulfill({ status: 401, json: { error: "Invalid token" } });
+    const url = new URL(request.url());
+    const current = orders();
+    const path = url.pathname.replace("/api/orders/admin/", "");
+    const status = url.searchParams.get("status");
+    if (path === "all") {
+      const filters = ["status", "paymentStatus", "deliveryMethod"] as const;
+      const matched = current.filter((item) => filters.every((key) => !url.searchParams.get(key) || item[key] === url.searchParams.get(key)));
+      const { items, pagination } = paginate(matched, url);
+      return route.fulfill({ json: { orders: items, pagination } });
+    }
+    if (path === "returns") {
+      const listed = current.flatMap((item) => item.returns.map((entry) => ({ ...entry, orderNumber: item.orderNumber, isDemo: item.isDemo ?? false })));
+      const { items, pagination } = paginate(listed.filter((entry) => !status || entry.status === status), url);
+      return route.fulfill({ json: { returns: items, pagination } });
+    }
+    if (path === "refunds") {
+      const listed = current.flatMap((item) => item.refunds.map((entry) => ({ ...entry, orderNumber: item.orderNumber, isDemo: item.isDemo ?? false })));
+      const { items, pagination } = paginate(listed.filter((entry) => !status || entry.status === status), url);
+      return route.fulfill({ json: { refunds: items, pagination } });
+    }
+    const found = current.find((item) => item.id === decodeURIComponent(path));
+    return found ? route.fulfill({ json: found }) : route.fulfill({ status: 404, json: { error: "Order not found", code: "ORDER_NOT_FOUND" } });
+  });
+}
+
+/** Page-level horizontal overflow in CSS pixels; 0 or less means nothing scrolls sideways. */
+export const pageOverflow = (page: Page) =>
+  page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+
+/** Elements inside `scope` whose content is wider than their box, ignoring form fields that scroll their own value,
+ * 1px visually hidden text and intentional horizontal scrollers. */
+export const clippedWithin = (scope: Locator) => scope.evaluate((root) =>
+  [root, ...root.querySelectorAll<HTMLElement>("*")]
+    .filter((element) => element instanceof HTMLElement && !element.matches("input, textarea, select") &&
+      element.clientWidth > 1 && element.scrollWidth > element.clientWidth + 1 && getComputedStyle(element).overflowX !== "auto")
+    .slice(0, 10)
+    .map((element) => ({ tag: element.tagName, text: element.textContent?.slice(0, 40), client: element.clientWidth, scroll: element.scrollWidth })));
 
 export type StoredShopper = {
   cart: CartLine[];

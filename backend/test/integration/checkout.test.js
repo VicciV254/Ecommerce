@@ -7,7 +7,7 @@ import { generateToken } from '../../src/config/auth.js';
 import { startServer } from '../../src/server.js';
 import { DEFAULT_CHECKOUT_POLICY } from '../../src/config/checkoutPolicy.js';
 import { commitOrderReservation, expireReservations } from '../../src/services/inventoryService.js';
-import emailService from '../../src/services/emailService.js';
+import { mailer } from '../../src/services/notificationService.js';
 
 let base, close, staffToken, sequence = 0;
 let failCartId = null;
@@ -18,8 +18,7 @@ prisma.$use(async (params, next) => {
   return next(params);
 });
 before(async () => {
-  mock.method(emailService, 'sendOrderConfirmation', async () => ({ success: true }));
-  mock.method(emailService, 'sendOrderCancellation', async () => ({ success: true }));
+  mock.method(mailer, 'send', async () => ({ provider: 'test', messageId: 'test-message' }));
   process.env.ENABLE_ORDER_RESERVATIONS = 'true';
   const staff = await prisma.admin.create({ data: {
     email: 'quote-staff@example.test', username: 'quote-staff', password: 'fixture-not-for-login', role: 'ADMIN',
@@ -169,8 +168,13 @@ test('both creation routes persist pending snapshots, ignore stale cart prices, 
   const metrics = await call('/admin/analytics/dashboard', { token: staffToken });
   assert.equal(metrics.status, 200);
   assert.equal(metrics.data.sales.total, 0);
-  assert.equal((await call(`/orders/admin/${created.data.id}/status`, { method: 'PUT', token: staffToken, body: { status: 'SHIPPED' } })).status, 409);
-  assert.equal((await call(`/orders/${created.data.id}/pickup`, { method: 'POST', token: f.user.token, body: {} })).status, 409);
+  for (const action of ['START_PROCESSING', 'DISPATCH']) {
+    const unpaid = await call(`/orders/admin/${created.data.id}/actions`, { method: 'POST', token: staffToken, body: { action, expectedStatus: 'PENDING' } });
+    assert.equal(unpaid.status, 409);
+    assert.equal(unpaid.data.code, 'ACTION_NOT_ALLOWED');
+  }
+  assert.equal((await call(`/orders/${created.data.id}/pickup`, { method: 'POST', token: f.user.token, body: {} })).status, 404);
+  assert.equal((await prisma.order.findUnique({ where: { id: created.data.id } })).status, 'PENDING');
 });
 
 test('concurrent identical requests replay one order and keys are bound to actor and contents', async () => {
@@ -262,10 +266,15 @@ test('customer and staff cancellation release only the held units and retries do
   assert.equal(await prisma.trackingEvent.count({ where: { orderId: created.data.id, status: 'CANCELLED' } }), 1);
   const another = await quote(f);
   const next = await place(another.data.id, f.user);
-  const staffCancel = await call(`/orders/admin/${next.data.id}/status`, { method: 'PUT', token: staffToken, body: { status: 'CANCELLED' } });
-  assert.equal(staffCancel.status, 200);
+  const staffCancel = (body) => call(`/orders/admin/${next.data.id}/actions`, { method: 'POST', token: staffToken, body: { action: 'CANCEL', expectedStatus: 'PENDING', ...body } });
+  assert.equal((await staffCancel({})).data.code, 'REASON_REQUIRED');
+  const cancelledByStaff = await staffCancel({ reason: 'Customer asked by phone' });
+  assert.equal(cancelledByStaff.status, 200);
   assert.equal((await stock(f.variant.id)).reserved, 0);
-  assert.equal(staffCancel.data.trackingHistory[0].location, 'Staff portal');
+  assert.equal(cancelledByStaff.data.trackingHistory[0].location, 'Staff portal');
+  assert.equal(cancelledByStaff.data.trackingHistory[0].actorType, 'STAFF');
+  assert.equal(cancelledByStaff.data.trackingHistory[0].reason, 'Customer asked by phone');
+  assert.equal((await staffCancel({ reason: 'Repeated click' })).data.code, 'ORDER_CHANGED');
 });
 
 test('expiry releases inventory once and late settlement cannot silently acquire it again', async () => {

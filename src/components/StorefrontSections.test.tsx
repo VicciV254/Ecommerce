@@ -6,6 +6,7 @@ import type { CatalogValue } from "../store/CatalogContext";
 import {
   campaignMedia,
   fixtureCategories,
+  fixtureReturnPolicy,
   fixtureStorefrontSettings,
   linenShirt,
   poloShirt,
@@ -27,6 +28,7 @@ function catalogWith(products: CatalogProduct[], status: CatalogValue["status"] 
     categories: buildCategoryTree(fixtureCategories),
     designers: [],
     discounts: [],
+    returnPolicy: status === "ready" ? fixtureReturnPolicy : null,
     reload: vi.fn(),
   };
 }

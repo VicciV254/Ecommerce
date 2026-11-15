@@ -2,9 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { Container } from "../components/ui";
 import { PasswordInput } from "../components/PasswordInput";
 import { ConfirmModal, Toast } from "../components/Modal";
-import { StaffPaymentPanel } from "../components/PaymentPanel";
 import { navigate } from "../router";
-import { adminAPI, type AdminOrder, type AdminUser, type DashboardMetrics, type SalesReport, type Subscription } from "../api/admin";
+import { adminAPI, type AdminUser, type DashboardMetrics, type SalesReport, type Subscription } from "../api/admin";
 import { describeApiError } from "../api/errors";
 import { clearAdminSession, readAdminSession, saveAdminSession, type AdminSession } from "../api/staffSession";
 import { useStorefront } from "../store/StorefrontContext";
@@ -13,6 +12,7 @@ import { formatKES } from "../utils/format";
 import { AdminCatalogProvider, useAdminCatalog } from "./admin/AdminCatalogContext";
 import { CatalogManager } from "./admin/CatalogManager";
 import { DiscountManager } from "./admin/DiscountManager";
+import { OrdersManager } from "./admin/OrdersManager";
 import { StockManager } from "./admin/StockManager";
 import { StorefrontManager } from "./admin/StorefrontManager";
 import jsPDF from 'jspdf';
@@ -24,8 +24,6 @@ type Tab = (typeof TABS)[number];
 const TOAST_MS = 2500;
 const RECENT_ORDER_LIMIT = 8;
 const REPORT_PREVIEW_LIMIT = 12;
-/** Staff roles the server lets request an M-Pesa status check; viewers may only read payments. */
-const PAYMENT_CHECK_ROLES = ["ADMIN", "SUPER_ADMIN"];
 
 export default function Admin() {
   const [admin, setAdmin] = useState<AdminSession | null>(readAdminSession);
@@ -176,7 +174,7 @@ function AdminDashboard({ admin, onLogout }: { admin: AdminSession; onLogout: ()
 
         {tab === "Dashboard" && <DashboardPanel activeDiscounts={activeDiscounts} />}
         {tab === "Analytics" && <AnalyticsPanel />}
-        {tab === "Orders" && <OrdersManager showToast={showToast} canCheckPayments={PAYMENT_CHECK_ROLES.includes(admin.role)} />}
+        {tab === "Orders" && <OrdersManager role={admin.role} showToast={showToast} />}
         {tab === "Users" && <UsersManager showToast={showToast} />}
         {tab === "Promotions" && <PromotionsManager showToast={showToast} />}
         {tab === "Storefront" && <StorefrontManager showToast={showToast} onDirtyChange={setStorefrontDirty} />}
@@ -214,21 +212,7 @@ function AdminDashboard({ admin, onLogout }: { admin: AdminSession; onLogout: ()
   );
 }
 
-const ORDER_STATUSES = ["PENDING", "PROCESSING", "SHIPPED", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED", "RETURNED", "AWAITING_REFUND"];
-const DELIVERY_FILTERS = [["", "All Delivery"], ["STORE_PICKUP", "Store Pickup"], ["SAME_DAY", "Same-Day Delivery"], ["STANDARD", "Standard Delivery"]];
-const STAGE_PRESETS: Record<string, { description: string; location: string }> = {
-  PENDING: { description: "Order Placed - Payment confirmed", location: "No Maneno Bazaar Warehouse" },
-  PROCESSING: { description: "Order Processed", location: "No Maneno Bazaar Warehouse" },
-  SHIPPED: { description: "Order Shipped - Dispatched from warehouse", location: "Mombasa Main Station" },
-  OUT_FOR_DELIVERY: { description: "Out for Delivery", location: "Mombasa CBD Hub" },
-  DELIVERED: { description: "Delivered", location: "Customer destination" },
-  CANCELLED: { description: "Order Cancelled", location: "No Maneno Bazaar Warehouse" },
-  RETURNED: { description: "Order Returned", location: "No Maneno Bazaar Warehouse" },
-  AWAITING_REFUND: { description: "Awaiting Refund Approval", location: "No Maneno Bazaar Admin" },
-};
-function deliveryLabel(value: string) { return value === "STORE_PICKUP" ? "In-Store Pickup" : value === "SAME_DAY" ? "Same-Day Delivery" : "Standard Delivery"; }
 function statusLabel(value: string) { return value.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (m) => m.toUpperCase()); }
-function dateTime(value: string) { return new Date(value).toLocaleString("en-KE", { dateStyle: "medium", timeStyle: "short" }); }
 
 function downloadCsv(filename: string, rows: Record<string, unknown>[]) {
   if (!rows.length) return;
@@ -534,112 +518,6 @@ function AnalyticsPanel() {
       </div>
     </div>
   );
-}
-
-/** One order's M-Pesa record, loaded only while expanded so a long order list never loads or polls every order. */
-function OrderPayments({ orderId, orderNumber, open, canCheck, onToggle }: {
-  orderId: string;
-  orderNumber: string;
-  open: boolean;
-  canCheck: boolean;
-  onToggle: () => void;
-}) {
-  const regionId = `order-payments-${orderId}`;
-  return (
-    <div className="mt-4 border-t border-light-gray pt-4">
-      <button type="button" aria-expanded={open} aria-controls={regionId} onClick={onToggle}
-        className="min-h-11 rounded-sm border border-brand-primary px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-brand-primary hover:bg-brand-primary hover:text-white">
-        M-Pesa payments<span className="sr-only"> for {orderNumber}</span>
-      </button>
-      <div id={regionId} className={open ? "mt-3" : undefined}>
-        {open && <StaffPaymentPanel orderId={orderId} canCheck={canCheck} />}
-      </div>
-    </div>
-  );
-}
-
-function OrdersManager({ showToast, canCheckPayments }: { showToast: (message: string) => void; canCheckPayments: boolean }) {
-  const [orders, setOrders] = useState<AdminOrder[]>([]);
-  const [paymentsFor, setPaymentsFor] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState("");
-  const [deliveryMethod, setDeliveryMethod] = useState("");
-  const [orderedDay, setOrderedDay] = useState("");
-  const [updating, setUpdating] = useState(""); const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState<"live" | "closed" | "refund">("live");
-  const loadOrders = async () => {
-    setLoading(true);
-    setError("");
-    let statusFilter = status || undefined;
-    
-    try {
-      // Apply status filter based on active tab
-      if (activeTab === "closed") {
-        // Closed orders: DELIVERED or CANCELLED with REFUNDED payment status
-        const { data: deliveredData } = await adminAPI.orders.getAll({ status: "DELIVERED", deliveryMethod: deliveryMethod || undefined, orderedDay: orderedDay || undefined, limit: 100 });
-        const { data: refundedData } = await adminAPI.orders.getAll({ status: "CANCELLED", paymentStatus: "REFUNDED", deliveryMethod: deliveryMethod || undefined, orderedDay: orderedDay || undefined, limit: 100 });
-        setOrders([...deliveredData.orders, ...refundedData.orders]);
-      } else if (activeTab === "refund") {
-        statusFilter = "AWAITING_REFUND";
-        const { data } = await adminAPI.orders.getAll({ status: statusFilter, deliveryMethod: deliveryMethod || undefined, orderedDay: orderedDay || undefined, limit: 100 });
-        setOrders(data.orders);
-      } else {
-        // Live orders: Only show orders in progress (exclude DELIVERED, AWAITING_REFUND, CANCELLED, RETURNED)
-        const { data } = await adminAPI.orders.getAll({ status: statusFilter, deliveryMethod: deliveryMethod || undefined, orderedDay: orderedDay || undefined, limit: 100 });
-        setOrders(data.orders.filter((order) =>
-          !["DELIVERED", "AWAITING_REFUND", "CANCELLED", "RETURNED"].includes(order.status)
-        ));
-      }
-    } catch (err) {
-      const message = describeApiError(err, "Could not load orders.");
-      setError(message);
-      showToast(message);
-    } finally {
-      setLoading(false);
-    }
-  };
-  useEffect(() => { loadOrders(); }, [status, deliveryMethod, orderedDay, activeTab]);
-  const updateStage = async (order: AdminOrder, nextStatus: string) => {
-    const preset = STAGE_PRESETS[nextStatus] ?? STAGE_PRESETS.PROCESSING;
-    setUpdating(order.id);
-    try { await adminAPI.orders.updateStatus(order.id, { status: nextStatus, ...preset }); showToast(`Order ${order.orderNumber} updated to ${statusLabel(nextStatus)}`); await loadOrders(); }
-    catch (err) { showToast(describeApiError(err, "Could not update order stage.")); }
-    finally { setUpdating(""); }
-  };
-  const approveRefund = async (order: AdminOrder) => {
-    setUpdating(order.id);
-    try { await adminAPI.orders.approveRefund(order.id); showToast(`Refund approved for order ${order.orderNumber}`); await loadOrders(); }
-    catch (err) { showToast(describeApiError(err, "Could not approve refund.")); }
-    finally { setUpdating(""); }
-  };
-  return <div className="space-y-4">
-    <div className="rounded-lg bg-white p-5 shadow-sm">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h3 className="text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Orders</h3>
-          <p className="mt-1 text-xs text-gray-500">View customer orders and update tracking. Each update records the current time.</p>
-          <p className="mt-1 text-[11px] font-bold uppercase tracking-wider text-brand-accent">Showing {orders.length} order(s)</p>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={loadOrders} className="rounded-sm border border-brand-primary px-3 py-2 text-[10px] font-bold uppercase text-brand-primary hover:bg-brand-primary hover:text-white">Refresh</button>
-        </div>
-      </div>
-      <div className="mt-4 flex gap-2 border-b border-light-gray">
-        <button onClick={() => setActiveTab("live")} className={`px-4 py-2 text-[11px] font-bold uppercase tracking-wider ${activeTab === "live" ? "text-brand-primary border-b-2 border-brand-primary" : "text-gray-500 hover:text-brand-primary"}`}>Live Orders</button>
-        <button onClick={() => setActiveTab("closed")} className={`px-4 py-2 text-[11px] font-bold uppercase tracking-wider ${activeTab === "closed" ? "text-brand-primary border-b-2 border-brand-primary" : "text-gray-500 hover:text-brand-primary"}`}>Closed Orders</button>
-        <button onClick={() => setActiveTab("refund")} className={`px-4 py-2 text-[11px] font-bold uppercase tracking-wider ${activeTab === "refund" ? "text-brand-primary border-b-2 border-brand-primary" : "text-gray-500 hover:text-brand-primary"}`}>Refund</button>
-      </div>
-      <div className="mt-4 grid gap-3 md:grid-cols-3">
-        <select value={deliveryMethod} onChange={(e) => setDeliveryMethod(e.target.value)} className="rounded-sm border border-light-gray px-3 py-2 text-xs">{DELIVERY_FILTERS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
-        {activeTab === "live" && <select value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-sm border border-light-gray px-3 py-2 text-xs"><option value="">All Stages</option>{ORDER_STATUSES.map((s) => <option key={s} value={s}>{statusLabel(s)}</option>)}</select>}
-        <input type="date" value={orderedDay} onChange={(e) => setOrderedDay(e.target.value)} className="rounded-sm border border-light-gray px-3 py-2 text-xs" />
-      </div>
-    </div>
-    {error && <div className="rounded-lg bg-error/10 p-4 text-sm font-semibold text-error shadow-sm">{error}</div>}
-    {loading && <div className="rounded-lg bg-white p-6 text-sm text-gray-500 shadow-sm">Loading orders...</div>}
-    {!loading && orders.length === 0 && <div className="rounded-lg bg-white p-6 text-sm text-gray-500 shadow-sm">No orders match these filters.</div>}
-    {orders.map((order) => <div key={order.id} className="rounded-lg bg-white p-5 shadow-sm"><div className="flex flex-wrap justify-between gap-4 border-b border-light-gray pb-4"><div><p className="font-mono text-sm font-bold text-brand-primary">{order.orderNumber}</p><p className="mt-1 text-xs text-gray-500">{order.user?.firstName} {order.user?.lastName} - {order.user?.email}</p><p className="mt-1 text-xs text-gray-500">Ordered {dateTime(order.createdAt)} - {deliveryLabel(order.deliveryMethod)}</p></div><div className="text-right"><p className="font-display text-lg text-brand-primary">{formatKES(order.total)}</p><p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{statusLabel(order.status)} / {order.paymentStatus}</p></div></div><div className="mt-4 grid gap-4 lg:grid-cols-[1fr_260px]"><div><p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Items</p><div className="mt-2 space-y-1 text-xs text-charcoal">{(order.items ?? []).map((item) => <p key={item.id}>{item.quantity} x {item.productName} - {formatKES(item.subtotal)}</p>)}</div><p className="mt-4 text-[10px] font-bold uppercase tracking-wider text-gray-400">Timeline</p><div className="mt-2 space-y-2">{(order.trackingHistory ?? []).map((event) => <div key={event.id} className="rounded-sm bg-off-white p-3 text-xs"><p className="font-bold text-brand-primary">{event.description}</p><p className="text-gray-500">{event.location || "No location"} - {dateTime(event.createdAt)}</p></div>)}</div></div><div><label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400">Update Stage</label><select value={order.status} onChange={(e) => updateStage(order, e.target.value)} disabled={updating === order.id} className="mt-2 w-full rounded-sm border border-light-gray px-3 py-2 text-xs">{(!order.status || order.status !== "AWAITING_REFUND") ? ORDER_STATUSES.map((s) => <option key={s} value={s}>{statusLabel(s)}</option>) : <option value="AWAITING_REFUND">Awaiting Refund</option>}</select>{order.status === "AWAITING_REFUND" && <button onClick={() => approveRefund(order)} disabled={updating === order.id} className="mt-3 w-full rounded-sm bg-success px-3 py-2 text-[10px] font-bold uppercase text-white hover:bg-green-600 disabled:opacity-50">Approve Refund</button>}<div className="mt-3 rounded-sm bg-light-pink p-3 text-[11px] text-charcoal"><p className="font-bold text-brand-primary">Delivery guide:</p><p>Store Pickup: Pickup Desk</p><p>Same-Day: Mombasa CBD Hub</p><p>Standard: Mombasa Main Station</p></div></div></div><OrderPayments orderId={order.id} orderNumber={order.orderNumber} open={paymentsFor === order.id} canCheck={canCheckPayments} onToggle={() => setPaymentsFor((current) => (current === order.id ? null : order.id))} /></div>)}
-  </div>;
 }
 
 function UsersManager({ showToast }: { showToast: (message: string) => void }) {

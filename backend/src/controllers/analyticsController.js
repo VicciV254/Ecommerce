@@ -2,6 +2,30 @@ import prisma from '../config/database.js';
 import { availableStock, httpError, loadCategories, productWhere } from '../services/catalogService.js';
 import { decimal, sumMoney } from '../utils/money.js';
 import { expireReservations } from '../services/inventoryService.js';
+import { inOrderPool } from '../services/refundService.js';
+
+/** Paid, uncancelled orders. Fully refunded orders net to zero and are excluded. */
+const SOLD_ORDER = { paymentStatus: { in: ['PAID', 'PARTIALLY_REFUNDED'] }, status: { not: 'CANCELLED' } };
+const MONEY_RECEIVED = ['PAID', 'PARTIALLY_REFUNDED', 'REFUNDED'];
+const CONFIRMED_REFUNDS = { where: { status: 'CONFIRMED' }, select: { amount: true, source: true, paymentId: true } };
+const isSold = (order) => SOLD_ORDER.paymentStatus.in.includes(order.paymentStatus) && order.status !== 'CANCELLED';
+
+/** Order total less confirmed refunds drawn from the order's own payment. */
+const netOrderValue = (order) => decimal(order.total)
+  .minus(sumMoney(order.refunds.filter((refund) => inOrderPool(order, refund)).map((refund) => refund.amount)));
+
+async function netSales(where) {
+  const sold = { ...where, ...SOLD_ORDER };
+  const [gross, refunds] = await Promise.all([
+    prisma.order.aggregate({ where: sold, _sum: { total: true }, _count: true }),
+    prisma.refund.findMany({
+      where: { status: 'CONFIRMED', order: { is: sold } },
+      select: { amount: true, source: true, paymentId: true, order: { select: { settledPaymentId: true } } },
+    }),
+  ]);
+  const refunded = sumMoney(refunds.filter((refund) => inOrderPool(refund.order, refund)).map((refund) => refund.amount));
+  return { total: decimal(gross._sum.total ?? 0).minus(refunded), count: gross._count };
+}
 
 async function inventory() {
   await expireReservations();
@@ -49,42 +73,11 @@ export const getDashboardMetrics = async (req, res, next) => {
     const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const categories = await loadCategories();
 
-    // Total sales
-    const totalSales = await prisma.order.aggregate({
-      where: {
-        isDemo: false,
-        paymentStatus: 'PAID',
-        status: { notIn: ['CANCELLED', 'RETURNED'] },
-      },
-      _sum: { total: true },
-    });
-
-    // This month's sales
-    const thisMonthSales = await prisma.order.aggregate({
-      where: {
-        isDemo: false,
-        paymentStatus: 'PAID',
-        status: { notIn: ['CANCELLED', 'RETURNED'] },
-        createdAt: { gte: startOfMonth },
-      },
-      _sum: { total: true },
-      _count: true,
-    });
-
-    // Last month's sales
-    const lastMonthSales = await prisma.order.aggregate({
-      where: {
-        isDemo: false,
-        paymentStatus: 'PAID',
-        status: { notIn: ['CANCELLED', 'RETURNED'] },
-        createdAt: {
-          gte: startOfLastMonth,
-          lt: endOfLastMonth,
-        },
-      },
-      _sum: { total: true },
-      _count: true,
-    });
+    const [totalSales, thisMonthSales, lastMonthSales] = await Promise.all([
+      netSales({ isDemo: false }),
+      netSales({ isDemo: false, createdAt: { gte: startOfMonth } }),
+      netSales({ isDemo: false, createdAt: { gte: startOfLastMonth, lt: endOfLastMonth } }),
+    ]);
 
     // Total orders
     const totalOrders = await prisma.order.count({ where: { isDemo: false } });
@@ -96,11 +89,11 @@ export const getDashboardMetrics = async (req, res, next) => {
     });
     const orderStatus = Object.fromEntries(statusGroups.map((item) => [item.status, item._count.status]));
     const cancelledOrders = orderStatus.CANCELLED || 0;
-    const returnedOrders = orderStatus.RETURNED || 0;
-    const refundedPayments = await prisma.order.aggregate({
-      where: { paymentStatus: 'REFUNDED', isDemo: false },
+    const returnedOrders = await prisma.order.count({ where: { isDemo: false, returnRequests: { some: { status: 'RECEIVED' } } } });
+    const confirmedRefunds = await prisma.refund.aggregate({
+      where: { status: 'CONFIRMED', order: { is: { isDemo: false } } },
       _count: true,
-      _sum: { total: true },
+      _sum: { amount: true },
     });
 
     // Total products
@@ -132,15 +125,15 @@ export const getDashboardMetrics = async (req, res, next) => {
       },
     });
 
-    const currentRevenue = decimal(thisMonthSales._sum.total ?? 0);
-    const previousRevenue = decimal(lastMonthSales._sum.total ?? 0);
+    const currentRevenue = thisMonthSales.total;
+    const previousRevenue = lastMonthSales.total;
     res.json({
       sales: {
-        total: totalSales._sum.total || 0,
-        thisMonth: thisMonthSales._sum.total || 0,
-        thisMonthOrders: thisMonthSales._count,
-        lastMonth: lastMonthSales._sum.total || 0,
-        lastMonthOrders: lastMonthSales._count,
+        total: totalSales.total,
+        thisMonth: currentRevenue,
+        thisMonthOrders: thisMonthSales.count,
+        lastMonth: previousRevenue,
+        lastMonthOrders: lastMonthSales.count,
         growth: !previousRevenue.isZero()
           ? currentRevenue.minus(previousRevenue).div(previousRevenue).mul(100).toDecimalPlaces(2).toNumber()
           : 0,
@@ -157,8 +150,8 @@ export const getDashboardMetrics = async (req, res, next) => {
         byStatus: orderStatus,
       },
       refunds: {
-        count: refundedPayments._count || 0,
-        total: refundedPayments._sum.total || 0,
+        count: confirmedRefunds._count || 0,
+        total: confirmedRefunds._sum.amount || 0,
       },
       products: {
         total: totalProducts,
@@ -218,20 +211,25 @@ export const getSalesReport = async (req, res, next) => {
       include: {
         items: true,
         user: { select: { email: true, firstName: true, lastName: true } },
+        refunds: CONFIRMED_REFUNDS,
+        returnRequests: { where: { status: 'RECEIVED' }, select: { lines: { select: { receivedQuantity: true } } } },
       },
       orderBy: { createdAt: 'desc' },
     });
 
-    const paidOrders = orders.filter((order) => order.paymentStatus === 'PAID' && order.status !== 'CANCELLED' && order.status !== 'RETURNED');
+    const paidOrders = orders.filter(isSold);
     const cancelledOrders = orders.filter((order) => order.status === 'CANCELLED');
-    const returnedOrders = orders.filter((order) => order.status === 'RETURNED');
-    const refundedOrders = orders.filter((order) => order.paymentStatus === 'REFUNDED');
-    const totalRevenue = sumMoney(paidOrders.map((order) => order.total));
-    const grossRevenue = sumMoney(orders.filter((order) => ['PAID', 'REFUNDED'].includes(order.paymentStatus)).map((order) => order.total));
+    const returnedOrders = orders.filter((order) => order.returnRequests.length > 0);
+    const refundedOrders = orders.filter((order) => ['PARTIALLY_REFUNDED', 'REFUNDED'].includes(order.paymentStatus));
+    const confirmedRefunds = orders.flatMap((order) => order.refunds);
+    const totalRevenue = sumMoney(paidOrders.map(netOrderValue));
+    const grossRevenue = sumMoney(orders.filter((order) => MONEY_RECEIVED.includes(order.paymentStatus)).map((order) => order.total));
     const cancelledValue = sumMoney(cancelledOrders.map((order) => order.total));
-    const returnedValue = sumMoney(returnedOrders.map((order) => order.total));
-    const refundedValue = sumMoney(refundedOrders.map((order) => order.total));
-    const totalItemsSold = paidOrders.reduce((sum, o) => sum + o.items.reduce((s, i) => s + i.quantity, 0), 0);
+    const returnedValue = sumMoney(confirmedRefunds.filter((refund) => refund.source === 'RETURN').map((refund) => refund.amount));
+    const refundedValue = sumMoney(confirmedRefunds.map((refund) => refund.amount));
+    const returnedUnits = (order) => order.returnRequests.flatMap((request) => request.lines)
+      .reduce((sum, line) => sum + (line.receivedQuantity ?? 0), 0);
+    const totalItemsSold = paidOrders.reduce((sum, o) => sum + o.items.reduce((s, i) => s + i.quantity, 0) - returnedUnits(o), 0);
 
     // Sales by category
     const salesByCategory = {};
@@ -307,11 +305,8 @@ export const getCustomerInsights = async (req, res, next) => {
     const customersWithOrders = await prisma.user.findMany({
       include: {
         orders: {
-          where: {
-            isDemo: false,
-            paymentStatus: 'PAID',
-            status: { notIn: ['CANCELLED', 'RETURNED'] },
-          },
+          where: { isDemo: false, ...SOLD_ORDER },
+          include: { refunds: CONFIRMED_REFUNDS },
         },
       },
     });
@@ -320,7 +315,7 @@ export const getCustomerInsights = async (req, res, next) => {
       (c) => c.orders.length > 0
     ).length;
 
-    const totalSpent = sumMoney(customersWithOrders.flatMap((customer) => customer.orders.map((order) => order.total)));
+    const totalSpent = sumMoney(customersWithOrders.flatMap((customer) => customer.orders.map(netOrderValue)));
     const avgOrderValue = totalSpent.div(activeCustomers || 1).toDecimalPlaces(2);
 
     const topCustomers = customersWithOrders
@@ -329,7 +324,7 @@ export const getCustomerInsights = async (req, res, next) => {
         name: `${c.firstName} ${c.lastName}`,
         email: c.email,
         totalOrders: c.orders.length,
-        totalSpent: sumMoney(c.orders.map((order) => order.total)),
+        totalSpent: sumMoney(c.orders.map(netOrderValue)),
       }))
       .sort((a, b) => b.totalSpent.comparedTo(a.totalSpent))
       .slice(0, 10);

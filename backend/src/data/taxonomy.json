@@ -405,7 +405,8 @@
       "name": "Health & Beauty",
       "slug": "health-beauty",
       "parentId": null,
-      "order": 3
+      "order": 3,
+      "returnRule": "UNOPENED_OR_FAULT"
     },
     {
       "id": "apex-category-facial-skincare",
@@ -482,7 +483,8 @@
       "name": "Hair Tools",
       "slug": "hair-tools",
       "parentId": "apex-category-hair-care",
-      "order": 3
+      "order": 3,
+      "returnRule": "STANDARD"
     },
     {
       "id": "apex-category-hair-loss-products",
@@ -1007,7 +1009,8 @@
       "name": "Underwear",
       "slug": "underwear",
       "parentId": "apex-category-mens-clothing",
-      "order": 3
+      "order": 3,
+      "returnRule": "FAULT_ONLY"
     },
     {
       "id": "apex-category-t-shirts-tanks",
@@ -1133,7 +1136,8 @@
       "name": "Lingerie Sleep & Lounge",
       "slug": "lingerie-sleep-lounge",
       "parentId": "apex-category-womens-clothing",
-      "order": 6
+      "order": 6,
+      "returnRule": "FAULT_ONLY"
     },
     {
       "id": "apex-category-womens-jeans",
@@ -1567,7 +1571,8 @@
       "name": "Dairy",
       "slug": "dairy",
       "parentId": "apex-category-drinks",
-      "order": 3
+      "order": 3,
+      "returnRule": "FAULT_ONLY"
     },
     {
       "id": "apex-category-juices-non-carbonated-drinks",
@@ -1672,14 +1677,16 @@
       "name": "Bottle-Feeding",
       "slug": "bottle-feeding",
       "parentId": "apex-category-feeding",
-      "order": 1
+      "order": 1,
+      "returnRule": "UNOPENED_OR_FAULT"
     },
     {
       "id": "apex-category-breastfeeding",
       "name": "Breastfeeding",
       "slug": "breastfeeding",
       "parentId": "apex-category-feeding",
-      "order": 2
+      "order": 2,
+      "returnRule": "UNOPENED_OR_FAULT"
     },
     {
       "id": "apex-category-highchairs-booster-seats",
@@ -1693,7 +1700,8 @@
       "name": "Pacifiers & Accessories",
       "slug": "pacifiers-accessories",
       "parentId": "apex-category-feeding",
-      "order": 4
+      "order": 4,
+      "returnRule": "UNOPENED_OR_FAULT"
     },
     {
       "id": "apex-category-solid-feeding",
@@ -1721,7 +1729,8 @@
       "name": "Disposable Diapers",
       "slug": "disposable-diapers",
       "parentId": "apex-category-diapering",
-      "order": 1
+      "order": 1,
+      "returnRule": "UNOPENED_OR_FAULT"
     },
     {
       "id": "apex-category-portable-changing-pads",
@@ -1735,7 +1744,8 @@
       "name": "Cloth Diapers",
       "slug": "cloth-diapers",
       "parentId": "apex-category-diapering",
-      "order": 3
+      "order": 3,
+      "returnRule": "UNOPENED_OR_FAULT"
     },
     {
       "id": "apex-category-changing-tables",
@@ -1749,7 +1759,8 @@
       "name": "Wipes & Holders",
       "slug": "wipes-holders",
       "parentId": "apex-category-diapering",
-      "order": 5
+      "order": 5,
+      "returnRule": "UNOPENED_OR_FAULT"
     },
     {
       "id": "apex-category-baby-safety",

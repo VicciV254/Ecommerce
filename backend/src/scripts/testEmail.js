@@ -1,7 +1,9 @@
 // Quick standalone test: node src/scripts/testEmail.js you@example.com
-// Prints the *actual* error from the mail service so we can see what's really wrong.
+// Sends one real email and prints the normalized result or error; credentials and provider responses are never printed.
 import 'dotenv/config';
-import { sendMail, isMailConfigured } from '../services/mailService.js';
+import { brandedEmail, isMailConfigured, sendMail } from '../services/mailService.js';
+
+const DIAGNOSTIC_FIELDS = ['code', 'message', 'statusCode', 'provider', 'providerCode', 'providerStatus', 'missingSettings'];
 
 const to = process.argv[2];
 if (!to) {
@@ -15,16 +17,19 @@ console.log('isMailConfigured() =', isMailConfigured());
 try {
   const result = await sendMail({
     to,
-    subject: 'Test email from No Maneno Bazaar backend',
+    subject: 'Test email from the Apex Cart backend',
     text: 'If you received this, email sending is working.',
-    html: '<p>If you received this, email sending is working.</p>',
+    html: brandedEmail({
+      eyebrow: 'Email diagnostics',
+      title: 'Email sending is working',
+      intro: 'If you received this, email sending is working.',
+    }),
   });
   console.log('SUCCESS:', result);
 } catch (err) {
   console.error('FAILED:');
-  console.error('  message:', err.message);
-  console.error('  statusCode:', err.statusCode);
-  if (err.response) console.error('  response data:', JSON.stringify(err.response?.data ?? err.response, null, 2));
-  if (err.code) console.error('  code:', err.code);
+  for (const field of DIAGNOSTIC_FIELDS) {
+    if (err[field] !== undefined) console.error(`  ${field}:`, err[field]);
+  }
   process.exit(1);
 }

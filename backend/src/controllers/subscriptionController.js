@@ -1,5 +1,7 @@
 import prisma from '../config/database.js';
-import emailService from '../services/emailService.js';
+import { brandedEmail, sendMail } from '../services/mailService.js';
+
+const PROMOTIONAL_FOOTER_NOTE = 'You are receiving this email because you subscribed to Apex Cart emails.';
 
 export const subscribe = async (req, res, next) => {
   try {
@@ -100,8 +102,17 @@ export const sendPromotionalEmail = async (req, res, next) => {
 
     const emails = subscriptions.map(sub => sub.email);
 
-    // Send promotional emails
-    const results = await emailService.sendPromotionalEmail(emails, subject, content);
+    // `content` is admin-authored HTML (the admin editor states "HTML supported"); sent one recipient at a time.
+    const html = brandedEmail({ eyebrow: 'Subscriber update', title: subject, body: content, footerNote: PROMOTIONAL_FOOTER_NOTE });
+    const results = [];
+    for (const email of emails) {
+      try {
+        const { messageId } = await sendMail({ to: email, subject, html });
+        results.push({ email, success: true, messageId });
+      } catch (error) {
+        results.push({ email, success: false, error: error.message, code: error.code });
+      }
+    }
 
     const successful = results.filter(r => r.success).length;
     const failed = results.filter(r => !r.success).length;

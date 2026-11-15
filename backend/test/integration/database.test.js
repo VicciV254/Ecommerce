@@ -5,7 +5,7 @@ import { before, test } from 'node:test';
 import prisma from '../../src/config/database.js';
 import { startServer } from '../../src/server.js';
 import { generateToken, generateRefreshToken } from '../../src/config/auth.js';
-import emailService from '../../src/services/emailService.js';
+import { mailer } from '../../src/services/notificationService.js';
 import defaults from '../../src/data/storefront-defaults.json' with { type: 'json' };
 import { STOREFRONT_KEY } from '../../src/utils/catalogValidation.js';
 
@@ -44,7 +44,7 @@ test('migrations and API reads use the isolated database and shutdown releases t
 });
 
 test('a reviewed quote creates a pending order with an image and reserves local stock', async (t) => {
-  t.mock.method(emailService, 'sendOrderConfirmation', async () => ({ success: true }));
+  t.mock.method(mailer, 'send', async () => ({ provider: 'test', messageId: 'test-message' }));
   const user = await prisma.user.create({
     data: {
       email: 'checkout@example.test',
@@ -123,8 +123,7 @@ test('a reviewed quote creates a pending order with an image and reserves local 
 });
 
 test('cancellation releases only the ordered SKU once and rejects incomplete legacy allocations atomically', async (t) => {
-  t.mock.method(emailService, 'sendOrderConfirmation', async () => ({ success: true }));
-  const cancellationEmail = t.mock.method(emailService, 'sendOrderCancellation', async () => ({ success: true }));
+  const emails = t.mock.method(mailer, 'send', async () => ({ provider: 'test', messageId: 'test-message' }));
   const user = await prisma.user.create({
     data: {
       email: 'variant-cancellation@example.test', password: 'fixture-not-used-for-login',
@@ -186,7 +185,9 @@ test('cancellation releases only the ordered SKU once and rejects incomplete leg
   assert.equal((await stock(sibling.id)).quantity, 7);
   assert.equal(await prisma.stockLog.count({ where: { stockId: selected.stock.id, action: 'release' } }), 1);
   assert.equal(await prisma.trackingEvent.count({ where: { orderId: order.id, status: 'CANCELLED' } }), 1);
-  assert.equal(cancellationEmail.mock.callCount(), 1);
+  const cancellationEmails = () => prisma.notification.findMany({ where: { orderId: order.id, type: 'ORDER_CANCELLED' } });
+  assert.deepEqual((await cancellationEmails()).map((item) => item.status), ['SENT']);
+  assert.equal(emails.mock.callCount(), 2);
   assert.equal((await cancel(order.id)).status, 200);
   assert.equal((await stock(selected.id)).quantity, 1);
 
@@ -204,7 +205,8 @@ test('cancellation releases only the ordered SKU once and rejects incomplete leg
   assert.equal((await prisma.order.findUnique({ where: { id: incomplete.id } })).status, 'PENDING');
   assert.equal(await prisma.trackingEvent.count({ where: { orderId: incomplete.id } }), 0);
   assert.equal(await prisma.stockLog.count({ where: { stockId: selected.stock.id, action: 'order-cancel' } }), 0);
-  assert.equal(cancellationEmail.mock.callCount(), 1);
+  assert.equal((await cancellationEmails()).length, 1);
+  assert.equal(emails.mock.callCount(), 2);
 });
 
 test('disabling an account invalidates existing access and refresh sessions', async (t) => {
@@ -263,7 +265,8 @@ test('customer, administrator and viewer boundaries are enforced by the API', as
   const { server, close } = await startServer({ port: 0, host: '127.0.0.1' });
   t.after(close);
   const base = `http://127.0.0.1:${server.address().port}`;
-  assert.equal((await fetch(`${base}/api/orders/${order.id}`, { headers: { Authorization: `Bearer ${token}` } })).status, 403);
+  // Another customer's order is indistinguishable from a missing one.
+  assert.equal((await fetch(`${base}/api/orders/${order.id}`, { headers: { Authorization: `Bearer ${token}` } })).status, 404);
   assert.equal((await fetch(`${base}/api/admin/me`, { headers: { Authorization: `Bearer ${token}` } })).status, 401);
   assert.equal((await fetch(`${base}/api/auth/me`, { headers: { Authorization: `Bearer ${adminToken}` } })).status, 401);
   assert.equal((await fetch(`${base}/api/orders/admin/all`, { headers: { Authorization: `Bearer ${adminToken}` } })).status, 200);

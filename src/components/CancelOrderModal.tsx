@@ -1,85 +1,109 @@
-import { useId, useState } from 'react';
-import { ordersAPI, type Order } from '../api/orders';
-import { describeApiError } from '../api/errors';
-import toast from 'react-hot-toast';
-import { ModalDialog } from './Modal';
+import { useId, useState } from "react";
+import { ordersAPI, type CustomerOrder } from "../api/orders";
+import { apiErrorCode, describeApiError } from "../api/errors";
+import { cancellationRefund } from "../store/orderCopy";
+import { OrderFormatError, parseCustomerOrder } from "../store/orderModel";
+import { formatKES } from "../utils/format";
+import { ModalDialog } from "./Modal";
 
-interface CancelOrderModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  orderId: string;
-  onOrderCancelled: (order: Order) => void;
+/** Refusals that mean the order changed since it was shown; its actions must be reloaded. */
+const CONFLICTS: Record<string, string> = {
+  ACTION_NOT_ALLOWED: "This order can no longer be cancelled because it has moved on since this page loaded.",
+  PAYMENT_REVIEW_REQUIRED: "This order cannot be cancelled while its payment is under review.",
+};
+
+/** What happens to the payment, in the customer's words; never a claim that money was sent. */
+function cancellationText(order: Pick<CustomerOrder, "orderNumber" | "paymentStatus" | "total">) {
+  switch (cancellationRefund(order.paymentStatus)) {
+    case "full":
+      return `Order ${order.orderNumber} is paid. If you cancel, a refund request for the full amount (${formatKES(order.total)}, including delivery) will be recorded; we will email you when it is sent.`;
+    case "remaining":
+      return `Part of your payment for order ${order.orderNumber} has already been refunded. If you cancel, a refund request for the remaining paid balance will be recorded; we will email you when it is sent.`;
+    case "settled":
+      return `Your payment for order ${order.orderNumber} has already been refunded, so cancelling records no further refund. Any items held for it will be released.`;
+    default:
+      return `Cancel order ${order.orderNumber}? Any items held for it will be released.`;
+  }
 }
 
-export default function CancelOrderModal({ isOpen, onClose, orderId, onOrderCancelled }: CancelOrderModalProps) {
-  const [reason, setReason] = useState('');
+/** Customer cancellation before dispatch. A paid order records a refund request; it never claims money was sent. */
+export default function CancelOrderModal({ order, onClose, onOrderCancelled, onConflict }: {
+  order: Pick<CustomerOrder, "id" | "orderNumber" | "paymentStatus" | "total">;
+  onClose: () => void;
+  onOrderCancelled: (order: CustomerOrder) => void;
+  /** Reloads the order after a refusal that means it changed; resolves `false` when it could not be reloaded. */
+  onConflict: () => Promise<boolean>;
+}) {
+  const [reason, setReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState("");
   const reasonId = useId();
 
   const close = () => {
-    if (isSubmitting) return;
-    setErrorMessage('');
-    setReason('');
-    onClose();
+    if (!isSubmitting) onClose();
   };
 
   const handleCancel = async () => {
     setIsSubmitting(true);
-    setErrorMessage('');
+    setErrorMessage("");
     try {
-      const { data } = await ordersAPI.cancel(orderId, { reason });
-      toast.success('Order cancelled successfully');
-      onOrderCancelled(data);
-      onClose();
-      setReason('');
+      const trimmed = reason.trim();
+      const { data } = await ordersAPI.cancel(order.id, trimmed ? { reason: trimmed } : {});
+      onOrderCancelled(parseCustomerOrder(data, order.id));
     } catch (error) {
-      setErrorMessage(describeApiError(error, 'Failed to cancel order'));
+      const conflict = CONFLICTS[apiErrorCode(error) ?? ""];
+      if (conflict) {
+        const refreshed = await onConflict();
+        setErrorMessage(`${conflict} ${refreshed ? "The order has been refreshed." : "We could not refresh it; reload the page to see its current status."}`);
+      } else {
+        setErrorMessage(error instanceof OrderFormatError
+          ? "The cancellation was sent, but its result could not be read. Reload your orders to check this order's status."
+          : describeApiError(error, "Failed to cancel order"));
+      }
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  if (!isOpen) return null;
-
   return (
-    <ModalDialog open={isOpen} label="Cancel Order" onClose={close}>
-      <div className="bg-white rounded-lg p-6 max-w-md w-full max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain shadow-xl">
-        <h2 className="text-xl font-semibold mb-4">Cancel Order</h2>
-        <p className="text-gray-600 mb-4">
-          Are you sure you want to cancel this order? If you've already paid, your order will be marked as awaiting refund approval.
-        </p>
-        
+    <ModalDialog open label="Cancel Order" onClose={close}>
+      <div className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-lg bg-white p-6 shadow-xl [overflow-wrap:anywhere]">
+        <h2 className="mb-4 text-xl font-semibold text-brand-primary">Cancel Order</h2>
+        <p className="mb-4 text-sm text-charcoal">{cancellationText(order)}</p>
+
         <div className="mb-4">
-          <label htmlFor={reasonId} className="block text-sm font-medium text-gray-700 mb-2">
+          <label htmlFor={reasonId} className="mb-2 block text-sm font-medium text-charcoal">
             Reason for cancellation (optional)
           </label>
           <textarea
             id={reasonId}
             disabled={isSubmitting}
             value={reason}
+            maxLength={1000}
             onChange={(e) => setReason(e.target.value)}
             placeholder="Please let us know why you're cancelling..."
             rows={3}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full rounded-md border border-light-gray px-3 py-2 text-base focus:border-brand-secondary"
           />
         </div>
 
         {errorMessage && <p role="alert" className="mb-4 text-sm text-error">{errorMessage}</p>}
-        <div className="flex justify-end gap-3">
+        <div className="flex flex-wrap justify-end gap-3">
           <button
+            type="button"
             onClick={close}
             disabled={isSubmitting}
-            className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 disabled:opacity-50"
+            className="min-h-11 rounded-md bg-off-white px-4 py-2 text-charcoal hover:bg-light-gray disabled:opacity-50"
           >
             Keep Order
           </button>
           <button
+            type="button"
             onClick={handleCancel}
             disabled={isSubmitting}
-            className="px-4 py-2 text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50"
+            className="min-h-11 rounded-md bg-error px-4 py-2 text-white hover:bg-red-700 disabled:opacity-50"
           >
-            {isSubmitting ? 'Cancelling...' : 'Cancel Order'}
+            {isSubmitting ? "Cancelling..." : "Cancel Order"}
           </button>
         </div>
       </div>

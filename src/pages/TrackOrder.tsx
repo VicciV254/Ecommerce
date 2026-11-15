@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Breadcrumb, Container } from "../components/ui";
 import { Link, parseRoute } from "../router";
-import { ordersAPI, type Order, type OrderTracking } from "../api/orders";
+import { ordersAPI, type CustomerOrder, type OrderStatus, type OrderTracking } from "../api/orders";
 import { apiStatus, describeApiError } from "../api/errors";
 import { useAuth } from "../contexts/AuthContext";
+import { isOrderStatus } from "../store/checkoutModel";
+import { ORDER_STATUS_LABELS, orderStatusLabel } from "../store/orderCopy";
+import { OrderFormatError, parseCustomerOrderPage } from "../store/orderModel";
 
 const ACTIVE_ORDER_LIMIT = 100;
 const COPIED_FEEDBACK_MS = 2000;
+/** Orders that need no further tracking. */
+const FINISHED: readonly OrderStatus[] = ["DELIVERED", "CANCELLED"];
 
 type TrackState =
   | { status: "idle" }
@@ -16,7 +21,13 @@ type TrackState =
   | { status: "error"; message: string };
 
 function formatStatus(status: string) {
-  return status.replace(/_/g, " ");
+  return isOrderStatus(status) ? ORDER_STATUS_LABELS[status] : status.replace(/_/g, " ");
+}
+
+/** The newest step's fixed phrase (e.g. "Collected" for pickups) when it describes the current status. */
+function publicStatus(tracking: OrderTracking) {
+  const latest = tracking.trackingHistory[0];
+  return latest?.status === tracking.status && latest.description ? latest.description : formatStatus(tracking.status);
 }
 
 function formatTrackTime(value: string) {
@@ -33,7 +44,7 @@ export default function TrackOrder({ route }: { route: string }) {
   const [orderNumber, setOrderNumber] = useState(prefilledOrder);
   const [result, setResult] = useState<TrackState>({ status: "idle" });
   const [copied, setCopied] = useState(false);
-  const [activeOrders, setActiveOrders] = useState<Order[]>([]);
+  const [activeOrders, setActiveOrders] = useState<CustomerOrder[]>([]);
   const [activeError, setActiveError] = useState("");
 
   const runTrack = useCallback(async (number: string) => {
@@ -58,10 +69,13 @@ export default function TrackOrder({ route }: { route: string }) {
     if (!user) return;
     ordersAPI.getMyOrders({ limit: ACTIVE_ORDER_LIMIT })
       .then(({ data }) => {
+        const orders = parseCustomerOrderPage(data).orders;
         setActiveError("");
-        setActiveOrders(data.orders.filter((order) => !["DELIVERED", "CANCELLED", "RETURNED"].includes(order.status)));
+        setActiveOrders(orders.filter((order) => !FINISHED.includes(order.status)));
       })
-      .catch((error: unknown) => setActiveError(describeApiError(error, "Your active orders could not be loaded.")));
+      .catch((error: unknown) => setActiveError(error instanceof OrderFormatError
+        ? `${error.message} Try again shortly.`
+        : describeApiError(error, "Your active orders could not be loaded.")));
   }, [user]);
 
   useEffect(() => {
@@ -147,7 +161,7 @@ export default function TrackOrder({ route }: { route: string }) {
             <div className="flex items-center justify-between border-b border-light-gray pb-4">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Status</p>
-                <p className="text-sm font-bold uppercase tracking-wide text-success">{formatStatus(result.tracking.status)}</p>
+                <p className="text-sm font-bold uppercase tracking-wide text-success">{publicStatus(result.tracking)}</p>
               </div>
               <div className="text-right">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Last Update</p>
@@ -165,10 +179,10 @@ export default function TrackOrder({ route }: { route: string }) {
                     <div className={`absolute -left-6 top-1 z-10 h-3.5 w-3.5 rounded-full border-2 ${
                       index === 0 ? "border-success bg-success shadow-[0_0_0_3px_rgba(35,122,75,0.15)]" : "border-brand-secondary bg-brand-secondary"
                     }`} />
+                    {/* Public tracking shows only the step and its time: no location, actor, payment or refund details. */}
                     <div className="ml-1">
                       <p className={`text-sm font-semibold ${index === 0 ? "text-success" : "text-brand-primary"}`}>{step.description || formatStatus(step.status)}</p>
-                      <p className="text-xs text-gray-500">{step.location || formatStatus(step.status)}</p>
-                      <p className="mt-0.5 text-[10px] text-gray-500">{formatTrackTime(step.createdAt)}</p>
+                      <p className="mt-0.5 text-xs text-gray-500">{formatTrackTime(step.createdAt)}</p>
                     </div>
                   </li>
                 ))}
@@ -191,7 +205,7 @@ export default function TrackOrder({ route }: { route: string }) {
                       <p className="font-mono text-sm font-bold text-brand-primary">{order.orderNumber}</p>
                       <p className="text-xs text-gray-500">{new Date(order.createdAt).toLocaleDateString()}</p>
                     </div>
-                    <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-charcoal">{formatStatus(order.status)}</span>
+                    <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-charcoal">{orderStatusLabel(order)}</span>
                   </div>
                   <div className="mt-3 flex gap-2">
                     <button

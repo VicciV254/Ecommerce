@@ -11,6 +11,7 @@ import {
   deleteUser,
   importLocalOrders,
 } from '../controllers/adminController.js';
+import { getAttention, readAttention, retryNotificationDelivery } from '../controllers/operationsController.js';
 import { authenticateAdmin, authorize } from '../middleware/adminAuth.js';
 import { authLimiter } from '../config/rateLimiter.js';
 
@@ -28,5 +29,8 @@ router.post('/users/:id/verify', authorize('SUPER_ADMIN', 'ADMIN'), sendVerifica
 router.put('/users/:id/disabled', authorize('SUPER_ADMIN', 'ADMIN'), setUserDisabled);
 router.delete('/users/:id', authorize('SUPER_ADMIN', 'ADMIN'), deleteUser);
 router.post('/orders/import-local', importLocalOrders);
+router.get('/attention', getAttention);
+router.post('/attention/read', readAttention);
+router.post('/notifications/:id/retry', authorize('SUPER_ADMIN', 'ADMIN'), retryNotificationDelivery);
 
 export default router;

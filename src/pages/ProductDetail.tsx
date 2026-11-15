@@ -32,6 +32,7 @@ import {
   type VariantSelection,
 } from "../store/catalogModel";
 import { useStore } from "../store/StoreContext";
+import { productReturnFact } from "../store/orderCopy";
 import { COLOR_MAP } from "../utils/colors";
 import { isRecord } from "../utils/storage";
 import { formatKES } from "../utils/format";
@@ -151,6 +152,7 @@ function ProductContent({ id }: { id: string }) {
   const tabs: InfoTab[] = specifications.length ? ["description", "specifications"] : ["description"];
   const related = catalog.products.filter((item) => item.id !== product.id && inCategory(item, product.categoryId)).slice(0, RELATED_LIMIT);
   const categoryPath = catalog.categories.path(product.categoryId);
+  const returnFact = catalog.returnPolicy ? productReturnFact(product.returnRule, catalog.returnPolicy) : null;
 
   const images = orderedImages(product);
   const imageIndex = Math.min(activeImage, Math.max(0, images.length - 1));
@@ -288,6 +290,11 @@ function ProductContent({ id }: { id: string }) {
               {variant && available > 0 && <span className="text-xs text-gray-500">{available} available</span>}
               {!variant && options.length > 0 && <span className="text-xs text-gray-500">Availability depends on the options you choose.</span>}
             </div>
+            {returnFact && (
+              <p className="mt-3 border-t border-light-gray pt-3 text-xs text-charcoal">
+                <span className="font-bold text-brand-primary">Returns: </span>{returnFact.window} {returnFact.refunds}
+              </p>
+            )}
           </div>
 
           {options.map((option) => (

@@ -5,10 +5,11 @@ import prisma from '../../src/config/database.js';
 import { generateToken } from '../../src/config/auth.js';
 import { startServer } from '../../src/server.js';
 import { createPendingOrder, createQuote } from '../../src/services/checkoutService.js';
-import { cancelOrderReservation, expireReservations } from '../../src/services/inventoryService.js';
+import { expireReservations } from '../../src/services/inventoryService.js';
+import { cancelOrderForCustomer } from '../../src/services/fulfilmentService.js';
+import { mailer } from '../../src/services/notificationService.js';
 import { reconcileDuePayments } from '../../src/services/paymentService.js';
 import provider, { DarajaError } from '../../src/services/mpesaService.js';
-import autoStageService from '../../src/services/autoStageService.js';
 import { TEST_MPESA_ENV, callbackBody } from '../mpesa-fixtures.js';
 
 let base, close, staffToken, viewerToken, sequence = 0;
@@ -31,6 +32,7 @@ before(async () => {
     if (role === 'ADMIN') staffToken = generateToken({ adminId: staff.id });
     else viewerToken = generateToken({ adminId: staff.id });
   }
+  mock.method(mailer, 'send', async () => ({ provider: 'test', messageId: 'test-message' }));
   mock.method(provider, 'initiate', async (config, request) => {
     const ids = { accepted: true, checkoutRequestId: `ws_TEST_${sent.length}`, merchantRequestId: `mr_TEST_${sent.length}` };
     sent.push({ ...request, ...ids, environment: config.environment });
@@ -142,8 +144,7 @@ test('only matching callback plus authenticated successful query pays and commit
   const order = await savedOrder(f);
   assert.equal(order.paymentStatus, 'PAID');
   assert.equal(order.status, 'PENDING');
-  assert.equal(order.autoStageEnabled, false);
-  assert.equal(order.autoStagePaused, true);
+  assert.equal(order.settledPaymentId, attempt.data.id);
   assert.equal(order.reservationStatus, 'COMMITTED');
   assert.equal((await inventory(f)).quantity, 2);
   assert.equal((await inventory(f)).reserved, 0);
@@ -292,7 +293,7 @@ test('late success records received money without reopening a cancelled or expir
     if (expired) {
       await prisma.order.update({ where: { id: f.order.id }, data: { reservationExpiresAt: new Date(0) } });
       await expireReservations();
-    } else await cancelOrderReservation(f.user.id, f.order.id, 'Cancelled before provider result');
+    } else await cancelOrderForCustomer(f.user.id, f.order.id, 'Cancelled before provider result');
     const before = await savedOrder(f);
     await callback(request);
     const reconciled = await reconcile(attempt.data.id, f.token);
@@ -551,13 +552,15 @@ test('cancellation racing verified payment cannot double-release stock or reopen
     assert.equal(order.reservationStatus, 'COMMITTED');
     assert.equal(stock.quantity, 2);
   } else {
-    assert.ok(['CANCELLED', 'AWAITING_REFUND'].includes(order.status));
+    assert.equal(order.status, 'CANCELLED');
     assert.equal(order.reservationStatus, 'RELEASED');
     assert.equal(stock.quantity, 3);
   }
   assert.ok(await prisma.stockLog.count({ where: { stockId: stock.id, action: 'commit' } }) <= 1);
   assert.equal(await prisma.trackingEvent.count({ where: { orderId: f.order.id, location: 'Payment verification' } }), 1);
-  assert.equal(order.autoStageEnabled, false);
+  // A paid cancellation only requests a refund; nothing claims money was returned.
+  const refunds = await prisma.refund.findMany({ where: { orderId: f.order.id } });
+  assert.ok(refunds.every((refund) => refund.status === 'REQUESTED' && refund.source === 'CANCELLATION'));
 });
 
 test('confirmed but disputed evidence preserves payment while blocking fulfilment shortcuts', async () => {
@@ -571,15 +574,15 @@ test('confirmed but disputed evidence preserves payment while blocking fulfilmen
   await callback(request);
   assert.equal((await reconcile(attempt.data.id, f.token)).data.status, 'SUCCEEDED');
   await callback(request, { resultCode: 1032 });
-  const status = await call(`/orders/admin/${f.order.id}/status`, {
-    method: 'PUT', token: staffToken, body: { status: 'PROCESSING' },
+  const status = await call(`/orders/admin/${f.order.id}/actions`, {
+    method: 'POST', token: staffToken, body: { action: 'START_PROCESSING', expectedStatus: 'PENDING' },
   });
   assert.equal(status.status, 409);
   assert.equal(status.data.code, 'PAYMENT_REVIEW_REQUIRED');
-  await prisma.order.update({ where: { id: f.order.id }, data: {
-    autoStageEnabled: true, autoStagePaused: false, autoStageLastUpdate: new Date(Date.now() - 120_000),
-  } });
-  await autoStageService.processAutoStages();
+  const staffView = await call(`/orders/admin/${f.order.id}`, { token: staffToken });
+  assert.equal(staffView.data.paymentReviewOpen, true);
+  assert.deepEqual(staffView.data.allowedActions, []);
+  assert.equal((await call(`/orders/${f.order.id}/cancel`, { method: 'POST', token: f.token, body: { reason: 'Disputed' } })).data.code, 'PAYMENT_REVIEW_REQUIRED');
   assert.equal((await savedOrder(f)).status, 'PENDING');
   assert.equal((await savedOrder(f)).paymentStatus, 'PAID');
   assert.equal((await inventory(f)).quantity, 2);

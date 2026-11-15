@@ -80,6 +80,7 @@ model MpesaPayment {
   reconcileLease     String?
   leaseExpiresAt     DateTime?
   events             MpesaPaymentEvent[]
+  refunds            Refund[]
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
 
@@ -175,15 +176,16 @@ model Subscription {
 // ========== ADMIN MODELS ==========
 
 model Admin {
-  id           String        @id @default(cuid())
-  email        String        @unique
-  username     String        @unique
+  id           String           @id @default(cuid())
+  email        String           @unique
+  username     String           @unique
   password     String
-  role         AdminRole     @default(ADMIN)
+  role         AdminRole        @default(ADMIN)
   lastLogin    DateTime?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
   activityLogs ActivityLog[]
+  alertReads   StaffAlertRead[]
 }
 
 enum AdminRole {
@@ -254,20 +256,22 @@ model ProductVariant {
 }
 
 model Category {
-  id            String     @id @default(cuid())
+  id            String      @id @default(cuid())
   name          String
-  slug          String     @unique
+  slug          String      @unique
   headerImage   String?
   products      Product[]
-  order         Int        @default(0)
+  order         Int         @default(0)
   parentId      String?
-  parent        Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Restrict)
-  children      Category[] @relation("CategoryTree")
-  attributeKeys String[]   @default([])
-  isActive      Boolean    @default(true)
+  parent        Category?   @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children      Category[]  @relation("CategoryTree")
+  attributeKeys String[]    @default([])
+  /// Null inherits the nearest ancestor's rule; a root without a rule is STANDARD.
+  returnRule    ReturnRule?
+  isActive      Boolean     @default(true)
   deletedAt     DateTime?
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 
   @@index([parentId, order])
 }
@@ -420,49 +424,52 @@ enum ReservationStatus {
 }
 
 model Order {
-  id                           String            @id @default(cuid())
-  orderNumber                  String            @unique
-  userId                       String
-  user                         User              @relation(fields: [userId], references: [id])
-  items                        OrderItem[]
-  payments                     MpesaPayment[]
-  subtotal                     Decimal           @db.Decimal(14, 2)
-  discount                     Decimal           @default(0) @db.Decimal(14, 2)
-  tax                          Decimal           @db.Decimal(14, 2)
-  shippingCost                 Decimal           @db.Decimal(14, 2)
-  total                        Decimal           @db.Decimal(14, 2)
-  quoteId                      String?           @unique
-  quote                        CheckoutQuote?    @relation(fields: [quoteId], references: [id], onDelete: Restrict)
-  idempotencyKey               String?
-  requestHash                  String?
-  addressSnapshot              Json?
-  pricingSnapshot              Json?
-  reservationStatus            ReservationStatus @default(COMMITTED)
-  reservationExpiresAt         DateTime?
-  status                       OrderStatus       @default(PENDING)
-  paymentMethod                PaymentMethod
-  paymentStatus                PaymentStatus     @default(PENDING)
-  isDemo                       Boolean           @default(false)
-  deliveryMethod               DeliveryMethod    @default(STANDARD)
-  addressId                    String
-  address                      Address           @relation(fields: [addressId], references: [id])
-  trackingNumber               String?
-  notes                        String?
-  cancellationReason           String?
-  refundApproved               Boolean           @default(false)
-  pickedUpAt                   DateTime?
-  autoStageEnabled             Boolean           @default(true)
-  autoStagePaused              Boolean           @default(false)
-  autoStageLastUpdate          DateTime?
-  awaitingRefundAt             DateTime?
-  refundNotificationSent       Boolean           @default(false)
-  refundNotificationLastSentAt DateTime?
-  trackingHistory              TrackingEvent[]
-  createdAt                    DateTime          @default(now())
-  updatedAt                    DateTime          @updatedAt
+  id                   String            @id @default(cuid())
+  orderNumber          String            @unique
+  userId               String
+  user                 User              @relation(fields: [userId], references: [id])
+  items                OrderItem[]
+  payments             MpesaPayment[]
+  subtotal             Decimal           @db.Decimal(14, 2)
+  discount             Decimal           @default(0) @db.Decimal(14, 2)
+  tax                  Decimal           @db.Decimal(14, 2)
+  shippingCost         Decimal           @db.Decimal(14, 2)
+  total                Decimal           @db.Decimal(14, 2)
+  quoteId              String?           @unique
+  quote                CheckoutQuote?    @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+  idempotencyKey       String?
+  requestHash          String?
+  addressSnapshot      Json?
+  pricingSnapshot      Json?
+  reservationStatus    ReservationStatus @default(COMMITTED)
+  reservationExpiresAt DateTime?
+  status               OrderStatus       @default(PENDING)
+  paymentMethod        PaymentMethod
+  paymentStatus        PaymentStatus     @default(PENDING)
+  isDemo               Boolean           @default(false)
+  deliveryMethod       DeliveryMethod    @default(STANDARD)
+  addressId            String
+  address              Address           @relation(fields: [addressId], references: [id])
+  trackingNumber       String?
+  notes                String?
+  cancellationReason   String?
+  /// The confirmed payment whose amount was attributed to this order.
+  settledPaymentId     String?
+  processingAt         DateTime?
+  readyForPickupAt     DateTime?
+  shippedAt            DateTime?
+  deliveredAt          DateTime?
+  pickedUpAt           DateTime?
+  cancelledAt          DateTime?
+  trackingHistory      TrackingEvent[]
+  returnRequests       ReturnRequest[]
+  refunds              Refund[]
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
 
   @@unique([userId, idempotencyKey])
   @@index([reservationStatus, reservationExpiresAt])
+  @@index([status, paymentStatus])
 }
 
 model OrderItem {
@@ -480,6 +487,7 @@ model OrderItem {
   subtotal          Decimal         @db.Decimal(14, 2)
   pricingSnapshot   Json?
   productImage      String?
+  returnLines       ReturnLine[]
 }
 
 model TrackingEvent {
@@ -489,6 +497,10 @@ model TrackingEvent {
   status      OrderStatus
   description String
   location    String?
+  /// CUSTOMER, STAFF, SYSTEM or PROVIDER; staff identity is visible only to staff.
+  actorType   String?
+  actorId     String?
+  reason      String?
   createdAt   DateTime    @default(now())
 }
 
@@ -499,8 +511,6 @@ enum OrderStatus {
   READY_FOR_PICKUP
   DELIVERED
   CANCELLED
-  AWAITING_REFUND
-  RETURNED
 }
 
 enum PaymentMethod {
@@ -515,10 +525,182 @@ enum PaymentStatus {
   PAID
   FAILED
   REFUNDED
+  PARTIALLY_REFUNDED
 }
 
 enum DeliveryMethod {
   STORE_PICKUP
   SAME_DAY
   STANDARD
+}
+
+// ========== RETURNS, REFUNDS AND OPERATIONS ==========
+
+enum ReturnRule {
+  STANDARD
+  FAULT_ONLY
+  UNOPENED_OR_FAULT
+}
+
+enum ReturnStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  CANCELLED
+  RECEIVED
+}
+
+enum ReturnReason {
+  CHANGED_MIND
+  FAULTY
+  DAMAGED
+  WRONG_ITEM
+  OTHER
+}
+
+model ReturnRequest {
+  id                     String       @id @default(cuid())
+  number                 String       @unique
+  orderId                String
+  order                  Order        @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  userId                 String
+  status                 ReturnStatus @default(REQUESTED)
+  reason                 ReturnReason
+  comment                String?
+  unopenedDeclared       Boolean      @default(false)
+  idempotencyKey         String
+  requestHash            String
+  decidedAt              DateTime?
+  decidedById            String?
+  decisionNote           String?
+  receivedAt             DateTime?
+  receivedById           String?
+  merchantFaultConfirmed Boolean?
+  inspectionNote         String?
+  cancelledAt            DateTime?
+  lines                  ReturnLine[]
+  refunds                Refund[]
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+
+  @@unique([userId, idempotencyKey])
+  @@index([orderId, createdAt])
+  @@index([status, createdAt])
+}
+
+model ReturnLine {
+  id                 String        @id @default(cuid())
+  returnRequestId    String
+  returnRequest      ReturnRequest @relation(fields: [returnRequestId], references: [id], onDelete: Cascade)
+  orderItemId        String
+  orderItem          OrderItem     @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  quantity           Int
+  returnRule         ReturnRule
+  receivedQuantity   Int?
+  restockQuantity    Int?
+  refundableQuantity Int?
+
+  @@unique([returnRequestId, orderItemId])
+  @@index([orderItemId])
+}
+
+enum RefundStatus {
+  REQUESTED
+  APPROVED
+  PROCESSING
+  CONFIRMED
+  FAILED
+  UNRESOLVED
+  CANCELLED
+}
+
+enum RefundSource {
+  CANCELLATION
+  RETURN
+  PAYMENT_REVIEW
+}
+
+model Refund {
+  id                  String         @id @default(cuid())
+  number              String         @unique
+  orderId             String
+  order               Order          @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  paymentId           String?
+  payment             MpesaPayment?  @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  /// A return can be refunded again after its refund is cancelled; dedupeKey keeps one active at a time.
+  returnRequestId     String?
+  returnRequest       ReturnRequest? @relation(fields: [returnRequestId], references: [id], onDelete: Restrict)
+  /// Unique while active; cleared when cancelled so a replacement can be requested.
+  dedupeKey           String?        @unique
+  source              RefundSource
+  status              RefundStatus   @default(REQUESTED)
+  amount              Decimal        @db.Decimal(14, 2)
+  requestedAmount     Decimal        @db.Decimal(14, 2)
+  includesDeliveryFee Boolean        @default(false)
+  method              String         @default("MPESA_MANUAL")
+  reason              String?
+  requestedByType     String
+  requestedById       String?
+  approvedAt          DateTime?
+  approvedById        String?
+  processingAt        DateTime?
+  processingById      String?
+  confirmedAt         DateTime?
+  confirmedById       String?
+  providerReference   String?        @unique
+  failedAt            DateTime?
+  failureReason       String?
+  unresolvedAt        DateTime?
+  unresolvedNote      String?
+  cancelledAt         DateTime?
+  cancelledById       String?
+  cancellationReason  String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  @@index([orderId, createdAt])
+  @@index([status, createdAt])
+  @@index([returnRequestId])
+}
+
+enum NotificationStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+  DEAD
+}
+
+model Notification {
+  id                String             @id @default(cuid())
+  type              String
+  channel           String             @default("EMAIL")
+  orderId           String?
+  userId            String?
+  returnRequestId   String?
+  refundId          String?
+  recipient         String
+  dedupeKey         String             @unique
+  status            NotificationStatus @default(PENDING)
+  attempts          Int                @default(0)
+  nextAttemptAt     DateTime           @default(now())
+  leaseId           String?
+  leaseExpiresAt    DateTime?
+  lastErrorCode     String?
+  providerMessageId String?
+  sentAt            DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@index([status, nextAttemptAt])
+  @@index([orderId, createdAt])
+}
+
+model StaffAlertRead {
+  adminId  String
+  admin    Admin    @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  alertKey String
+  readAt   DateTime @default(now())
+
+  @@id([adminId, alertKey])
 }

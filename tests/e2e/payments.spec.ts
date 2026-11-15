@@ -1,7 +1,8 @@
 import type { BrowserContext, Page } from "@playwright/test";
 import type { PaymentAttempt } from "../../src/api/mpesa";
-import type { Order } from "../../src/api/orders";
+import type { CustomerOrder, Order } from "../../src/api/orders";
 import { fixturePendingOrder } from "../../src/test-support/checkoutFixtures";
+import { fixtureCustomerOrder, fixtureStaffOrder } from "../../src/test-support/orderFixtures";
 import {
   PAYABLE,
   PAYMENT_MESSAGES,
@@ -17,13 +18,15 @@ import {
   expect,
   linenCartLine,
   servePaymentOverview,
+  serveStaffOrders,
   signInCustomer,
   signInStaff,
   test,
 } from "./fixtures";
 
 const REQUEST_KEY = /^[A-Za-z0-9:_-]{16,128}$/;
-const placed = fixturePendingOrder(browserQuote());
+/** The pending order as the order views report it; the checkout response accepts the same record. */
+const placed = fixtureCustomerOrder(fixturePendingOrder(browserQuote()));
 const paidOrder: Order = { ...placed, paymentStatus: "PAID", reservationStatus: "COMMITTED", reservationExpiresAt: null };
 const ordersList = (orders: Order[]) => ({ orders, pagination: { page: 1, limit: 100, total: orders.length, pages: 1 } });
 /** Keeps automatic checks out of the way of a test's own clicks. */
@@ -161,7 +164,7 @@ test("a sandbox prompt is labelled before confirmation and a failed attempt need
 test("cancelling from an open receipt immediately removes payment initiation without a page reload", async ({ page, context }) => {
   await signInCustomer(page);
   let cancelled = false;
-  const cancelledOrder: Order = { ...placed, status: "CANCELLED", reservationStatus: "RELEASED" };
+  const cancelledOrder: CustomerOrder = { ...placed, status: "CANCELLED", reservationStatus: "RELEASED", customerActions: [] };
   await context.route("**/api/orders?*", (route) => route.fulfill({ json: ordersList([cancelled ? cancelledOrder : placed]) }));
   await servePaymentOverview(context, placed, () => cancelled
     ? fixturePaymentOverview(cancelledOrder, { environment: "production", reasonCode: "ORDER_NOT_PAYABLE", message: "This order is no longer payable." })
@@ -196,9 +199,9 @@ async function staffPayments(page: Page, context: BrowserContext, role: string) 
   });
   let checked = false;
   const seen: { path: string; authorization?: string }[] = [];
-  await context.route("**/api/orders/admin/all?*", (route) => route.fulfill({
-    json: ordersList([{ ...placed, user: { id: customer.id, firstName: customer.firstName, lastName: customer.lastName, email: customer.email } } as Order]),
-  }));
+  await serveStaffOrders(context, () => [fixtureStaffOrder(placed, {
+    user: { id: customer.id, firstName: customer.firstName, lastName: customer.lastName, email: customer.email },
+  })]);
   await context.route(`**/api/mpesa/admin/**`, (route) => {
     const { pathname } = new URL(route.request().url());
     const authorization = route.request().headers().authorization;
@@ -219,6 +222,9 @@ async function staffPayments(page: Page, context: BrowserContext, role: string) 
 
   await page.goto("/#/admin");
   await page.getByRole("navigation", { name: "Admin sections" }).getByRole("button", { name: "Orders" }).click();
+  // An unpaid order needs no staff action yet, so it is opened from the full list.
+  await page.getByRole("navigation", { name: "Order worklists" }).getByRole("button", { name: "All orders" }).click();
+  await page.getByRole("button", { name: `Open order ${placed.orderNumber}` }).click();
   const toggle = page.getByRole("button", { name: `M-Pesa payments for ${placed.orderNumber}` });
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
   expect(seen).toEqual([]);

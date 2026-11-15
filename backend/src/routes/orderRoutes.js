@@ -1,35 +1,47 @@
 import express from 'express';
 import {
-  createOrder,
-  quoteOrder,
-  getCheckoutQuote,
-  getUserOrders,
-  getOrderById,
+  applyOrderAction,
+  applyRefundAction,
   cancelOrder,
-  pickupOrder,
-  returnOrder,
-  trackOrder,
-  getAllOrders,
-  updateOrderStatus,
-  approveRefund,
+  cancelOrderReturn,
   createCheckoutOrder,
-  toggleAutoStage,
-  bulkToggleAutoStage,
+  createOrder,
+  createPaymentRefund,
+  decideOrderReturn,
+  getAllOrders,
+  getCheckoutQuote,
+  getOrderById,
+  getRefunds,
+  getReturns,
+  getStaffOrder,
+  getUserOrders,
+  quoteOrder,
+  receiveOrderReturn,
+  requestOrderRefund,
+  requestOrderReturn,
+  trackOrder,
 } from '../controllers/orderController.js';
 import { authenticate } from '../middleware/auth.js';
 import { authenticateAdmin, authorize } from '../middleware/adminAuth.js';
 
 const router = express.Router();
+const staffRead = [authenticateAdmin, authorize('SUPER_ADMIN', 'ADMIN', 'VIEWER')];
+const staffWrite = [authenticateAdmin, authorize('SUPER_ADMIN', 'ADMIN')];
 
 // Public route
 router.get('/track/:number', trackOrder);
 
-// Admin routes
-router.get('/admin/all', authenticateAdmin, authorize('SUPER_ADMIN', 'ADMIN', 'VIEWER'), getAllOrders);
-router.put('/admin/:id/status', authenticateAdmin, authorize('SUPER_ADMIN', 'ADMIN'), updateOrderStatus);
-router.put('/admin/:id/refund', authenticateAdmin, authorize('SUPER_ADMIN', 'ADMIN'), approveRefund);
-router.put('/admin/:id/auto-stage', authenticateAdmin, authorize('SUPER_ADMIN', 'ADMIN'), toggleAutoStage);
-router.post('/admin/auto-stage/bulk', authenticateAdmin, authorize('SUPER_ADMIN', 'ADMIN'), bulkToggleAutoStage);
+// Staff routes
+router.get('/admin/all', ...staffRead, getAllOrders);
+router.get('/admin/returns', ...staffRead, getReturns);
+router.get('/admin/refunds', ...staffRead, getRefunds);
+router.get('/admin/:id', ...staffRead, getStaffOrder);
+router.post('/admin/:id/actions', ...staffWrite, applyOrderAction);
+router.post('/admin/:id/refunds', ...staffWrite, requestOrderRefund);
+router.post('/admin/returns/:returnId/decision', ...staffWrite, decideOrderReturn);
+router.post('/admin/returns/:returnId/receive', ...staffWrite, receiveOrderReturn);
+router.post('/admin/refunds/:refundId/:action', ...staffWrite, applyRefundAction);
+router.post('/admin/payments/:paymentId/refunds', ...staffWrite, createPaymentRefund);
 
 // Customer routes
 router.use(authenticate);
@@ -40,7 +52,7 @@ router.post('/', createOrder);
 router.get('/', getUserOrders);
 router.get('/:id', getOrderById);
 router.post('/:id/cancel', cancelOrder);
-router.post('/:id/pickup', pickupOrder);
-router.post('/:id/return', returnOrder);
+router.post('/:id/returns', requestOrderReturn);
+router.post('/:id/returns/:returnId/cancel', cancelOrderReturn);
 
 export default router;

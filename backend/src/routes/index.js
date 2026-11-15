@@ -23,6 +23,7 @@ import settingsRoutes from './settingsRoutes.js';
 import subscriptionRoutes from './subscriptionRoutes.js';
 import { getCatalog, getAdminCatalog, createMedia } from '../controllers/productController.js';
 import { authenticateAdmin, authorize } from '../middleware/adminAuth.js';
+import { runScheduledMaintenance } from '../controllers/operationsController.js';
 
 const router = express.Router();
 
@@ -43,6 +44,9 @@ router.use((req, res, next) => req.path.toLowerCase().startsWith('/mpesa/callbac
 router.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+// Scheduled work: Vercel cron sends Authorization: Bearer CRON_SECRET.
+router.get('/internal/maintenance', runScheduledMaintenance);
 
 // API routes
 router.get('/catalog', getCatalog);

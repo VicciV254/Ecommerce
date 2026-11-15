@@ -9,6 +9,7 @@ import {
   fixtureCategories,
   fixtureDiscounts,
   fixtureImage,
+  fixtureReturnPolicy,
   fixtureVariant,
   imagelessShirt,
   linenShirt,
@@ -39,6 +40,7 @@ function catalogWith(products: CatalogProduct[], status: CatalogValue["status"] 
     categories: buildCategoryTree(fixtureCategories),
     designers: [],
     discounts: fixtureDiscounts,
+    returnPolicy: status === "ready" ? fixtureReturnPolicy : null,
     reload: vi.fn(),
   };
 }
@@ -71,6 +73,20 @@ describe("ProductDetail", () => {
     await act(async () => finish({ data: poloShirt }));
     expect(screen.getByRole("heading", { name: "Cotton Polo Shirt" })).toBeTruthy();
     expect(addButton().hasAttribute("disabled")).toBe(false);
+  });
+
+  it.each([
+    ["STANDARD", "Returns within 7 days of delivery."],
+    ["FAULT_ONLY", "Returnable only if faulty, damaged or wrong — within 7 days."],
+    ["UNOPENED_OR_FAULT", "Returnable within 7 days if unopened, or if faulty, damaged or wrong."],
+  ] as const)("states the %s returns rule beside price and availability", (returnRule, window) => {
+    mocks.catalog = catalogWith([{ ...poloShirt, returnRule }]);
+    mocks.getProduct.mockImplementation(pending);
+    render(<ProductDetail id={poloShirt.id} />);
+    const fact = screen.getByText(/^Returns:/).closest("p");
+    expect(fact?.textContent).toBe(`Returns: ${window} Refunds by M-Pesa; delivery fee refunded only for faulty, damaged or wrong items.`);
+    // The fact sits with the availability box, ahead of the purchase controls.
+    expect(fact && fact.compareDocumentPosition(addButton()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("reports an unknown product as not found instead of showing another product", async () => {

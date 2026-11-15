@@ -6,6 +6,7 @@ import { idempotencyKeySchema } from '../utils/checkoutValidation.js';
 import { initiatePaymentSchema, parseCallback } from '../utils/mpesaValidation.js';
 import { commitOrderReservation, expireOrderReservation, isInventoryConflict, lockOrderInventory as lockOrder } from './inventoryService.js';
 import provider, { DarajaError } from './mpesaService.js';
+import { dispatchNotifications, enqueueNotification } from './notificationService.js';
 
 const UNSETTLED = ['INITIATING', 'PENDING', 'UNKNOWN', 'REVIEW', 'SUCCEEDED'];
 const MAX_ATTEMPTS = 5;
@@ -323,14 +324,17 @@ async function finishQuery(db, payment, result, lease) {
   if (order.status !== 'PENDING' || order.reservationStatus !== 'HELD') reviewCode ??= 'RESERVATION_UNAVAILABLE';
   if (!reviewCode) await commitOrderReservation(db, order.id);
   const canAttribute = moneyNumber(order.total) === moneyNumber(payment.amount) && order.paymentStatus === 'PENDING';
-  if (canAttribute) await db.order.update({ where: { id: order.id }, data: {
-    paymentStatus: 'PAID', autoStageEnabled: false, autoStagePaused: true,
-    trackingHistory: { create: {
-      status: order.status,
-      description: reviewCode ? 'M-Pesa payment received; staff review required. No fulfilment was started.' : 'M-Pesa payment confirmed; awaiting staff fulfilment.',
-      location: 'Payment verification',
-    } },
-  } });
+  if (canAttribute) {
+    const settled = await db.order.update({ where: { id: order.id }, data: {
+      paymentStatus: 'PAID', settledPaymentId: payment.id,
+      trackingHistory: { create: {
+        status: order.status,
+        description: reviewCode ? 'M-Pesa payment received; staff review required. No fulfilment was started.' : 'M-Pesa payment confirmed; awaiting staff fulfilment.',
+        location: 'Payment verification', actorType: 'PROVIDER',
+      } },
+    } });
+    if (!reviewCode) await enqueueNotification(db, { type: 'PAYMENT_CONFIRMED', order: settled, dedupeKey: `payment-confirmed:${order.id}` });
+  }
   return db.mpesaPayment.update({ where: { id: payment.id }, data: {
     ...verified, status: reviewCode ? 'REVIEW' : 'SUCCEEDED',
     reviewCode, receiptNumber: callback.receiptNumber, confirmedAt: new Date(), nextReconcileAt: null,
@@ -386,6 +390,7 @@ export async function reconcilePayment(id, { userId, staff = false, automatic = 
       await lockOrder(db, known.orderId);
       return finishQuery(db, await db.mpesaPayment.findUnique({ where: { id } }), result, lease);
     });
+    if (payment.confirmedAt) await dispatchPendingOrderNotifications(known.orderId);
     return paymentDto(payment);
   } catch (error) {
     // A receipt conflict must not be mistaken for a second confirmed payment.
@@ -399,6 +404,11 @@ export async function reconcilePayment(id, { userId, staff = false, automatic = 
     } catch { console.error('M-Pesa verification result requires persistence recovery', { paymentId: id }); }
     throw paymentError(503, code, 'Payment verification could not be saved. Check this attempt again; do not initiate another payment.');
   }
+}
+
+async function dispatchPendingOrderNotifications(orderId) {
+  const pending = await prisma.notification.findMany({ where: { orderId, status: 'PENDING' }, select: { id: true } });
+  await dispatchNotifications(pending.map((notification) => notification.id));
 }
 
 export async function reconcileDuePayments() {

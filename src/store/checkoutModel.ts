@@ -43,10 +43,8 @@ export const DELIVERY_LABELS: Record<DeliveryMethod, string> = {
   SAME_DAY: "Same-day delivery",
   STORE_PICKUP: "Store pickup",
 };
-const ORDER_STATUSES: readonly OrderStatus[] = [
-  "PENDING", "PROCESSING", "SHIPPED", "READY_FOR_PICKUP", "DELIVERED", "CANCELLED", "AWAITING_REFUND", "RETURNED",
-];
-const PAYMENT_STATUSES: readonly PaymentStatus[] = ["PENDING", "PAID", "FAILED", "REFUNDED"];
+const ORDER_STATUSES: readonly OrderStatus[] = ["PENDING", "PROCESSING", "SHIPPED", "READY_FOR_PICKUP", "DELIVERED", "CANCELLED"];
+const PAYMENT_STATUSES: readonly PaymentStatus[] = ["PENDING", "PAID", "FAILED", "REFUNDED", "PARTIALLY_REFUNDED"];
 const RESERVATION_STATUSES: readonly ReservationStatus[] = ["HELD", "COMMITTED", "RELEASED", "EXPIRED"];
 
 export const isDeliveryMethod = (value: unknown): value is DeliveryMethod =>

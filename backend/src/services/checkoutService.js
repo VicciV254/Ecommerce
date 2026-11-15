@@ -1,9 +1,11 @@
 import { createHash } from 'node:crypto';
 import prisma from '../config/database.js';
 import { checkoutPolicy, demoOrdersEnabled, reservationsEnabled } from '../config/checkoutPolicy.js';
+import { effectiveReturnRule, policySnapshot, returnPolicy } from '../config/returnPolicy.js';
 import { availableStock, httpError, loadCategories, productInclude, productWhere } from './catalogService.js';
 import { priceBasket } from './pricingService.js';
 import { expireReservations, reserveOrderItems } from './inventoryService.js';
+import { enqueueNotification } from './notificationService.js';
 import { idempotencyKeySchema, orderInputSchema, quoteInputSchema } from '../utils/checkoutValidation.js';
 import { orderDto, orderInclude } from '../utils/orderDto.js';
 import { generateOrderNumber } from '../utils/helpers.js';
@@ -43,8 +45,13 @@ async function buildSnapshot(db, userId, input, policy, now) {
   const destination = {
     id: address.id, street: address.street, city: address.city, county: address.county, postalCode: address.postalCode,
   };
+  const priced = priceBasket(entries, discounts, input.couponCode, input.deliveryMethod, destination, policy, now);
+  // Return terms are part of the reviewed quote, so a changed rule requires a fresh review.
+  const rules = new Map(entries.map((entry) => [entry.variant.id, effectiveReturnRule(context.paths.get(entry.product.categoryId))]));
   return {
-    ...priceBasket(entries, discounts, input.couponCode, input.deliveryMethod, destination, policy, now),
+    ...priced,
+    lines: priced.lines.map((line) => ({ ...line, returnRule: rules.get(line.variantId) })),
+    returnPolicy: policySnapshot(returnPolicy()),
     mode: hasDemo ? 'demo' : 'live', address: destination, notes: input.notes,
   };
 }
@@ -124,7 +131,7 @@ export async function createPendingOrder(userId, body, key) {
       const policy = checkoutPolicy();
       const current = await buildSnapshot(db, userId, request, policy, new Date());
       if (fingerprint(current) !== quote.fingerprint) {
-        throw httpError(409, 'Prices, delivery or the address changed. Request and review a new quote.', 'QUOTE_CHANGED');
+        throw httpError(409, 'Prices, delivery, return terms or the address changed. Request and review a new quote.', 'QUOTE_CHANGED');
       }
       const now = new Date();
       if (quote.expiresAt <= now) throw httpError(409, 'This quote expired. Request and review a new quote.', 'QUOTE_EXPIRED');
@@ -135,13 +142,13 @@ export async function createPendingOrder(userId, body, key) {
           pricingSnapshot: {
             currency: current.currency, policyVersion: current.policyVersion, policyHash: current.policyHash,
             vatRate: current.vatRate, couponCode: current.couponCode, couponApplied: current.couponApplied,
-            discountedSubtotal: current.discountedSubtotal,
+            discountedSubtotal: current.discountedSubtotal, returnPolicy: current.returnPolicy,
           },
           subtotal: current.subtotal, discount: current.discount, tax: current.tax,
           shippingCost: current.shippingCost, total: current.total,
           status: 'PENDING', paymentStatus: 'PENDING', paymentMethod: 'MPESA',
           isDemo: current.mode === 'demo', deliveryMethod: current.deliveryMethod, notes: current.notes,
-          autoStageEnabled: false, reservationStatus: 'HELD',
+          reservationStatus: 'HELD',
           reservationExpiresAt: new Date(now.getTime() + policy.reservationSeconds * 1000),
           items: { create: current.lines.map((line) => ({
             productId: line.productId, variantId: line.variantId, sku: line.sku,
@@ -149,14 +156,15 @@ export async function createPendingOrder(userId, body, key) {
             productPrice: line.unitPrice, quantity: line.quantity, subtotal: line.total,
             productImage: line.productImage, pricingSnapshot: line,
           })) },
-          trackingHistory: { create: { status: 'PENDING', description: 'Order reserved; payment has not been received.' } },
+          trackingHistory: { create: { status: 'PENDING', description: 'Order reserved; payment has not been received.', actorType: 'CUSTOMER', actorId: userId } },
         },
         include: orderInclude,
       });
       await reserveOrderItems(db, order.items);
       await db.checkoutQuote.update({ where: { id: quote.id }, data: { consumedAt: now } });
       await consumeMatchingCart(db, userId, current.lines);
-      return { order: orderDto(order), created: true };
+      const notification = await enqueueNotification(db, { type: 'ORDER_RECEIVED', order, dedupeKey: `order-received:${order.id}` });
+      return { order: orderDto(order), created: true, notificationIds: notification ? [notification.id] : [] };
     }, { isolationLevel: 'Serializable', maxWait: 5000, timeout: 20_000 });
     return result;
   } catch (error) {

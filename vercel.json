@@ -11,6 +11,12 @@
             "buildCommand": "npm run build"
         }
     },
+    "crons": [
+        {
+            "path": "/api/internal/maintenance",
+            "schedule": "0 3 * * *"
+        }
+    ],
     "rewrites": [
         {
             "source": "/api(/.*)?",

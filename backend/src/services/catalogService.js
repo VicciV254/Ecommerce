@@ -1,6 +1,7 @@
 import prisma from '../config/database.js';
 import { storefrontSchema, STOREFRONT_KEY } from '../utils/catalogValidation.js';
 import { checkoutPolicy } from '../config/checkoutPolicy.js';
+import { effectiveReturnRule, policySnapshot, returnPolicy } from '../config/returnPolicy.js';
 import { unitPrice } from './pricingService.js';
 
 export { STOREFRONT_KEY };
@@ -110,7 +111,7 @@ export function productDto(product, context) {
     categorySlug: product.category.slug, categoryPath: path.map((item) => item.id),
     designerId: product.designerId, tags: product.tags, collection: product.collection,
     specifications: product.specifications, isActive: product.isActive,
-    isFeatured: product.isFeatured, isDemo: product.isDemo,
+    isFeatured: product.isFeatured, isDemo: product.isDemo, returnRule: effectiveReturnRule(path),
     images: product.images.map(mediaDto), variants,
     stock: available.reduce((sum, variant) => sum + variant.stock, 0),
     maxStock: available.reduce((sum, variant) => sum + variant.maxStock, 0),
@@ -124,7 +125,7 @@ export function categoryDtos(context, products, admin = false) {
     .map((category) => ({
       id: category.id, name: category.name, slug: category.slug, parentId: category.parentId,
       order: category.order, image: category.headerImage, attributeKeys: category.attributeKeys,
-      isActive: category.isActive,
+      isActive: category.isActive, returnRule: category.returnRule ?? null,
       productCount: products.filter((product) => product.categoryPath.includes(category.id)).length,
     }));
 }
@@ -164,6 +165,7 @@ export async function catalogSnapshot(db, admin = false) {
     version: 2, mode: admin ? 'admin' : demoCatalogEnabled() ? 'demo' : 'live',
     products, categories: categoryDtos(context, products, admin),
     designers: designers.map(designerDto), discounts: discounts.map(discountDto),
+    returnPolicy: (({ hash, ...terms }) => terms)(policySnapshot(returnPolicy())),
   };
 }
 

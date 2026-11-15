@@ -7,6 +7,7 @@ import type {
   CatalogDesigner,
   CatalogDiscount,
   CatalogProduct,
+  CatalogReturnPolicy,
   CatalogSnapshot,
   CatalogVariant,
   MediaAsset,
@@ -54,6 +55,7 @@ export function fixtureProduct(overrides: Partial<CatalogProduct> & Pick<Catalog
     slug: slug(overrides.name), description: `${overrides.name} described for automated tests.`, price: 1000, comparePrice: null,
     categoryId: "cat-shirts", categoryName: "Shirts", categorySlug: "shirts", categoryPath: ["cat-fashion", "cat-men", "cat-shirts"],
     designerId: null, tags: [], collection: null, specifications: {}, isActive: true, isFeatured: false, isDemo: false,
+    returnRule: "STANDARD",
     images: [], variants: [fixtureVariant({ id: `${overrides.id}-sku` })], stock: 10, maxStock: 100, rating: 0, reviewsCount: 0,
     ...overrides,
   };
@@ -142,11 +144,16 @@ export const fixtureDiscounts: CatalogDiscount[] = [
   },
 ];
 
+/** The user-approved terms as the catalog API publishes them. */
+export const fixtureReturnPolicy: CatalogReturnPolicy = {
+  version: 1, windowDays: 7, deliveryFeeRefund: "MERCHANT_FAULT_ONLY", partialReturns: true, refundRounding: "UP_TO_WHOLE_KES",
+};
+
 export function fixtureSnapshot(overrides: Partial<CatalogSnapshot> = {}): CatalogSnapshot {
   return {
     version: 2, mode: "demo",
     products: [linenShirt, poloShirt, imagelessShirt, demoPhone],
-    categories: fixtureCategories, designers: fixtureDesigners, discounts: fixtureDiscounts,
+    categories: fixtureCategories, designers: fixtureDesigners, discounts: fixtureDiscounts, returnPolicy: fixtureReturnPolicy,
     ...overrides,
   };
 }

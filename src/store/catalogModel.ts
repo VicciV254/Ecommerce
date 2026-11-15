@@ -3,11 +3,13 @@ import type {
   CatalogDesigner,
   CatalogDiscount,
   CatalogProduct,
+  CatalogReturnPolicy,
   CatalogSnapshot,
   CatalogVariant,
   MediaAsset,
   VariantPricing,
 } from "../api/catalog";
+import type { DeliveryFeeRefund, ReturnRule } from "../api/orders";
 import { isRecord } from "../utils/storage";
 
 /* ------------------------------------------------------------------ */
@@ -39,6 +41,23 @@ export function isMoney(value: unknown): value is number {
   return isNumber(value) && value >= 0 && value <= MAX_MONEY && MONEY_TEXT.test(String(value));
 }
 
+export const RETURN_RULES: readonly ReturnRule[] = ["STANDARD", "FAULT_ONLY", "UNOPENED_OR_FAULT"];
+const DELIVERY_FEE_REFUNDS: readonly DeliveryFeeRefund[] = ["MERCHANT_FAULT_ONLY", "ALWAYS", "NEVER"];
+/** The server accepts return windows of 1 to 365 days. */
+const MAX_RETURN_WINDOW_DAYS = 365;
+
+export const isReturnRule = (value: unknown): value is ReturnRule => RETURN_RULES.some((rule) => rule === value);
+export const isDeliveryFeeRefund = (value: unknown): value is DeliveryFeeRefund =>
+  DELIVERY_FEE_REFUNDS.some((rule) => rule === value);
+export const isReturnWindowDays = (value: unknown): value is number =>
+  Number.isInteger(value) && Number(value) >= 1 && Number(value) <= MAX_RETURN_WINDOW_DAYS;
+
+function isCatalogReturnPolicy(value: unknown): value is CatalogReturnPolicy {
+  return isRecord(value) && Number.isInteger(value.version) && Number(value.version) > 0 &&
+    isReturnWindowDays(value.windowDays) && isDeliveryFeeRefund(value.deliveryFeeRefund) &&
+    typeof value.partialReturns === "boolean" && value.refundRounding === "UP_TO_WHOLE_KES";
+}
+
 function isMediaAsset(value: unknown): value is MediaAsset {
   return isRecord(value) && isString(value.id) && isString(value.url) && typeof value.isPlaceholder === "boolean" &&
     typeof value.isMain === "boolean" && isNumber(value.order) && isNullableString(value.alt);
@@ -64,7 +83,7 @@ export function isCatalogProduct(value: unknown): value is CatalogProduct {
     isString(value.categoryId) && isString(value.categoryName) && isStringArray(value.categoryPath) &&
     isNullableString(value.designerId) && isStringArray(value.tags) && isNullableString(value.collection) &&
     isStringRecord(value.specifications) && typeof value.isActive === "boolean" &&
-    typeof value.isFeatured === "boolean" && typeof value.isDemo === "boolean" &&
+    typeof value.isFeatured === "boolean" && typeof value.isDemo === "boolean" && isReturnRule(value.returnRule) &&
     Array.isArray(value.images) && value.images.every(isMediaAsset) &&
     Array.isArray(value.variants) && value.variants.every(isVariant) &&
     isNumber(value.rating) && isNumber(value.reviewsCount);
@@ -97,12 +116,13 @@ export function parseCatalogSnapshot(data: unknown, modes: readonly CatalogSnaps
   const mode = data.mode;
   if (mode !== "live" && mode !== "demo" && mode !== "admin") throw new CatalogFormatError("unknown mode");
   if (!modes.includes(mode)) throw new CatalogFormatError(`unexpected ${mode} mode`);
-  const { products, categories, designers, discounts } = data;
+  const { products, categories, designers, discounts, returnPolicy } = data;
   if (!Array.isArray(products) || !products.every(isCatalogProduct)) throw new CatalogFormatError("products");
   if (!Array.isArray(categories) || !categories.every(isCategory)) throw new CatalogFormatError("categories");
   if (!Array.isArray(designers) || !designers.every(isDesigner)) throw new CatalogFormatError("designers");
   if (!Array.isArray(discounts) || !discounts.every(isDiscount)) throw new CatalogFormatError("discounts");
-  return { version: 2, mode, products, categories, designers, discounts };
+  if (!isCatalogReturnPolicy(returnPolicy)) throw new CatalogFormatError("return policy");
+  return { version: 2, mode, products, categories, designers, discounts, returnPolicy };
 }
 
 /* ------------------------------------------------------------------ */

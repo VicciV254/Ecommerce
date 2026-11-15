@@ -1,5 +1,6 @@
-import { browserQuote, expect, linenCartLine, servePaymentOverview, shopperState, signInCustomer, test, watchPaymentWrites } from "./fixtures";
+import { browserQuote, expect, linenCartLine, orderPage, servePaymentOverview, shopperState, signInCustomer, test, watchPaymentWrites } from "./fixtures";
 import { fixturePendingOrder, linenLine } from "../../src/test-support/checkoutFixtures";
+import { fixtureCustomerOrder } from "../../src/test-support/orderFixtures";
 import { PAYMENT_MESSAGES } from "../../src/test-support/paymentFixtures";
 
 const REQUEST_KEY = /^[A-Za-z0-9:_-]{16,128}$/;
@@ -73,10 +74,8 @@ test("a cart quote with a coupon is reviewed and reserved as one unpaid pending 
 test("saved and printed receipts explain the stored discount and VAT without recalculating totals", async ({ page, context }) => {
   await signInCustomer(page);
   await context.addInitScript(() => { window.print = () => {}; });
-  const order = fixturePendingOrder(browserQuote(couponTotals));
-  await context.route("**/api/orders?*", (route) => route.fulfill({
-    json: { orders: [order], pagination: { page: 1, limit: 100, total: 1, pages: 1 } },
-  }));
+  const order = fixtureCustomerOrder(fixturePendingOrder(browserQuote(couponTotals)));
+  await context.route("**/api/orders?*", (route) => route.fulfill({ json: orderPage([order]) }));
   await servePaymentOverview(context, order);
   await page.goto("/#/account/orders");
   await page.getByRole("button", { name: "Details", exact: true }).click();
