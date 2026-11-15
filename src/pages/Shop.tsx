@@ -265,7 +265,7 @@ function ShopListing({ category, designerId, designerName, designerParam, q }: {
           <h1 className="font-display text-2xl uppercase tracking-wider text-brand-primary sm:text-3xl">{heading}</h1>
           <p className="mt-1 text-xs text-gray-500">{filtered.length} {filtered.length === 1 ? "product" : "products"} found</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
           <select
             aria-label="Sort products"
             value={sort}
@@ -273,7 +273,7 @@ function ShopListing({ category, designerId, designerName, designerParam, q }: {
               setSort(SORTS.find((option) => option.value === event.target.value)?.value ?? "featured");
               setPage(1);
             }}
-            className="rounded-sm border border-light-gray bg-white px-3 py-2 text-xs outline-none"
+            className="min-w-0 max-w-full rounded-sm border border-light-gray bg-white px-3 py-2 text-xs outline-none"
           >
             {SORTS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>

@@ -4,7 +4,7 @@
 @theme {
   --color-brand-primary: #14213d;
   --color-brand-secondary: #d4a73c;
-  --color-brand-accent: #926d21;
+  --color-brand-accent: #765619;
   --color-warm-beige: #f4f1e9;
   --color-ocean-blue: #1d4e89;
   --color-ocean-blue-dark: #173f6e;
@@ -17,35 +17,155 @@
   --color-light-gray: #d8dee7;
   --color-light-pink: #eef2f7;
 
+  /* Design-system colours that no published setting controls. */
+  --color-surface: #ffffff;
+  --color-navy-950: #071426;
+  --color-gold-400: #e4be61;
+  --color-gold-600: #b88a26;
+  --color-muted: #475569;
+  --color-on-navy-muted: #d8dee7;
+  --color-control: #64748b;
+  --color-success-tint: #eaf5ee;
+  --color-warning-tint: #fff7e1;
+  --color-error-tint: #fef3f2;
+  --color-info-tint: #eef4fc;
+
   --font-display: "Marcellus", serif;
   --font-body: "Jost", sans-serif;
+  /* The wordmark keeps its typeface when a published theme swaps the display font. */
+  --font-wordmark: "Marcellus", serif;
+
+  --shadow-card: 0 1px 3px rgb(7 20 38 / 0.08);
+  --shadow-overlay: 0 12px 32px rgb(7 20 38 / 0.18);
+}
+
+/* Role names for published settings; `inline` resolves them where used, so a published theme recolours them too. */
+@theme inline {
+  --color-surface-page: var(--color-off-white);
+  --color-surface-soft: var(--color-light-pink);
+  --color-surface-warm: var(--color-warm-beige);
+  --color-navy-900: var(--color-brand-primary);
+  --color-navy-800: var(--color-charcoal);
+  --color-gold-500: var(--color-brand-secondary);
+  --color-gold-text: var(--color-brand-accent);
+  --color-link: var(--color-ocean-blue);
+  --color-link-hover: var(--color-ocean-blue-dark);
+  --color-focus: var(--color-ocean-blue);
+  --color-info: var(--color-ocean-blue);
+  --color-divider: var(--color-light-gray);
+}
+
+:root {
+  /* Inline role tokens are not emitted as variables, so the ring reads the published colour behind `focus`. */
+  --focus-ring: var(--color-ocean-blue);
+  --focus-ring-width: 3px;
+  --focus-ring-offset: 2px;
+  --motion-feedback: 120ms;
+  --motion-overlay: 180ms;
+}
+
+/* Type scale: phone, then tablet (768px) and desktop (1280px). Marcellus has one weight, so display roles never bold. */
+@utility type-display {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 2rem;
+  line-height: 2.5rem;
+  @media (width >= 48rem) { font-size: 2.5rem; line-height: 3rem; }
+  @media (width >= 80rem) { font-size: 3rem; line-height: 3.5rem; }
+}
+
+@utility type-h1 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 1.75rem;
+  line-height: 2.25rem;
+  @media (width >= 48rem) { font-size: 2rem; line-height: 2.5rem; }
+  @media (width >= 80rem) { font-size: 2.25rem; line-height: 2.75rem; }
+}
+
+@utility type-h2 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 1.5rem;
+  line-height: 2rem;
+  @media (width >= 48rem) { font-size: 1.75rem; line-height: 2.25rem; }
+}
+
+@utility type-h3 {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 1.25rem;
+  line-height: 1.75rem;
+}
+
+/* Amounts: Jost with tabular figures so columns of prices align. */
+@utility type-price {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  font-size: 1.5rem;
+  line-height: 2rem;
+  @media (width >= 48rem) { font-size: 1.75rem; line-height: 2.25rem; }
+}
+
+@utility type-price-card {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  font-size: 1.125rem;
+  line-height: 1.5rem;
+}
+
+/* Focus ring colour for a subtree: gold on navy surfaces, info blue on light panels nested inside them. */
+@utility on-navy {
+  --focus-ring: var(--color-gold-400);
+}
+
+@utility on-light {
+  --focus-ring: var(--color-ocean-blue);
+}
+
+@layer base {
+  /* Form controls never drop below the 16px body size (also stops iOS zooming on focus); size utilities read these. */
+  input, select, textarea {
+    font-size: max(1rem, 1em);
+    --text-xs: 1rem;
+    --text-xs--line-height: 1.5;
+    --text-sm: 1rem;
+    --text-sm--line-height: 1.5;
+  }
 }
 
 html {
   scroll-behavior: smooth;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  font-synthesis-weight: none;
+  /* Focus and scroll-into-view stop below the sticky header (height set by useStickyHeaderOffset), ring included. */
+  scroll-padding-top: calc(var(--sticky-header-height, 0px) + var(--focus-ring-width) + var(--focus-ring-offset) + 0.25rem);
+}
+
+/* The sticky header never leaves the viewport, so focus and caret moves inside it must not scroll the page. */
+html:has([data-sticky-header] :focus) {
+  scroll-padding-top: 0;
 }
 
 body {
   font-family: var(--font-body);
   background-color: var(--color-off-white);
   color: var(--color-charcoal);
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: 1rem;
+  line-height: 1.5;
 }
 
 body:has(dialog.modal-frame[open]) {
   overflow: hidden;
 }
 
-:where(a, button, input, select, textarea):focus-visible {
-  outline: 2px solid var(--color-ocean-blue);
-  outline-offset: 3px;
-}
-
-h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-display);
+/* One focus indicator, unlayered so it also replaces `outline-none`: a 3px ring outside a 2px gap. */
+:where(a, button, input, select, textarea, summary):focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
 }
 
 /* Selection */
@@ -69,7 +189,7 @@ h1, h2, h3, h4, h5, h6 {
   to { opacity: 1; }
 }
 .animate-fade-in {
-  animation: fadeIn 0.4s ease-out both;
+  animation: fadeIn var(--motion-overlay) ease-out both;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -79,6 +199,18 @@ h1, h2, h3, h4, h5, h6 {
 
   .animate-fade-in {
     animation: none;
+  }
+
+  /* Immediate state changes: no transitions, spinning or scroll-in reveals. */
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  [data-aos] {
+    opacity: 1 !important;
+    transform: none !important;
   }
 }
 

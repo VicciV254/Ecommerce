@@ -146,7 +146,7 @@ export function OrderWorkspace({ orderId, focus, canWrite, onBack, onChanged, sh
           </div>
           {order && (
             <div className="flex flex-col items-start gap-1.5 sm:items-end">
-              <p className="font-display text-2xl text-brand-primary">{formatKES(order.total)}</p>
+              <p className="text-2xl font-semibold tabular-nums text-navy-900">{formatKES(order.total)}</p>
               <div className="flex flex-wrap gap-2">
                 <OrderStatusBadge order={order} />
                 <span className="rounded-full bg-off-white px-3 py-1 text-xs font-semibold text-charcoal">Payment: {paymentLabel(order)}</span>

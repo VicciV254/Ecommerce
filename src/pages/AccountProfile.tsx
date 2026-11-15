@@ -70,7 +70,7 @@ export default function AccountProfile() {
         <h2 className="mt-1 font-display text-2xl">Profile Settings</h2>
       </div>
       <form onSubmit={handleSubmit} className="max-w-md space-y-4">
-        <div className="rounded-md border border-brand-secondary/30 bg-light-pink p-4">
+        <div className="rounded-md border border-brand-secondary/30 bg-surface-soft p-4">
           <div className="flex items-center gap-4">
             {formData.profileImage ? (
               <img src={formData.profileImage} alt="" className="h-20 w-20 rounded-full object-cover ring-2 ring-brand-secondary" />
@@ -79,9 +79,9 @@ export default function AccountProfile() {
                 {user?.firstName?.[0] ?? 'U'}
               </div>
             )}
-            <div className="flex-1">
-              <label className="block text-sm font-semibold text-brand-primary mb-1">Profile Photo</label>
-              <input type="file" accept="image/*" onChange={handlePhotoFile} className="text-sm" />
+            <div className="min-w-0 flex-1">
+              <label htmlFor="profile-photo" className="block text-sm font-semibold text-brand-primary mb-1">Profile Photo</label>
+              <input id="profile-photo" type="file" accept="image/*" onChange={handlePhotoFile} className="block w-full max-w-full text-sm" />
             </div>
           </div>
         </div>
@@ -133,14 +133,14 @@ export default function AccountProfile() {
             type="email"
             value={user?.email ?? ''}
             disabled
-            className="w-full rounded-md border border-light-gray bg-light-pink/40 p-2 text-charcoal/60"
+            className="w-full rounded-md border border-light-gray bg-surface-soft p-2 text-muted"
           />
         </div>
-        <div className="rounded-md border border-brand-secondary/30 bg-light-pink p-4">
+        <div className="rounded-md border border-brand-secondary/30 bg-surface-soft p-4">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-sm font-semibold text-brand-primary">Promotional Emails</h3>
-              <p className="mt-1 text-xs text-gray-500">Receive updates about new products and special offers.</p>
+              <p className="mt-1 text-xs text-muted">Receive updates about new products and special offers.</p>
             </div>
             <button
               type="button"
@@ -158,9 +158,9 @@ export default function AccountProfile() {
             </button>
           </div>
         </div>
-        <div className="rounded-md border border-brand-secondary/30 bg-light-pink p-4">
+        <div className="rounded-md border border-brand-secondary/30 bg-surface-soft p-4">
           <h3 className="text-sm font-semibold text-brand-primary">M-Pesa Payments</h3>
-          <p className="mt-1 text-xs text-gray-500">Payment availability and status are shown on each order. Enter your M-Pesa PIN only in the prompt on your phone, never on this website.</p>
+          <p className="mt-1 text-xs text-muted">Payment availability and status are shown on each order. Enter your M-Pesa PIN only in the prompt on your phone, never on this website.</p>
         </div>
         {message && (
           <p className={`text-sm ${message.includes('success') ? 'text-green-600' : 'text-red-600'}`}>

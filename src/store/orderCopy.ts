@@ -1,5 +1,6 @@
 import { isAxiosError } from "axios";
 import type { AttentionItem, RefundAction, StaffAction } from "../api/admin";
+import type { User } from "../api/auth";
 import type { CatalogReturnPolicy } from "../api/catalog";
 import { apiErrorCode, describeApiError } from "../api/errors";
 import type {
@@ -57,6 +58,14 @@ export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
   REFUNDED: "refunded",
   PARTIALLY_REFUNDED: "partially refunded",
 };
+
+export function customerName(user: Pick<User, "firstName" | "lastName"> | null) {
+  return [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Customer";
+}
+
+export function deliveryAddress(order: Pick<Order, "address">) {
+  return order.address ? `${order.address.street}, ${order.address.city}, ${order.address.county}` : "Not provided";
+}
 
 export function paymentLabel(order: Pick<Order, "paymentMethod" | "paymentStatus">) {
   const method = order.paymentMethod === "MPESA" ? "M-Pesa" : order.paymentMethod.replace(/_/g, " ").toLowerCase();

@@ -278,8 +278,8 @@ function ProductContent({ id }: { id: string }) {
 
           {price && (
             <div className="mt-3 flex flex-wrap items-baseline gap-3">
-              <span className="font-display text-3xl text-brand-primary">
-                {price.isFromPrice && <span className="font-body text-sm">From </span>}
+              <span className="type-price text-navy-900">
+                {price.isFromPrice && <span className="text-sm font-normal">From </span>}
                 {formatKES(price.price)}
               </span>
               {price.comparePrice !== null && <span className="text-base text-gray-500 line-through">{formatKES(price.comparePrice)}</span>}

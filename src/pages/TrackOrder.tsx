@@ -113,7 +113,7 @@ export default function TrackOrder({ route }: { route: string }) {
             value={orderNumber}
             onChange={(event) => { setOrderNumber(event.target.value); setResult({ status: "idle" }); }}
             placeholder="Order number"
-            className="flex-1 rounded-sm border border-light-gray bg-off-white px-4 py-3 text-sm outline-none focus:border-brand-secondary"
+            className="min-w-0 flex-1 rounded-sm border border-light-gray bg-off-white px-4 py-3 text-sm outline-none focus:border-brand-secondary"
           />
           <button type="submit" className="rounded-sm bg-brand-primary px-8 py-3 text-xs font-bold uppercase tracking-wider text-white hover:bg-brand-secondary hover:text-brand-primary">
             Track

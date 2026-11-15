@@ -7,7 +7,7 @@ test("storefront renders published sections and browses the canonical catalog", 
   await expect(page.getByRole("heading", { name: "Shop by department" })).toBeVisible();
   await expect(page.getByRole("list", { name: "Shop by department" }).getByRole("link")).toHaveCount(2);
   await expect(page.getByRole("note")).toContainText("Demo catalog");
-  await expect(page.getByRole("link", { name: `${publishedStorefront.settings.brand.name} home` }).first()).toBeVisible();
+  await expect(page.getByRole("banner").getByRole("link", { name: publishedStorefront.settings.brand.name, exact: true })).toBeVisible();
   await page.goto("/#/shop");
   await expect(page.getByRole("heading", { name: "All Products", exact: true })).toBeVisible();
   await page.goto("/#/shop?q=linen");

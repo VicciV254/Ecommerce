@@ -245,7 +245,7 @@ test("storefront drafts save and publish with versions without leaking to shoppe
 
   const shopper = await context.newPage();
   await shopper.goto("/");
-  await expect(shopper.getByRole("link", { name: "Apex Cart home" }).first()).toBeVisible();
+  await expect(shopper.getByRole("banner").getByRole("link", { name: "Apex Cart", exact: true })).toBeVisible();
   await expect(shopper.getByText("Apex Cart Draft")).toHaveCount(0);
 
   const reloads: Request[] = [];
@@ -254,7 +254,7 @@ test("storefront drafts save and publish with versions without leaking to shoppe
   await expect.poll(() => writes.at(-1)).toEqual({ path: "publish", body: { version: 6 } });
   await expect.poll(() => reloads.length).toBeGreaterThan(0);
   await shopper.reload();
-  await expect(shopper.getByRole("link", { name: "Apex Cart Draft home" }).first()).toBeVisible();
+  await expect(shopper.getByRole("banner").getByRole("link", { name: "Apex Cart Draft", exact: true })).toBeVisible();
   await shopper.close();
 });
 

@@ -301,7 +301,7 @@ export function DiscountManager({ showToast }: { showToast: (message: string) =>
                       {affected} {affected === 1 ? "product" : "products"} · {toDateInput(discount.startDate)} → {discount.endDate ? toDateInput(discount.endDate) : "no end date"}
                     </p>
                   </div>
-                  <p className="text-right font-display text-2xl text-coral">
+                  <p className="text-right text-2xl font-semibold tabular-nums text-coral">
                     {discount.type === "PERCENTAGE" ? `${discount.value}%` : formatKES(discount.value)}
                     <span className="block text-[9px] uppercase tracking-wider text-gray-500">off</span>
                   </p>

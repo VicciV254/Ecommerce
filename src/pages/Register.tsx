@@ -3,6 +3,10 @@ import { Link, navigate } from '../router';
 import { useAuth } from '../contexts/AuthContext';
 import { authAPI } from '../api/auth';
 import { PasswordInput } from '../components/PasswordInput';
+import { AuthLayout, authStyles } from '../components/AuthLayout';
+
+/** The API's minimum password length. */
+const PASSWORD_MIN = 8;
 
 export default function Register() {
   const [formData, setFormData] = useState({
@@ -58,145 +62,75 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-light-pink py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-lg shadow-lg">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Create your account
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Or{' '}
-            <Link to="/login" className="font-medium text-brand-secondary hover:text-brand-accent">
-              sign in to existing account
-            </Link>
-          </p>
-        </div>
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          {error && (
-            <p className="text-sm text-red-600 text-center">{error}</p>
-          )}
-          {notice && (
-            <div className="rounded-md bg-success/10 p-4 text-center text-sm text-success">
-              {notice}
-              <div className="mt-3">
-                <button type="button" onClick={() => navigate(`/verify-email?email=${encodeURIComponent(formData.email)}`)} className="font-bold underline">
-                  Enter OTP
-                </button>
-                <button type="button" onClick={resendVerification} disabled={resending} className="ml-4 font-bold underline disabled:opacity-50">
-                  {resending ? 'Sending...' : 'Resend OTP'}
-                </button>
-              </div>
-            </div>
-          )}
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">
-                  First Name
-                </label>
-                <input
-                  id="firstName"
-                  name="firstName"
-                  type="text"
-                  required
-                  value={formData.firstName}
-                  onChange={handleChange}
-                  className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-brand-secondary focus:border-brand-secondary sm:text-sm"
-                  placeholder="First Name"
-                />
-              </div>
-              <div>
-                <label htmlFor="lastName" className="block text-sm font-medium text-gray-700">
-                  Last Name
-                </label>
-                <input
-                  id="lastName"
-                  name="lastName"
-                  type="text"
-                  required
-                  value={formData.lastName}
-                  onChange={handleChange}
-                  className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-brand-secondary focus:border-brand-secondary sm:text-sm"
-                  placeholder="Last Name"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                Email address
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                value={formData.email}
-                onChange={handleChange}
-                className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-brand-secondary focus:border-brand-secondary sm:text-sm"
-                placeholder="Email address"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="phone" className="block text-sm font-medium text-gray-700">
-                Phone (optional)
-              </label>
-              <input
-                id="phone"
-                name="phone"
-                type="tel"
-                value={formData.phone}
-                onChange={handleChange}
-                className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-brand-secondary focus:border-brand-secondary sm:text-sm"
-                placeholder="Phone number"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                Password
-              </label>
-              <PasswordInput
-                id="password"
-                name="password"
-                autoComplete="new-password"
-                required
-                value={formData.password}
-                onChange={handleChange}
-                className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-brand-secondary focus:border-brand-secondary sm:text-sm"
-                placeholder="Password (min. 8 characters)"
-              />
-            </div>
-
-            <div className="flex items-center">
-              <input
-                id="promotionalEmails"
-                name="promotionalEmails"
-                type="checkbox"
-                checked={formData.promotionalEmails}
-                onChange={handleChange}
-                className="h-4 w-4 text-brand-secondary focus:ring-brand-secondary border-gray-300 rounded"
-              />
-              <label htmlFor="promotionalEmails" className="ml-2 block text-sm text-gray-700">
-                I would like to receive promotional emails about new products and special offers
-              </label>
+    <AuthLayout
+      title="Create your account"
+      intro={<>Or <Link to="/login" className={authStyles.link}>sign in to an existing account</Link></>}
+    >
+      <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
+        {error && <p role="alert" className={`${authStyles.error} text-center`}>{error}</p>}
+        {notice && (
+          <div role="status" className={`${authStyles.success} text-center`}>
+            {notice}
+            <div className="mt-1 flex flex-wrap justify-center gap-x-4">
+              <button type="button" onClick={() => navigate(`/verify-email?email=${encodeURIComponent(formData.email)}`)} className="inline-flex min-h-[44px] items-center font-bold underline underline-offset-4">
+                Enter OTP
+              </button>
+              <button type="button" onClick={resendVerification} disabled={resending} className="inline-flex min-h-[44px] items-center font-bold underline underline-offset-4 disabled:cursor-not-allowed">
+                {resending ? 'Sending...' : 'Resend OTP'}
+              </button>
             </div>
           </div>
-
+        )}
+        <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-brand-secondary hover:bg-brand-accent focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-secondary disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? 'Creating account...' : 'Create account'}
-            </button>
+            <label htmlFor="firstName" className={authStyles.label}>First name</label>
+            <input id="firstName" name="firstName" type="text" autoComplete="given-name" required value={formData.firstName} onChange={handleChange} className={authStyles.field} />
           </div>
-        </form>
-      </div>
-    </div>
+          <div>
+            <label htmlFor="lastName" className={authStyles.label}>Last name</label>
+            <input id="lastName" name="lastName" type="text" autoComplete="family-name" required value={formData.lastName} onChange={handleChange} className={authStyles.field} />
+          </div>
+        </div>
+        <div>
+          <label htmlFor="email" className={authStyles.label}>Email address</label>
+          <input id="email" name="email" type="email" autoComplete="email" required value={formData.email} onChange={handleChange} className={authStyles.field} />
+        </div>
+        <div>
+          <label htmlFor="phone" className={authStyles.label}>Phone (optional)</label>
+          <input id="phone" name="phone" type="tel" autoComplete="tel" value={formData.phone} onChange={handleChange} className={authStyles.field} />
+        </div>
+        <div>
+          <label htmlFor="password" className={authStyles.label}>Password</label>
+          <PasswordInput
+            id="password"
+            name="password"
+            autoComplete="new-password"
+            required
+            minLength={PASSWORD_MIN}
+            aria-describedby="password-hint"
+            value={formData.password}
+            onChange={handleChange}
+            className={authStyles.field}
+          />
+          <p id="password-hint" className="mt-1 text-sm text-muted">At least {PASSWORD_MIN} characters.</p>
+        </div>
+        <div className="flex items-start gap-3">
+          <input
+            id="promotionalEmails"
+            name="promotionalEmails"
+            type="checkbox"
+            checked={formData.promotionalEmails}
+            onChange={handleChange}
+            className="mt-1 size-[18px] shrink-0 accent-navy-900"
+          />
+          <label htmlFor="promotionalEmails" className="text-sm text-navy-800">
+            I would like to receive promotional emails about new products and special offers
+          </label>
+        </div>
+        <button type="submit" disabled={loading} className={authStyles.submit}>
+          {loading ? 'Creating account...' : 'Create account'}
+        </button>
+      </form>
+    </AuthLayout>
   );
 }
-

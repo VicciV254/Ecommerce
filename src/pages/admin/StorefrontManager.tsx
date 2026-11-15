@@ -10,6 +10,7 @@ import { isRecord } from "../../utils/storage";
 import { useAdminCatalog } from "./AdminCatalogContext";
 import { CampaignEditor, SLUG, STOREFRONT_LIMITS, SectionEditor, type PickerItem } from "./StorefrontEditors";
 import { Feedback, Field, Panel, categoryOptions, inputClass, primaryButtonClass, smallButtonClass } from "./shared";
+import { BrandLogo } from "../../components/Brand";
 
 type Section = StorefrontSettings["sections"][number];
 type DraftLoad = { status: "loading" } | { status: "error"; message: string } | { status: "ready"; draft: StorefrontDraft };
@@ -273,7 +274,7 @@ export function StorefrontManager({ showToast, onDirtyChange }: {
             Draft preview at this screen width — not visible to shoppers. Unavailable references are listed.
           </p>
           <div style={previewStyle} className="bg-off-white text-charcoal">
-            <p className="px-6 pt-6 font-display text-2xl uppercase tracking-[0.12em] text-brand-primary">{settings.brand.name}</p>
+            <div className="on-navy bg-navy-900 px-6 py-2"><BrandLogo name={settings.brand.name} surface="navy" size="sm" /></div>
             <StorefrontSections settings={settings} mediaById={mediaById} showProblems />
           </div>
         </section>
@@ -284,7 +285,7 @@ export function StorefrontManager({ showToast, onDirtyChange }: {
           <div className="space-y-3">
             <Field label="Store name">{(id) => <input id={id} value={settings.brand.name} onChange={(event) => update({ ...settings, brand: { ...settings.brand, name: event.target.value } })} className={inputClass} />}</Field>
             <Field label="Tagline (optional)">{(id) => <input id={id} value={settings.brand.tagline} onChange={(event) => update({ ...settings, brand: { ...settings.brand, tagline: event.target.value } })} className={inputClass} />}</Field>
-            <p className="text-[11px] text-gray-600">Logo and icon artwork are prepared separately; the store name is shown as text until a logo is published.</p>
+            <p className="text-[11px] text-gray-600">The Apex Cart mark is built into the site; the store name is shown beside it in the header, footer and sign-in screens.</p>
           </div>
         </Panel>
 

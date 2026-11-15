@@ -6,6 +6,7 @@ import nodemailer from 'nodemailer';
 import {
   brandedEmail,
   createMailTransporter,
+  emailPalette,
   escapeHtml,
   isMailConfigured,
   sendContactEmail,
@@ -254,9 +255,9 @@ test('the branded layout escapes text fields and uses the fixed Apex Cart palett
     footerNote: 'Footer <b>note</b>',
   });
 
-  assert.match(html, />Apex Cart<\/div>/);
+  assert.match(html, /text-transform:uppercase[^>]*>Apex Cart<\/span>/);
   assert.doesNotMatch(html, /maneno|<img|<script/i);
-  assert.ok(html.includes('#0b1f3a') && html.includes('#c9a227'));
+  assert.ok(html.includes('#14213d') && html.includes('#d4a73c'));
   for (const fragment of [
     'Order &lt;update&gt;',
     'Title &amp; &quot;quotes&quot;',
@@ -274,11 +275,16 @@ test('the logo appears only for an http(s) EMAIL_LOGO_URL and non-http CTA links
   useMailEnv(t, { EMAIL_LOGO_URL: 'javascript:alert(1)' });
   const fallback = brandedEmail({ title: 'Hello', cta: { href: 'javascript:alert(1)', label: 'Open' } });
   assert.doesNotMatch(fallback, /<img|javascript:|>Open</);
-  assert.match(fallback, />Apex Cart<\/div>/);
+  assert.match(fallback, /text-transform:uppercase[^>]*>Apex Cart<\/span>/);
   assert.match(fallback, /This email was sent by Apex Cart\./);
 
-  process.env.EMAIL_LOGO_URL = 'https://cdn.example.test/apex-cart-logo.png';
-  assert.match(brandedEmail({ title: 'Hello' }), /<img src="https:\/\/cdn\.example\.test\/apex-cart-logo\.png" alt="Apex Cart"/);
+  // With a logo, the mark is decorative and the live name stays readable when images are blocked.
+  process.env.EMAIL_LOGO_URL = 'https://cdn.example.test/brand/apex-cart-mark-gold-128.png';
+  const branded = brandedEmail({ title: 'Hello' });
+  assert.match(branded, /<img src="https:\/\/cdn\.example\.test\/brand\/apex-cart-mark-gold-128\.png" alt="" width="40" height="40"/);
+  assert.match(branded, /text-transform:uppercase[^>]*>Apex Cart<\/span>/);
+  assert.equal(emailPalette.navy, '#14213d');
+  assert.equal(emailPalette.gold, '#d4a73c');
 });
 
 test('escapeHtml escapes every HTML-significant character', () => {

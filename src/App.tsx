@@ -18,7 +18,6 @@ import Contact from "./pages/Contact";
 import Wishlist from "./pages/Wishlist";
 import Admin from "./pages/Admin";
 import TrackOrder from "./pages/TrackOrder";
-import Showroom from "./pages/Showroom";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Account from "./pages/Account";
@@ -62,9 +61,6 @@ function Router() {
       break;
     case "track":
       page = <TrackOrder route={route} />;
-      break;
-    case "showroom":
-      page = <Showroom />;
       break;
     case "login":
       page = <Login />;

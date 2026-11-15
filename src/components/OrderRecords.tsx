@@ -56,7 +56,7 @@ export function OrderTotals({ order }: { order: Pick<Order, "subtotal" | "discou
     ["Delivery fee", formatKES(order.shippingCost)],
   ];
   return (
-    <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1">
+    <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1 tabular-nums">
       {rows.map(([label, value]) => (
         <div key={label} className="contents">
           <dt>{label}:</dt>{" "}<dd className="text-right">{value}</dd>

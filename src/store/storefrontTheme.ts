@@ -16,7 +16,7 @@ export type ThemeVariables = Record<`--${string}`, string>;
 
 /** Each editable colour, the CSS variable it drives and what it controls. */
 export const COLOR_SLOTS: { key: keyof ThemeColors; variable: `--color-${string}`; label: string }[] = [
-  { key: "primary", variable: "--color-brand-primary", label: "Text, buttons and footer" },
+  { key: "primary", variable: "--color-brand-primary", label: "Header, footer, headings and buttons" },
   { key: "secondary", variable: "--color-brand-secondary", label: "Calls to action and highlights" },
   { key: "accent", variable: "--color-brand-accent", label: "Hover states and sub-labels" },
   { key: "warmBeige", variable: "--color-warm-beige", label: "Section backgrounds" },
@@ -29,7 +29,7 @@ export const COLOR_SLOTS: { key: keyof ThemeColors; variable: `--color-${string}
   { key: "charcoal", variable: "--color-charcoal", label: "Body text" },
   { key: "offWhite", variable: "--color-off-white", label: "Page background" },
   { key: "lightGray", variable: "--color-light-gray", label: "Borders" },
-  { key: "lightPink", variable: "--color-light-pink", label: "Header and card surfaces" },
+  { key: "lightPink", variable: "--color-light-pink", label: "Soft panels and notices" },
 ];
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;

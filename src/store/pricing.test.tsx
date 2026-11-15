@@ -7,7 +7,6 @@ import { StorefrontProvider } from "./StorefrontContext";
 import Home from "../pages/Home";
 import Shop from "../pages/Shop";
 import Wishlist from "../pages/Wishlist";
-import Showroom from "../pages/Showroom";
 import Cart from "../pages/Cart";
 import ProductDetail from "../pages/ProductDetail";
 import { ProductSearch } from "../components/ProductSearch";
@@ -49,7 +48,6 @@ describe("single display discount from the canonical catalog", () => {
     ["Home featured section", <Home />],
     ["Shop search", <Shop route="/shop?q=Linen%20Short-Sleeve%20Shirt" />],
     ["Wishlist", <Wishlist />],
-    ["Showroom", <Showroom />],
     ["Product detail", <ProductDetail id={linenShirt.id} />],
     ["Related product card", <ProductDetail id={poloShirt.id} />],
   ] as const) {

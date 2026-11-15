@@ -67,7 +67,7 @@ export default function Account({ children }: AccountProps) {
         
         <div className="flex flex-col md:flex-row gap-6">
           <div className="md:w-64 shrink-0">
-            <div className="rounded-lg border border-brand-secondary/30 bg-light-pink p-4 shadow-card">
+            <div className="rounded-lg border border-brand-secondary/30 bg-surface-soft p-4 shadow-card">
               <div className="text-center mb-4">
                 {user.profileImage ? (
                   <img src={user.profileImage} alt="" className="mx-auto h-16 w-16 rounded-full object-cover ring-2 ring-brand-secondary/40" />
@@ -79,7 +79,7 @@ export default function Account({ children }: AccountProps) {
                 <p className="font-medium mt-2">
                   {user.firstName} {user.lastName}
                 </p>
-                <p className="text-sm text-gray-500">{user.email}</p>
+                <p className="text-sm text-muted">{user.email}</p>
               </div>
               <hr className="my-4 border-brand-secondary/30" />
               <nav className="space-y-1">

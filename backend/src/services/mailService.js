@@ -25,10 +25,11 @@ const PROVIDER_TIMEOUT_CODES = new Set(['ETIMEDOUT', 'ECONNABORTED', 'ESOCKETTIM
 const SAFE_PROVIDER_CODE = /^[A-Z][A-Z0-9_]{1,39}$/;
 const HTML_ENTITIES = Object.freeze({ '&nbsp;': ' ', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'", '&amp;': '&' });
 
-// Fixed Apex Cart email palette: every text pairing is at least 6.8:1; gold is never text on white (2.4:1).
+// Fixed Apex Cart email palette, matching the site tokens: every text pairing is at least 6.8:1
+// (gold on navy is 7.1:1); gold is never text on white (2.2:1).
 export const emailPalette = Object.freeze({
-  navy: '#0b1f3a',
-  gold: '#c9a227',
+  navy: '#14213d',
+  gold: '#d4a73c',
   canvas: '#f4f5f7',
   surface: '#ffffff',
   panel: '#f8f6ef',
@@ -116,12 +117,12 @@ function resolveContactRecipient() {
   return extractEmail(process.env.GMAIL_FROM || process.env.SMTP_FROM || process.env.SMTP_USER || configuredTo || '');
 }
 
+/** The logo lockup: the mark (decorative when shown) beside the live name, which stays readable if images are blocked. */
 function brandMark() {
+  const name = `<span style="font-family:Marcellus,Georgia,'Times New Roman',serif;font-size:22px;line-height:1.2;font-weight:400;letter-spacing:0.14em;text-transform:uppercase;color:${emailPalette.surface};">${BRAND_NAME}</span>`;
   const logoUrl = process.env.EMAIL_LOGO_URL?.trim();
-  if (isHttpUrl(logoUrl)) {
-    return `<img src="${escapeHtml(logoUrl)}" alt="${BRAND_NAME}" height="40" style="display:block;border:0;height:40px;width:auto;max-width:200px;color:${emailPalette.surface};font-size:22px;font-weight:800;" />`;
-  }
-  return `<div style="font-size:24px;line-height:1.2;font-weight:800;letter-spacing:0.02em;color:${emailPalette.surface};">${BRAND_NAME}</div>`;
+  if (!isHttpUrl(logoUrl)) return `<div>${name}</div>`;
+  return `<table role="presentation" cellspacing="0" cellpadding="0"><tr><td style="padding-right:12px;vertical-align:middle;"><img src="${escapeHtml(logoUrl)}" alt="" width="40" height="40" style="display:block;border:0;width:40px;height:40px;" /></td><td style="vertical-align:middle;">${name}</td></tr></table>`;
 }
 
 // `body` is trusted HTML built by the caller; every other field is escaped here.

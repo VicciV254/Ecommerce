@@ -177,7 +177,7 @@ function TotalRow({ label, value, strong = false }: { label: string; value: stri
   return (
     <div className={`flex items-baseline justify-between gap-4 ${strong ? "border-t border-light-gray pt-3 text-base font-semibold text-brand-primary" : ""}`}>
       <dt className={strong ? "" : "text-gray-600"}>{label}</dt>
-      <dd className={strong ? "font-display text-lg" : "text-charcoal"}>{value}</dd>
+      <dd className={strong ? "text-lg" : "text-charcoal"}>{value}</dd>
     </div>
   );
 }
@@ -185,7 +185,7 @@ function TotalRow({ label, value, strong = false }: { label: string; value: stri
 /** Server totals: VAT and delivery stay separate lines, nothing is added up in the browser. */
 export function QuoteTotals({ quote }: { quote: Quote }) {
   return (
-    <dl className="space-y-2.5 text-sm">
+    <dl className="space-y-2.5 text-sm tabular-nums">
       <TotalRow label="Items subtotal" value={formatKES(quote.subtotal)} />
       {quote.discount > 0 && (
         <>

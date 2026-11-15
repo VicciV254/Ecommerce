@@ -1,11 +1,23 @@
 import { forwardRef, useEffect, useState, useCallback, type ComponentPropsWithoutRef, type MouseEvent } from "react";
 
-function currentRoute() {
+/** Retired pages, by first path segment, whose old links still land somewhere useful. */
+const RETIRED_ROUTES = new Map([["showroom", "/shop"]]);
+
+function readRoute() {
   const hashRoute = window.location.hash.replace(/^#/, "");
   if (hashRoute) return hashRoute;
 
   const pathRoute = `${window.location.pathname}${window.location.search}`;
   return pathRoute === "/" ? "/" : pathRoute;
+}
+
+/** The current route; a retired one is swapped in place for its replacement, adding no history entry. */
+function currentRoute() {
+  const route = readRoute();
+  const replacement = RETIRED_ROUTES.get(parseRoute(route).parts[0] ?? "");
+  if (replacement === undefined) return route;
+  window.history.replaceState(window.history.state, "", `#${replacement}`);
+  return replacement;
 }
 
 export function useRoute() {

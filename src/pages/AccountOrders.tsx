@@ -9,13 +9,13 @@ import { formatDateTime, formatKES } from "../utils/format";
 import { DELIVERY_LABELS } from "../store/checkoutModel";
 import { OrderFormatError, parseCustomerOrder, parseCustomerOrderPage } from "../store/orderModel";
 import {
-  PAYMENT_STATUS_LABELS,
   REFUND_SOURCE_TEXT,
   RETURN_REASON_LABELS,
   RETURN_STATUS_TEXT,
   cancellationNotice,
   cancellationRequestsRefund,
-  orderStatusLabel,
+  customerName,
+  deliveryAddress,
   paymentLabel,
   refundStatusText,
   returnNotice,
@@ -23,6 +23,7 @@ import {
   returnWindowText,
 } from "../store/orderCopy";
 import { withPaymentSummary } from "../store/paymentModel";
+import { receiptDocument } from "../utils/receiptDocument";
 import { useStorefront } from "../store/StorefrontContext";
 import CancelOrderModal from "../components/CancelOrderModal";
 import ReturnOrderModal from "../components/ReturnOrderModal";
@@ -47,10 +48,6 @@ type Notice = { tone: "info" | "error"; text: string };
 
 function describeOrderError(error: unknown, fallback: string) {
   return error instanceof OrderFormatError ? `${error.message} Try again shortly.` : describeApiError(error, fallback);
-}
-
-function deliveryAddress(order: CustomerOrder) {
-  return order.address ? `${order.address.street}, ${order.address.city}, ${order.address.county}` : "Not provided";
 }
 
 /** Stock-hold state of a quote-based order; legacy orders have none to show. */
@@ -91,96 +88,25 @@ function cancelLabel(order: CustomerOrder) {
   return cancellationRequestsRefund(order.paymentStatus) ? "Cancel & Request Refund" : "Cancel Order";
 }
 
-function customerName(user: User | null) {
-  return [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Customer";
-}
+/** Longest wait for the brand fonts; after it the receipt prints in its fallback faces. */
+const RECEIPT_FONT_WAIT_MS = 3000;
 
-function escapeHtml(value: string) {
-  return value.replace(/[&<>"']/g, (character) => `&#${character.charCodeAt(0)};`);
-}
-
-function receiptTheme() {
-  const styles = getComputedStyle(document.documentElement);
-  return {
-    primary: styles.getPropertyValue("--color-brand-primary").trim(),
-    secondary: styles.getPropertyValue("--color-brand-secondary").trim(),
-    background: styles.getPropertyValue("--color-light-pink").trim(),
-  };
-}
-
-function printReceipt(order: CustomerOrder, user: User | null, brandName: string, logoUrl: string | null) {
-  const theme = receiptTheme();
-  const brand = escapeHtml(brandName);
-  const lines = order.items
-    .map((item) =>
-      `<tr><td>${escapeHtml(item.productName)}</td><td>${item.quantity}</td><td>${formatKES(item.productPrice)}</td><td>${formatKES(item.subtotal)}</td></tr>`)
-    .join("");
-
+/** Opens the receipt in its own window and prints it once, after the brand fonts load, fail or time out. */
+function printReceipt(order: CustomerOrder, user: User | null, brandName: string) {
   const popup = window.open("", "_blank", "width=720,height=900");
   if (!popup) return;
-
-  popup.document.write(`
-    <html>
-      <head>
-        <title>Order ${escapeHtml(order.orderNumber)}</title>
-        <style>
-          * { box-sizing: border-box; }
-          body { margin: 0; font-family: Arial, sans-serif; background: ${theme.background}; color: #1f1f1f; }
-          .receipt { max-width: 760px; margin: 0 auto; min-height: 100vh; background: #fff; }
-          .brand { display: flex; align-items: center; gap: 16px; padding: 28px 32px; color: #fff; background: ${theme.primary}; border-bottom: 6px solid ${theme.secondary}; }
-          .brand img { width: 68px; height: 68px; object-fit: contain; border-radius: 8px; background: #fff; padding: 6px; }
-          .brand h1 { margin: 0; font-size: 28px; letter-spacing: .04em; }
-          .brand p { margin: 4px 0 0; color: rgba(255,255,255,.78); font-size: 13px; }
-          .content { padding: 30px 32px 36px; }
-          .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 24px; }
-          .box { border: 1px solid #eee; border-left: 4px solid ${theme.secondary}; padding: 14px; }
-          .label { color: #555; font-size: 11px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
-          .value { margin-top: 5px; font-size: 14px; line-height: 1.45; }
-          table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-          th { background: ${theme.primary}; color: #fff; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
-          th, td { border-bottom: 1px solid #eee; padding: 11px 10px; text-align: left; }
-          .totals { margin-left: auto; margin-top: 22px; width: 280px; }
-          .totals p { display: flex; justify-content: space-between; margin: 8px 0; }
-          .grand { border-top: 2px solid ${theme.secondary}; padding-top: 12px; color: ${theme.primary}; font-size: 22px; font-weight: 800; }
-          .footer { padding: 18px 32px; background: ${theme.primary}; color: rgba(255,255,255,.78); font-size: 12px; }
-        </style>
-      </head>
-      <body>
-        <main class="receipt">
-          <section class="brand">
-            ${logoUrl ? `<img src="${escapeHtml(logoUrl)}" alt="" />` : ""}
-            <div>
-              <h1>${brand}</h1>
-              <p>Order ${escapeHtml(order.orderNumber)} · Payment ${escapeHtml(PAYMENT_STATUS_LABELS[order.paymentStatus])}</p>
-            </div>
-          </section>
-          <section class="content">
-            <div class="grid">
-              <div class="box"><div class="label">Date</div><div class="value">${new Date(order.createdAt).toLocaleString()}</div></div>
-              <div class="box"><div class="label">Status</div><div class="value">${escapeHtml(orderStatusLabel(order))}</div></div>
-              <div class="box"><div class="label">Customer</div><div class="value">${escapeHtml(customerName(user))}<br>${escapeHtml(user?.email ?? "")}<br>${escapeHtml(user?.phone ?? "")}</div></div>
-              <div class="box"><div class="label">Delivery</div><div class="value">${escapeHtml(deliveryAddress(order))}</div></div>
-            </div>
-            <table>
-              <thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Subtotal</th></tr></thead>
-              <tbody>${lines}</tbody>
-            </table>
-            <div class="totals">
-              <p><span>Subtotal</span><strong>${formatKES(order.subtotal)}</strong></p>
-              <p><span>Discount</span><strong>-${formatKES(order.discount)}</strong></p>
-              <p><span>${order.pricingSnapshot ? `VAT (${order.pricingSnapshot.vatRate}%)` : "Tax"}</span><strong>${formatKES(order.tax)}</strong></p>
-              <p><span>Delivery</span><strong>${formatKES(order.shippingCost)}</strong></p>
-              <p class="grand"><span>Total</span><span>${formatKES(order.total)}</span></p>
-            </div>
-          </section>
-          <section class="footer">Thank you for shopping with ${brand}.</section>
-        </main>
-      </body>
-    </html>
-  `);
+  popup.document.write(receiptDocument(order, user, brandName));
   popup.document.close();
-  popup.focus();
-  popup.print();
+  const loaded = new Promise<void>((resolve) => {
+    if (popup.document.readyState === "complete") resolve();
+    else popup.addEventListener("load", () => resolve(), { once: true });
+  });
+  const timeout = new Promise<void>((resolve) => window.setTimeout(resolve, RECEIPT_FONT_WAIT_MS));
+  void Promise.race([loaded.then(() => popup.document.fonts.ready), timeout]).then(() => {
+    if (popup.closed) return;
+    popup.focus();
+    popup.print();
+  });
 }
 
 /** Errors are announced as alerts; confirmations go to a status region that stays mounted. */
@@ -188,7 +114,7 @@ function NoticeArea({ notice }: { notice: Notice | null }) {
   return (
     <>
       {notice?.tone === "error" && <p role="alert" className="mt-4 rounded-md border border-error/30 bg-error/5 p-3 text-sm font-semibold text-error">{notice.text}</p>}
-      <p role="status" className={notice?.tone === "info" ? "mt-4 rounded-md border border-brand-secondary/30 bg-light-pink p-3 text-sm text-brand-primary" : "sr-only"}>
+      <p role="status" className={notice?.tone === "info" ? "mt-4 rounded-md border border-brand-secondary/30 bg-surface-soft p-3 text-sm text-navy-900" : "sr-only"}>
         {notice?.tone === "info" ? notice.text : ""}
       </p>
     </>
@@ -226,7 +152,7 @@ function OrderCard({ order, onDetails, onReceipt, onCancel, onReturn }: {
           <OrderStatusBadge order={order} />
         </div>
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-          <p className="font-display text-xl text-brand-primary">{formatKES(order.total)}</p>
+          <p className="text-xl font-semibold tabular-nums text-navy-900">{formatKES(order.total)}</p>
           <p className="text-xs text-gray-600">Payment: {paymentLabel(order)}</p>
         </div>
         {orderNotes(order).map((note) => <p key={note} className="text-xs text-charcoal">{note}</p>)}
@@ -346,7 +272,7 @@ function OrderDetails({ order, user, notice, closeRef, onClose, onCancel, onRetu
         <section aria-label="Order summary" className="mt-5 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <OrderStatusBadge order={order} />
-            <p className="font-display text-2xl text-brand-primary">{formatKES(order.total)}</p>
+            <p className="text-2xl font-semibold tabular-nums text-navy-900">{formatKES(order.total)}</p>
           </div>
           <p className="text-sm"><span className="text-gray-600">Payment:</span> {paymentLabel(order)}</p>
           {notes.map((note) => <p key={note} className="text-sm text-charcoal">{note}</p>)}
@@ -430,9 +356,7 @@ function rescueFocus(target: HTMLElement | null) {
 }
 
 function AccountOrdersContent({ user }: { user: User | null }) {
-  const { brandName, storefront, mediaById } = useStorefront();
-  const logoId = storefront?.settings.brand.logoMediaId;
-  const logoUrl = (logoId && mediaById.get(logoId)?.url) || null;
+  const { brandName } = useStorefront();
   const [orders, setOrders] = useState<OrdersState>({ status: "loading" });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -601,7 +525,7 @@ function AccountOrdersContent({ user }: { user: User | null }) {
             key={order.id}
             order={order}
             onDetails={() => openModal(setSelectedId, order)}
-            onReceipt={() => printReceipt(order, user, brandName, logoUrl)}
+            onReceipt={() => printReceipt(order, user, brandName)}
             onCancel={() => openModal(setCancelId, order)}
             onReturn={() => openModal(setReturnId, order)}
           />
@@ -619,7 +543,7 @@ function AccountOrdersContent({ user }: { user: User | null }) {
           onReturn={() => setReturnId(selected.id)}
           onWithdraw={(item) => setWithdrawal({ orderId: selected.id, item })}
           onPaymentSummary={applyPaymentSummary}
-          onPrint={() => printReceipt(selected, user, brandName, logoUrl)}
+          onPrint={() => printReceipt(selected, user, brandName)}
         />
       )}
 

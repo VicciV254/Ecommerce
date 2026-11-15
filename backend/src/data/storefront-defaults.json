@@ -3,7 +3,7 @@
   "theme": {
     "fontId": "default",
     "colors": {
-      "primary": "#14213d", "secondary": "#d4a73c", "accent": "#926d21",
+      "primary": "#14213d", "secondary": "#d4a73c", "accent": "#765619",
       "warmBeige": "#f4f1e9", "oceanBlue": "#1d4e89", "oceanBlueDark": "#173f6e",
       "coral": "#b75238", "success": "#237a4b", "warning": "#9a6700",
       "error": "#b42318", "charcoal": "#253044", "offWhite": "#f8fafc",

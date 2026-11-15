@@ -88,7 +88,7 @@ test('every notification type renders an Apex Cart subject, readable text and br
     assert.ok(rendered.text.includes(`View your order: ${ORDER_LINK}`), type);
     assert.doesNotMatch(rendered.text, /<[a-z][^>]*>/i, `${type} text contains markup`);
     assert.match(rendered.html, /^<!doctype html>/, type);
-    assert.match(rendered.html, />Apex Cart<\/div>|alt="Apex Cart"/, type);
+    assert.match(rendered.html, /text-transform:uppercase[^>]*>Apex Cart<\/span>/, type);
     assert.ok(rendered.html.includes(`href="${ORDER_LINK}"`), type);
     assert.doesNotMatch(everything(rendered), /maneno/i, type);
     assert.doesNotMatch(everything(rendered), /\+?254\d{9}|\b07\d{8}\b|undefined|\bnull\b|NaN|\[object/, type);

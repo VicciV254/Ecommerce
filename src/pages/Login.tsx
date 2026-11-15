@@ -3,6 +3,7 @@ import { Link, navigate, parseRoute, useRoute } from '../router';
 import { useAuth } from '../contexts/AuthContext';
 import { authAPI } from '../api/auth';
 import { PasswordInput } from '../components/PasswordInput';
+import { AuthLayout, authStyles } from '../components/AuthLayout';
 
 export default function Login() {
   const route = useRoute();
@@ -54,90 +55,55 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-light-pink py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-lg shadow-lg">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Sign in to your account
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Or{' '}
-            <Link to="/register" className="font-medium text-brand-secondary hover:text-brand-accent">
-              create a new account
-            </Link>
-          </p>
-        </div>
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          {verified && (
-            <div className="rounded-md bg-success/10 p-3 text-center text-sm font-medium text-success">
-              Email verified. Sign in to continue.
-            </div>
-          )}
-          {error && (
-            <div className="rounded-md bg-error/10 p-3 text-center text-sm text-error">
-              <p>{error}</p>
-              <button
-                type="button"
-                onClick={resendVerification}
-                disabled={resending}
-                className="mt-2 font-bold underline underline-offset-4 disabled:opacity-50"
-              >
-                {resending ? 'Sending...' : 'Resend OTP'}
-              </button>
-            </div>
-          )}
-          {notice && (
-            <div className="rounded-md bg-success/10 p-3 text-center text-sm font-medium text-success">
-              {notice}
-            </div>
-          )}
-          <div className="rounded-md shadow-sm -space-y-px">
-            <div>
-              <label htmlFor="email" className="sr-only">
-                Email address
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-brand-secondary focus:border-brand-secondary focus:z-10 sm:text-sm"
-                placeholder="Email address"
-              />
-            </div>
-            <div>
-              <label htmlFor="password" className="sr-only">
-                Password
-              </label>
-              <PasswordInput
-                id="password"
-                name="password"
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-brand-secondary focus:border-brand-secondary focus:z-10 sm:text-sm"
-                placeholder="Password"
-              />
-            </div>
-          </div>
-
-          <div>
+    <AuthLayout
+      title="Sign in to your account"
+      intro={<>Or <Link to="/register" className={authStyles.link}>create a new account</Link></>}
+    >
+      <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
+        {verified && <p role="status" className={`${authStyles.success} text-center`}>Email verified. Sign in to continue.</p>}
+        {error && (
+          <div role="alert" className={`${authStyles.error} text-center`}>
+            <p>{error}</p>
             <button
-              type="submit"
-              disabled={loading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-brand-secondary hover:bg-brand-accent focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+              type="button"
+              onClick={resendVerification}
+              disabled={resending}
+              className="mt-1 inline-flex min-h-[44px] items-center font-bold underline underline-offset-4 disabled:cursor-not-allowed"
             >
-              {loading ? 'Signing in...' : 'Sign in'}
+              {resending ? 'Sending...' : 'Resend OTP'}
             </button>
           </div>
-        </form>
-      </div>
-    </div>
+        )}
+        {notice && <p role="status" className={`${authStyles.success} text-center`}>{notice}</p>}
+        <div>
+          <label htmlFor="email" className={authStyles.label}>Email address</label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className={authStyles.field}
+          />
+        </div>
+        <div>
+          <label htmlFor="password" className={authStyles.label}>Password</label>
+          <PasswordInput
+            id="password"
+            name="password"
+            autoComplete="current-password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className={authStyles.field}
+          />
+        </div>
+        <button type="submit" disabled={loading} className={authStyles.submit}>
+          {loading ? 'Signing in...' : 'Sign in'}
+        </button>
+      </form>
+    </AuthLayout>
   );
 }
-
-

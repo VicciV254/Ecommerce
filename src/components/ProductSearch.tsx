@@ -6,7 +6,13 @@ import { formatKES } from "../utils/format";
 import { searchSuggestions } from "../utils/search";
 import { ResponsiveImage } from "./ui";
 
-export function ProductSearch({ onNavigate }: { onNavigate?: () => void }) {
+/** Field and button colours for the surface the search sits on; the white field needs no border on navy. */
+const SEARCH_TONES = {
+  navy: { field: "border-transparent", button: "bg-gold-500 text-navy-900 hover:bg-gold-400" },
+  light: { field: "border-control", button: "bg-navy-900 text-white hover:bg-gold-500 hover:text-navy-900" },
+} as const;
+
+export function ProductSearch({ onNavigate, tone = "light" }: { onNavigate?: () => void; tone?: keyof typeof SEARCH_TONES }) {
   const { products, status } = useCatalog();
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
@@ -78,16 +84,16 @@ export function ProductSearch({ onNavigate }: { onNavigate?: () => void }) {
             }
           }}
           placeholder="Search products"
-          className="min-w-0 w-full rounded-l-sm border border-light-gray bg-off-white px-4 py-2.5 text-sm outline-none transition-colors focus:border-brand-secondary"
+          className={`min-w-0 w-full rounded-l-sm border bg-surface px-4 py-2.5 text-navy-900 placeholder:text-muted ${SEARCH_TONES[tone].field}`}
         />
-        <button type="submit" aria-label="Submit product search" className="rounded-r-sm bg-brand-primary px-4 text-white transition-colors hover:bg-brand-secondary hover:text-brand-primary">
+        <button type="submit" aria-label="Submit product search" className={`rounded-r-sm px-4 transition-colors duration-(--motion-feedback) ${SEARCH_TONES[tone].button}`}>
           <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-4 w-4">
             <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607z" />
           </svg>
         </button>
       </form>
       {expanded && (
-        <div className="absolute inset-x-0 top-full z-50 mt-1 overflow-hidden rounded-sm border border-light-gray bg-white shadow-xl">
+        <div className="on-light absolute inset-x-0 top-full z-50 mt-1 overflow-hidden rounded-sm border border-divider bg-surface text-navy-800 shadow-overlay">
           <div id={listId} role="listbox" aria-label="Product suggestions" className="max-h-[50dvh] overflow-y-auto overscroll-contain">
             {suggestions.map((product, index) => {
               const image = primaryImage(product);

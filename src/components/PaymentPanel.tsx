@@ -117,7 +117,7 @@ function Amount({ id, label, amount }: { id?: string; label: string; amount: num
   return (
     <div id={id}>
       <p className={labelClass}>{label}</p>
-      <p className="mt-1 font-display text-2xl text-brand-primary">{formatKES(amount)}</p>
+      <p className="mt-1 text-2xl font-semibold tabular-nums text-navy-900">{formatKES(amount)}</p>
       <p className="text-xs text-gray-600">The saved total for this order.</p>
     </div>
   );

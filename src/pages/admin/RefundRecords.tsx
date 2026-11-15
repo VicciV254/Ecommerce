@@ -43,7 +43,7 @@ export function StaffRefundCard({ refund, canWrite, onAction, header, anchorId }
         <h4 id={anchorId} tabIndex={-1} className="font-mono text-sm font-bold text-brand-primary">{refund.number}</h4>
         <p className="text-sm font-semibold">{STAFF_REFUND_STATUS[refund.status]}</p>
       </div>
-      <p className="mt-1 font-display text-lg text-brand-primary">
+      <p className="mt-1 text-lg font-semibold tabular-nums text-navy-900">
         {formatKES(refund.amount)}
         {refund.includesDeliveryFee && <span className="ml-2 font-body text-xs text-gray-600">includes the delivery fee</span>}
       </p>

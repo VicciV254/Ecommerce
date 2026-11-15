@@ -1,7 +1,7 @@
 import { createRef } from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { Link } from "./router";
+import { Link, useRoute } from "./router";
 
 beforeEach(() => { window.location.hash = ""; });
 
@@ -58,5 +58,43 @@ describe("shared Link", () => {
     expect(download.getAttribute("download")).toBe("catalog.html");
     expect(clickWasIntercepted(download)).toBe(false);
     expect(window.location.hash).toBe("");
+  });
+});
+
+function RouteProbe() {
+  return <p>route:{useRoute()}</p>;
+}
+
+describe("retired routes", () => {
+  // Route changes scroll to the top, which jsdom does not implement.
+  beforeEach(() => { vi.spyOn(window, "scrollTo").mockImplementation(() => undefined); });
+
+  it("replaces an old showroom link with the shop on load, adding no history entry", () => {
+    window.location.hash = "#/showroom?go=events";
+    const entries = window.history.length;
+    render(<RouteProbe />);
+    expect(screen.getByText("route:/shop")).toBeTruthy();
+    expect(window.location.hash).toBe("#/shop");
+    expect(window.history.length).toBe(entries);
+  });
+
+  it("replaces a showroom link followed while the app is open, so Back skips it", async () => {
+    render(<RouteProbe />);
+    expect(screen.getByText("route:/")).toBeTruthy();
+    window.location.hash = "#/showroom/events";
+    const entries = window.history.length;
+    await waitFor(() => expect(screen.getByText("route:/shop")).toBeTruthy());
+    expect(window.location.hash).toBe("#/shop");
+    expect(window.history.length).toBe(entries);
+  });
+
+  it("leaves current routes and look-alike names untouched", () => {
+    for (const hash of ["#/shop?cat=fashion", "#/showrooms", "#/toString", "#/about"]) {
+      window.location.hash = hash;
+      const { unmount } = render(<RouteProbe />);
+      expect(screen.getByText(`route:${hash.slice(1)}`)).toBeTruthy();
+      expect(window.location.hash).toBe(hash);
+      unmount();
+    }
   });
 });

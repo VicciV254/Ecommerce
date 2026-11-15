@@ -232,8 +232,8 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
         )}
         {price && (
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="font-display text-lg text-brand-primary">
-              {price.isFromPrice && <span className="text-xs font-body">From </span>}
+            <span className="type-price-card text-navy-900">
+              {price.isFromPrice && <span className="text-xs font-normal">From </span>}
               {formatKES(price.price)}
             </span>
             {price.comparePrice !== null && <span className="text-xs text-gray-500 line-through">{formatKES(price.comparePrice)}</span>}

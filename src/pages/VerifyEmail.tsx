@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { authAPI } from "../api/auth";
 import { describeApiError } from "../api/errors";
 import { Link, navigate, parseRoute, useRoute } from "../router";
+import { AuthLayout, authStyles } from "../components/AuthLayout";
 
 export default function VerifyEmail() {
   const route = useRoute();
@@ -81,30 +82,29 @@ export default function VerifyEmail() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-light-pink px-4">
-      <div className="w-full max-w-md rounded-lg border border-brand-secondary/30 bg-off-white p-8 text-center shadow-lg">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-brand-secondary/20 text-xs font-bold text-brand-primary">
-          OTP
-        </div>
-        <h1 className="mt-5 font-display text-2xl text-brand-primary">Verify Your Email</h1>
-        <p className="mt-2 text-sm text-charcoal/70">{message}</p>
-        {error && <p className="mt-3 rounded-md bg-error/10 p-3 text-sm text-error">{error}</p>}
+    <AuthLayout title="Verify your email" intro={<p role="status">{message}</p>}>
+      {error && <p role="alert" className={`mt-4 text-center ${authStyles.error}`}>{error}</p>}
 
-        <form onSubmit={verify} className="mt-6">
-          <label className="block text-left text-xs font-bold uppercase tracking-wider text-brand-primary">Email address</label>
-          <input
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            placeholder="you@example.com"
-            className="mt-2 w-full rounded-md border border-light-gray bg-white px-3 py-2 text-sm outline-none focus:border-brand-secondary"
-          />
+      <form onSubmit={verify} className="mt-6">
+        <label htmlFor="verify-email" className={authStyles.label}>Email address</label>
+        <input
+          id="verify-email"
+          type="email"
+          autoComplete="email"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          className={authStyles.field}
+        />
 
-          <div className="mt-5 flex justify-center gap-2">
+        <fieldset className="mt-5">
+          <legend className={authStyles.label}>6-digit code</legend>
+          <div className="flex justify-center gap-2">
             {digits.map((digit, index) => (
               <input
                 key={index}
                 ref={(node) => { inputs.current[index] = node; }}
+                aria-label={`Digit ${index + 1} of ${digits.length}`}
+                autoComplete={index === 0 ? "one-time-code" : "off"}
                 value={digit}
                 onChange={(event) => setDigit(index, event.target.value)}
                 onKeyDown={(event) => {
@@ -113,34 +113,30 @@ export default function VerifyEmail() {
                 onPaste={handlePaste}
                 inputMode="numeric"
                 maxLength={1}
-                className="h-12 w-11 rounded-md border border-light-gray bg-white text-center text-xl font-bold text-brand-primary outline-none focus:border-brand-secondary"
+                className="h-[48px] w-full min-w-0 max-w-[44px] rounded-sm border border-control bg-surface text-center text-xl font-bold text-navy-900"
               />
             ))}
           </div>
+        </fieldset>
 
-          <button
-            disabled={loading}
-            className="mt-6 w-full rounded-sm bg-brand-primary px-4 py-3 text-xs font-bold uppercase tracking-wider text-white hover:bg-brand-secondary hover:text-brand-primary disabled:opacity-50"
-          >
-            {loading ? "Verifying..." : "Verify OTP"}
-          </button>
-        </form>
+        <button disabled={loading} className={`mt-6 ${authStyles.submit}`}>
+          {loading ? "Verifying..." : "Verify OTP"}
+        </button>
+      </form>
 
+      <div className="mt-4 flex flex-col items-center gap-1">
         <button
           type="button"
           onClick={resend}
           disabled={resending}
-          className="mt-4 text-xs font-bold uppercase tracking-wider text-brand-primary underline underline-offset-4 disabled:opacity-50"
+          className="inline-flex min-h-[44px] items-center text-sm font-bold uppercase tracking-wider text-navy-900 underline underline-offset-4 disabled:cursor-not-allowed"
         >
           {resending ? "Sending..." : "Resend OTP"}
         </button>
-
-        <div className="mt-5">
-          <Link to="/login" className="text-xs font-bold uppercase tracking-wider text-gray-500 hover:text-brand-primary">
-            Back to Login
-          </Link>
-        </div>
+        <Link to="/login" className={`inline-flex min-h-[44px] items-center text-sm ${authStyles.link}`}>
+          Back to Login
+        </Link>
       </div>
-    </div>
+    </AuthLayout>
   );
 }

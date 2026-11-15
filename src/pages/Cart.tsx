@@ -166,7 +166,7 @@ function CartContent({ user }: { user: User }) {
                         {!quoted && projected.comparePrice !== null && <span className="mr-1 line-through">{formatKES(projected.comparePrice)}</span>}
                         {formatKES(quoted ? quoted.unitPrice : projected.price)} each
                       </span>
-                      {quoted && <span className="font-display text-base text-brand-primary">{formatKES(quoted.total)}</span>}
+                      {quoted && <span className="font-semibold tabular-nums text-navy-900">{formatKES(quoted.total)}</span>}
                       {quoted && quoted.discount > 0 && <span className="block text-[11px] font-semibold text-success">Saving {formatKES(quoted.discount)}</span>}
                     </p>
                   </div>

@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Container } from "../components/ui";
 import { PasswordInput } from "../components/PasswordInput";
+import { AuthLayout, authStyles } from "../components/AuthLayout";
+import { BrandLogo } from "../components/Brand";
+import { useStickyHeaderOffset } from "../components/stickyHeader";
 import { ConfirmModal, Toast } from "../components/Modal";
 import { navigate } from "../router";
 import { adminAPI, type AdminUser, type DashboardMetrics, type SalesReport, type Subscription } from "../api/admin";
@@ -46,7 +49,6 @@ export default function Admin() {
 }
 
 function AdminLogin({ onLogin }: { onLogin: (admin: AdminSession) => void }) {
-  const { brandName } = useStorefront();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -68,26 +70,23 @@ function AdminLogin({ onLogin }: { onLogin: (admin: AdminSession) => void }) {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-off-white px-4">
-      <form onSubmit={submit} className="w-full max-w-sm rounded-lg bg-white p-8 shadow-sm">
-        <p className="text-center font-display text-lg uppercase tracking-[0.12em] text-brand-primary">{brandName}</p>
-        <h1 className="mt-3 text-center font-display text-2xl uppercase tracking-wider text-brand-primary">Admin Login</h1>
-        <p className="mt-2 text-center text-sm text-gray-600">Staff credentials are required for dashboard access.</p>
-        {error && <p role="alert" className="mt-4 rounded-sm bg-error/10 p-3 text-center text-xs font-semibold text-error">{error}</p>}
-        <div className="mt-6 space-y-4">
+    <div className="flex min-h-screen flex-col justify-center bg-surface-page">
+      <AuthLayout title="Admin Login" intro="Staff credentials are required for dashboard access.">
+        <form onSubmit={submit} className="mt-6 space-y-4">
+          {error && <p role="alert" className={`${authStyles.error} text-center font-semibold`}>{error}</p>}
           <div>
-            <label htmlFor="admin-email" className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-600">Email</label>
-            <input id="admin-email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-sm border border-light-gray px-3 py-2.5 text-sm outline-none focus:border-brand-secondary" />
+            <label htmlFor="admin-email" className={authStyles.label}>Email</label>
+            <input id="admin-email" type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} className={authStyles.field} />
           </div>
           <div>
-            <label htmlFor="admin-password" className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-600">Password</label>
-            <PasswordInput id="admin-password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-sm border border-light-gray px-3 py-2.5 text-sm outline-none focus:border-brand-secondary" />
+            <label htmlFor="admin-password" className={authStyles.label}>Password</label>
+            <PasswordInput id="admin-password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} className={authStyles.field} />
           </div>
-        </div>
-        <button disabled={loading} className="mt-6 w-full rounded-sm bg-brand-primary py-3 text-xs font-bold uppercase tracking-wider text-white hover:bg-brand-secondary hover:text-brand-primary disabled:cursor-not-allowed disabled:bg-gray-300">
-          {loading ? "Signing in..." : "Sign In"}
-        </button>
-      </form>
+          <button disabled={loading} className={authStyles.submit}>
+            {loading ? "Signing in..." : "Sign In"}
+          </button>
+        </form>
+      </AuthLayout>
     </div>
   );
 }
@@ -100,6 +99,8 @@ function AdminDashboard({ admin, onLogout }: { admin: AdminSession; onLogout: ()
   const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null);
   const [toast, setToast] = useState("");
   const toastTimer = useRef<number | undefined>(undefined);
+  const topBar = useRef<HTMLDivElement>(null);
+  useStickyHeaderOffset(topBar);
 
   const showToast = useCallback((message: string) => {
     setToast(message);
@@ -119,20 +120,23 @@ function AdminDashboard({ admin, onLogout }: { admin: AdminSession; onLogout: ()
 
   return (
     <div className="min-h-screen bg-off-white text-brand-primary">
-      <div className="sticky top-0 z-40 bg-brand-primary py-4">
-        <Container className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="font-display text-lg tracking-wider text-white">{brandName} Admin</h1>
-            <span className="hidden rounded-full bg-white/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white/80 sm:inline">
+      <div ref={topBar} data-sticky-header className="on-navy sticky top-0 z-40 bg-navy-900 py-1.5 text-white">
+        <Container className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+            <h1 className="flex min-h-[44px] items-center gap-2.5">
+              <BrandLogo name={brandName} surface="navy" size="sm" />
+              <span className="rounded-sm border border-gold-400 px-1.5 py-0.5 text-xs font-bold uppercase tracking-[0.15em] text-gold-400">Admin</span>
+            </h1>
+            <span className="hidden rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider text-on-navy-muted sm:inline">
               {admin.username} · {admin.role}
             </span>
-            {catalog.refreshing && catalog.data && <span role="status" className="text-[10px] font-bold uppercase tracking-wider text-white/70">Refreshing…</span>}
+            {catalog.refreshing && catalog.data && <span role="status" className="text-xs font-bold uppercase tracking-wider text-on-navy-muted">Refreshing…</span>}
           </div>
-          <div className="flex items-center gap-3">
-            <button type="button" onClick={() => guard(() => navigate("/"))} className="text-[10px] font-bold uppercase tracking-widest text-white/80 hover:text-white">
+          <div className="flex items-center gap-1">
+            <button type="button" onClick={() => guard(() => navigate("/"))} className="min-h-[44px] px-2 text-xs font-bold uppercase tracking-widest text-on-navy-muted transition-colors duration-(--motion-feedback) hover:text-white">
               ← Exit
             </button>
-            <button type="button" onClick={() => guard(onLogout)} className="text-[10px] font-bold uppercase tracking-widest text-white/80 hover:text-white">
+            <button type="button" onClick={() => guard(onLogout)} className="min-h-[44px] px-2 text-xs font-bold uppercase tracking-widest text-on-navy-muted transition-colors duration-(--motion-feedback) hover:text-white">
               Logout
             </button>
           </div>
@@ -254,11 +258,11 @@ function downloadPdf(filename: string, rows: Record<string, unknown>[], title: s
   if (!rows.length) return;
   const doc = new jsPDF();
   
-  // Brand colors
-  const brandPrimary = "#2B1B12";
-  const brandSecondary = "#D7A84F";
+  // Apex Cart navy and gold text (gold text, not gold 500, stays readable on white paper)
+  const brandPrimary = "#14213D";
+  const brandSecondary = "#765619";
   
-  // Add logo placeholder (you can replace with actual logo URL)
+  // Brand heading
   doc.setFontSize(20);
   doc.setTextColor(parseInt(brandPrimary.slice(1, 3), 16), parseInt(brandPrimary.slice(3, 5), 16), parseInt(brandPrimary.slice(5, 7), 16));
   doc.text(brandName, 14, 20);
@@ -286,7 +290,7 @@ function downloadPdf(filename: string, rows: Record<string, unknown>[], title: s
     body: data,
     startY: 55,
     headStyles: {
-      fillColor: [43, 27, 18],
+      fillColor: [20, 33, 61],
       textColor: [255, 255, 255],
       fontStyle: 'bold',
     },
@@ -337,7 +341,7 @@ function DashboardPanel({ activeDiscounts }: { activeDiscounts: number | undefin
         {cards.map(([label, value, color]) => (
           <div key={label} className="rounded-lg bg-white p-5 shadow-sm">
             <div className={`mb-2 h-1 w-8 rounded-full ${color}`} />
-            <p className="font-display text-xl text-brand-primary">{metrics.status === "loading" && label !== "Active Discounts" ? "…" : value}</p>
+            <p className="text-xl font-semibold tabular-nums text-navy-900">{metrics.status === "loading" && label !== "Active Discounts" ? "…" : value}</p>
             <p className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.15em] text-gray-600">{label}</p>
           </div>
         ))}
@@ -418,7 +422,7 @@ function AnalyticsPanel() {
   }));
 
   const handleDownload = () => {
-    const filename = `nmb-financial-${period}`;
+    const filename = `apex-cart-financial-${period}`;
     const title = `Financial Report - ${period.charAt(0).toUpperCase() + period.slice(1)}`;
     if (downloadFormat === "csv") downloadCsv(`${filename}.csv`, rows);
     else if (downloadFormat === "excel") downloadExcel(`${filename}.xlsx`, rows);
@@ -466,7 +470,7 @@ function AnalyticsPanel() {
           <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
             {summary.map(([label, value]) => (
               <div key={label} className="rounded-md bg-off-white p-4">
-                <p className="font-display text-lg text-brand-primary">{value}</p>
+                <p className="text-lg font-semibold tabular-nums text-navy-900">{value}</p>
                 <p className="text-[10px] font-bold uppercase tracking-wider text-gray-600">{label}</p>
               </div>
             ))}
