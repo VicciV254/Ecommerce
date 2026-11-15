@@ -188,6 +188,30 @@ describe("ProductDetail", () => {
     expect(screen.queryByText("Loading image...")).toBeNull();
   });
 
+  it("loads only the cover eagerly with high priority at detail renditions, and other views and thumbnails lazily", () => {
+    mocks.getProduct.mockImplementation(pending);
+    const stored = (name: string) => `https://res.cloudinary.com/apex-test/image/upload/v1763200000/apex-cart/products/${name}.webp`;
+    mocks.catalog = catalogWith([{ ...linenShirt, images: [
+      fixtureImage({ id: "img-cover", url: stored("cover"), alt: "Linen shirt, front", isMain: true, width: 2400, height: 3000 }),
+      fixtureImage({ id: "img-back", url: stored("back"), alt: "Linen shirt, back", order: 1 }),
+    ] }]);
+    render(<ProductDetail id={linenShirt.id} />);
+    const cover = screen.getByRole("img", { name: "Linen shirt, front" });
+    expect([cover.getAttribute("loading"), cover.getAttribute("fetchpriority"), cover.getAttribute("decoding")]).toEqual(["eager", "high", "async"]);
+    expect(cover.getAttribute("sizes")).toBe("(min-width: 1024px) 50vw, 100vw");
+    expect(cover.getAttribute("srcset")?.split(", ").map((entry) => entry.split(" ")[1])).toEqual(["480w", "640w", "960w", "1280w", "1600w"]);
+    expect([cover.getAttribute("width"), cover.getAttribute("height")]).toEqual(["2400", "3000"]);
+    const thumbnails = screen.getAllByRole("button", { name: /^Show image/ }).map((button) => button.querySelector("img")!);
+    const strip = "(min-width: 1440px) 157px, (min-width: 1024px) calc(12.5vw - 23px), (min-width: 640px) calc(25vw - 22px), calc(25vw - 18px)";
+    expect(thumbnails.map((image) => [image.getAttribute("sizes"), image.getAttribute("loading")])).toEqual([[strip, "lazy"], [strip, "lazy"]]);
+    expect(thumbnails[0].getAttribute("srcset")?.split(", ").map((entry) => entry.split(" ")[1])).toEqual(["96w", "160w", "240w"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Show image 2 of 2" }));
+    const back = screen.getByRole("img", { name: "Linen shirt, back" });
+    expect([back.getAttribute("loading"), back.hasAttribute("fetchpriority")]).toEqual(["lazy", false]);
+    expect(document.body.innerHTML).not.toMatch(/w_2400/);
+  });
+
   it("labels demo listings and sample imagery, and never renders an empty image source", () => {
     mocks.getProduct.mockImplementation(pending);
     const { rerender } = render(<ProductDetail id={demoPhone.id} />);

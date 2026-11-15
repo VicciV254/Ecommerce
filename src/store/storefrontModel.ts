@@ -7,7 +7,7 @@ import type {
   StorefrontSettings,
 } from "../api/catalog";
 import { isRecord } from "../utils/storage";
-import type { CategoryTree } from "./catalogModel";
+import { hasValidLaterMediaFields, withMediaDefaults, type CategoryTree } from "./catalogModel";
 import { COLOR_SLOTS } from "./storefrontTheme";
 
 export const DEFAULT_BRAND_NAME = "Apex Cart";
@@ -50,7 +50,7 @@ function isCampaign(value: unknown): value is Campaign {
 
 export function isMedia(value: unknown): value is MediaAsset {
   return isRecord(value) && isString(value.id) && isString(value.url) && isNullableString(value.alt) &&
-    typeof value.isPlaceholder === "boolean";
+    typeof value.isPlaceholder === "boolean" && hasValidLaterMediaFields(value);
 }
 
 export function isStorefrontSettings(value: unknown): value is StorefrontSettings {
@@ -68,7 +68,7 @@ export function parsePublishedStorefront(data: unknown): PublishedStorefront {
   if (!isNullableString(data.publishedAt)) throw new StorefrontFormatError("publication time");
   if (!isStorefrontSettings(data.settings)) throw new StorefrontFormatError("settings");
   if (!Array.isArray(data.media) || !data.media.every(isMedia)) throw new StorefrontFormatError("media");
-  return { version: data.version, publishedAt: data.publishedAt, settings: data.settings, media: data.media };
+  return { version: data.version, publishedAt: data.publishedAt, settings: data.settings, media: data.media.map(withMediaDefaults) };
 }
 
 /* ------------------------------------------------------------------ */

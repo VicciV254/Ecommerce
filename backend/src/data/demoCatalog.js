@@ -1,20 +1,5 @@
 import taxonomy from './taxonomy.json' with { type: 'json' };
-
-const photoIds = [
-  'photo-1511707171634-5f897ff02aa9',
-  'photo-1496181133206-80ce9b88a853',
-  'photo-1490481651871-ab68de25d43d',
-  'photo-1555041469-a586c61ea9bc',
-  'photo-1481627834876-b7833e8f5570',
-  'photo-1416879595882-3373a0480b5b',
-];
-export const demoPhotos = photoIds.map((id) => ({
-  url: `https://images.unsplash.com/${id}?w=640&auto=format&fit=crop&q=75`,
-  sourceUrl: `https://images.unsplash.com/${id}`,
-  license: 'https://unsplash.com/license',
-  credit: 'Unsplash - reusable demo placeholder',
-  isPlaceholder: true,
-}));
+import { departmentPhotos, galleryPhotos } from './placeholderMedia.js';
 
 const rootAttributes = {
   'phones-tablets': ['Brand', 'Model', 'Storage', 'Connectivity'],
@@ -37,16 +22,25 @@ export function buildDemoCatalog() {
   const nodes = taxonomy.categories;
   const byId = new Map(nodes.map((item) => [item.id, item]));
   const parentIds = new Set(nodes.map((item) => item.parentId).filter(Boolean));
-  const roots = nodes.filter((item) => !item.parentId);
   const leaves = nodes.filter((item) => !parentIds.has(item.id));
   const rootOf = (node) => {
     let current = node;
     while (current.parentId) current = byId.get(current.parentId);
     return current;
   };
-  const photoFor = (node) => demoPhotos[roots.findIndex((root) => root.id === rootOf(node).id) % demoPhotos.length];
+  // Each department alternates between its own photos, so neighbouring products differ.
+  const seen = new Map();
+  const photoFor = (node) => {
+    const department = rootOf(node).slug;
+    const photos = departmentPhotos[department];
+    if (!photos?.length) throw new Error(`No placeholder photos for department ${department}`);
+    const index = seen.get(department) ?? 0;
+    seen.set(department, index + 1);
+    const { width, height, ...photo } = photos[index % photos.length];
+    return { ...photo, width, height };
+  };
   const categories = nodes.map((node) => ({
-    ...node, headerImage: photoFor(node).url, isActive: true,
+    ...node, headerImage: (node.parentId ? photoFor(node) : departmentPhotos[node.slug]?.[0] ?? photoFor(node)).url, isActive: true,
     attributeKeys: node.parentId ? [] : rootAttributes[node.slug] ?? ['Brand', 'Material', 'Dimensions'],
   }));
   const featuredRoots = new Set();
@@ -77,15 +71,23 @@ export function buildDemoCatalog() {
     id: `${variant.id}-stock`, variantId: variant.id, quantity: 12, maxStock: 24,
     minThreshold: 3, status: 'IN_STOCK',
   }));
+  seen.clear();
   const images = products.map((product) => ({
     id: `${product.id}-image`, productId: product.id,
     ...photoFor(byId.get(product.categoryId)),
-    alt: 'Demo placeholder - not actual product photography', isMain: true, order: 0,
+    alt: 'Sample image - not actual product photography', isMain: true, order: 0,
   }));
-  if (varied) images.push({
-    id: `${varied.id}-detail`, productId: varied.id, ...demoPhotos[1],
-    alt: 'Additional demo placeholder', isMain: false, order: 1,
+  const phone = products.find((product) => rootOf(byId.get(product.categoryId)).slug === 'phones-tablets');
+  const gallery = (product, photos, ids) => photos.forEach(({ variant: color, ...photo }, index) => {
+    const variant = color && variants.find((item) => item.productId === product.id && item.attributes.color === color);
+    images.push({
+      id: ids[index], productId: product.id, ...photo, variantId: variant?.id ?? null, isMain: false, order: index + 1,
+      alt: variant ? `Sample image for the ${color} option - not actual product photography`
+        : 'Sample image of a different item - not actual product photography',
+    });
   });
+  if (varied) gallery(varied, galleryPhotos.fashion, [`${varied.id}-detail`, `${varied.id}-gallery-2`, `${varied.id}-gallery-3`]);
+  if (phone) gallery(phone, galleryPhotos['phones-tablets'], [`${phone.id}-gallery-1`, `${phone.id}-gallery-2`]);
   return {
     categories, products, variants, stocks, images,
     designers: [{

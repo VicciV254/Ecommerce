@@ -2,23 +2,30 @@ import { useMemo, useState } from "react";
 import { catalogAdminAPI, type CatalogCategory, type CatalogDesigner, type CatalogProduct } from "../../api/catalog";
 import { describeApiError } from "../../api/errors";
 import { ConfirmModal } from "../../components/Modal";
+import { ResponsiveImage } from "../../components/ui";
 import { primaryImage, productStock } from "../../store/catalogModel";
 import { formatKES } from "../../utils/format";
 import { useAdminCatalog } from "./AdminCatalogContext";
 import { CategoryForm, DesignerForm } from "./CatalogForms";
 import { ProductEditor } from "./ProductEditor";
-import { Feedback, Panel, categoryOptions, dangerButtonClass, descendantIds, inputClass, primaryButtonClass, smallButtonClass } from "./shared";
+import { Feedback, Panel, canEditCatalog, categoryOptions, dangerButtonClass, descendantIds, inputClass, primaryButtonClass, smallButtonClass } from "./shared";
 
 const STATUS_FILTERS = [
   { value: "all", label: "All products" },
   { value: "visible", label: "Visible" },
   { value: "hidden", label: "Hidden" },
   { value: "demo", label: "Demo records" },
-  { value: "needs-images", label: "Needs images" },
   { value: "sample-images", label: "Sample images" },
 ] as const;
 type StatusFilter = (typeof STATUS_FILTERS)[number]["value"];
 const PRODUCT_LIMIT = 120;
+/**
+ * Rendered width of a product tile image inside its 1px border: 2/3/4/5 columns with `gap-3` in a list with 4px
+ * right padding, inside the Panel (20 then 24px padding) and the admin Container (16/24/32px, 1440px at most).
+ * Tiles reach ~298px, so they use the card renditions (up to 960px) for 2x screens.
+ */
+const PRODUCT_TILE_SIZES =
+  "(min-width: 1440px) 254px, (min-width: 1280px) calc(20vw - 34.8px), (min-width: 1024px) calc(25vw - 40px), (min-width: 640px) calc(33.34vw - 43px), calc(50vw - 46px)";
 
 type PendingDelete =
   | { kind: "product"; item: CatalogProduct }
@@ -30,19 +37,22 @@ function matchesStatus(product: CatalogProduct, filter: StatusFilter) {
     case "visible": return product.isActive;
     case "hidden": return !product.isActive;
     case "demo": return product.isDemo;
-    case "needs-images": return product.images.length === 0;
     case "sample-images": return product.images.some((image) => image.isPlaceholder);
     default: return true;
   }
 }
 
-export function CatalogManager({ showToast }: { showToast: (message: string) => void }) {
+/** No images at all, or only sample/placeholder images: real photography is still needed. */
+const needsImages = (product: CatalogProduct) => product.images.every((image) => image.isPlaceholder);
+
+export function CatalogManager({ role, showToast }: { role: string; showToast: (message: string) => void }) {
   const { data, categories, reload } = useAdminCatalog();
   const products = useMemo(() => data?.snapshot.products ?? [], [data]);
   const designers = data?.snapshot.designers ?? [];
   const options = useMemo(() => categoryOptions(categories), [categories]);
   const [categoryFilter, setCategoryFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [onlyNeedingImages, setOnlyNeedingImages] = useState(false);
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<CatalogProduct | "new" | null>(null);
   const [categoryForm, setCategoryForm] = useState<{ category: CatalogCategory | null; parentId: string | null } | null>(null);
@@ -55,9 +65,10 @@ export function CatalogManager({ showToast }: { showToast: (message: string) => 
     const term = search.trim().toLowerCase();
     const scope = categoryFilter ? new Set([categoryFilter, ...descendantIds(categories, categoryFilter)]) : null;
     return products.filter((product) =>
-      (!scope || scope.has(product.categoryId)) && matchesStatus(product, statusFilter) &&
+      (!scope || scope.has(product.categoryId)) && matchesStatus(product, statusFilter) && (!onlyNeedingImages || needsImages(product)) &&
       (!term || product.name.toLowerCase().includes(term) || product.tags.some((tag) => tag.toLowerCase().includes(term))));
-  }, [products, search, categoryFilter, statusFilter, categories]);
+  }, [products, search, categoryFilter, statusFilter, onlyNeedingImages, categories]);
+  const needingImages = useMemo(() => products.filter(needsImages).length, [products]);
 
   const editingProduct = editing && editing !== "new" ? products.find((product) => product.id === editing.id) ?? editing : null;
 
@@ -122,15 +133,25 @@ export function CatalogManager({ showToast }: { showToast: (message: string) => 
         description="Products are saved straight to the catalog. Hidden products and demo records never become real inventory through this screen."
         actions={<button type="button" onClick={() => setEditing("new")} className={primaryButtonClass}>Add Product</button>}
       >
-        <div className="mb-4 grid gap-3 md:grid-cols-[1fr_240px_180px]">
-          <input aria-label="Search products" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by name or tag…" className={inputClass} />
-          <select aria-label="Filter products by category" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} className={inputClass}>
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          <input aria-label="Search products" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by name or tag…" className={`min-w-0 basis-full md:flex-1 md:basis-48 ${inputClass}`} />
+          <select aria-label="Filter products by category" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} className={`min-w-0 basis-full sm:flex-1 sm:basis-0 md:w-56 md:flex-none ${inputClass}`}>
             <option value="">All categories</option>
             {options.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
           </select>
-          <select aria-label="Filter products by status" value={statusFilter} onChange={(event) => setStatusFilter(STATUS_FILTERS.find((item) => item.value === event.target.value)?.value ?? "all")} className={inputClass}>
+          <select aria-label="Filter products by status" value={statusFilter} onChange={(event) => setStatusFilter(STATUS_FILTERS.find((item) => item.value === event.target.value)?.value ?? "all")} className={`min-w-0 basis-full sm:flex-1 sm:basis-0 md:w-44 md:flex-none ${inputClass}`}>
             {STATUS_FILTERS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
           </select>
+          <button
+            type="button"
+            aria-pressed={onlyNeedingImages}
+            onClick={() => setOnlyNeedingImages((value) => !value)}
+            className={`min-h-[44px] shrink-0 rounded-full border px-4 text-[11px] font-bold uppercase tracking-wider ${
+              onlyNeedingImages ? "border-warning bg-warning text-white" : "border-warning/60 bg-white text-warning hover:bg-warning/10"
+            }`}
+          >
+            Needs images ({needingImages})
+          </button>
         </div>
         <p className="mb-3 text-[11px] text-gray-600">{list.length} of {products.length} products</p>
         <ul className="grid max-h-[640px] grid-cols-2 gap-3 overflow-y-auto pr-1 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
@@ -142,7 +163,7 @@ export function CatalogManager({ showToast }: { showToast: (message: string) => 
                 <button type="button" onClick={() => setEditing(product)} className="flex-1 text-left" aria-label={`Edit ${product.name}`}>
                   <span className="relative block aspect-square overflow-hidden bg-warm-beige">
                     {image
-                      ? <img src={image.url} alt="" className="h-full w-full object-cover" />
+                      ? <ResponsiveImage url={image.url} preset="card" sizes={PRODUCT_TILE_SIZES} width={image.width} height={image.height} alt="" className="h-full w-full object-cover" />
                       : <span className="flex h-full items-center justify-center p-2 text-center text-[10px] font-bold uppercase text-warning">Needs images</span>}
                   </span>
                   <span className="block p-2">
@@ -200,6 +221,7 @@ export function CatalogManager({ showToast }: { showToast: (message: string) => 
         <ProductEditor
           key={editing === "new" ? "new" : editing.id}
           product={editingProduct}
+          canWrite={canEditCatalog(role)}
           onClose={() => setEditing(null)}
           onSaved={(message) => {
             setEditing(null);

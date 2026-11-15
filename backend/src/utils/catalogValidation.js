@@ -9,7 +9,17 @@ const optionalText = (max) => text(max).nullable().optional();
 const money = z.number().finite().positive().max(1_000_000_000).refine(isMoneyInput, 'Amounts support at most two decimal places');
 const unique = (items) => new Set(items).size === items.length;
 
+export const MEDIA_UPLOAD_FORMATS = ['jpg', 'png', 'webp', 'avif'];
+/** The Cloudinary account's per-image limit (Free plan). */
+export const MEDIA_MAX_BYTES = 10 * 1024 * 1024;
+/** Uploads are resized on arrival to fit this box, which still leaves detail for zoom. */
+export const MEDIA_MAX_DIMENSION = 3000;
+
+/** Whitespace or control characters could add extra srcset candidates or break markup. */
+const hasUnsafeCharacters = (value) => /\s/.test(value) || [...value].some((char) => char.codePointAt(0) < 0x20 || char.codePointAt(0) === 0x7f);
+
 export const imageUrlSchema = z.string().max(2048).refine((value) => {
+  if (hasUnsafeCharacters(value)) return false;
   try {
     const url = new URL(value, 'https://local.invalid');
     if (url.username || url.password || value.includes('\\')) return false;
@@ -18,7 +28,7 @@ export const imageUrlSchema = z.string().max(2048).refine((value) => {
   } catch {
     return false;
   }
-}, 'Images must use an HTTPS URL without credentials, or a local /images/ path');
+}, 'Images must use one HTTPS URL without credentials or spaces, or a local /images/ path');
 
 const attributes = z.record(z.string().regex(/^[a-z][a-z0-9_-]{0,31}$/), text(80).min(1))
   .refine((value) => Object.keys(value).length <= 8, 'At most eight variant attributes are supported');
@@ -31,9 +41,20 @@ export const catalogStockSchema = z.object({
   minThreshold: z.number().int().min(0).max(1_000_000).optional(),
 }).strict();
 
+/** The result of a signed direct upload, as returned by Cloudinary to the browser. */
+const cloudinaryUploadSchema = z.object({
+  publicId: z.string().max(255).regex(/^[a-z0-9-]+(?:\/[a-z0-9-]+)+$/),
+  version: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  signature: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i),
+  format: z.enum(MEDIA_UPLOAD_FORMATS),
+  bytes: z.number().int().positive().max(MEDIA_MAX_BYTES),
+}).strict();
+
 export const mediaSchema = z.object({
   id: idSchema.optional(),
-  url: imageUrlSchema,
+  url: imageUrlSchema.optional(),
+  cloudinary: cloudinaryUploadSchema.optional(),
+  variantId: idSchema.nullable().optional(),
   alt: optionalText(240),
   isMain: z.boolean().optional(),
   order: z.number().int().min(0).max(100).optional(),
@@ -44,8 +65,15 @@ export const mediaSchema = z.object({
   license: optionalText(240),
   credit: optionalText(240),
 }).strict().superRefine((value, ctx) => {
-  if (value.isPlaceholder && (!value.sourceUrl || !value.license)) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Placeholder media needs its source and reuse license' });
+  const issue = (message, field) => ctx.addIssue({ code: z.ZodIssueCode.custom, message, ...(field && { path: [field] }) });
+  // Retained images may omit stored attribution; the merged result is checked when the product is written.
+  if (!value.id && value.isPlaceholder && (!value.sourceUrl || !value.license)) issue('Placeholder media needs its source and reuse license');
+  if (value.cloudinary && value.url !== undefined) issue('Send either an image address or an upload, not both', 'url');
+  if (!value.id && !value.cloudinary && value.url === undefined) issue('A new image needs an HTTPS address or an upload', 'url');
+  if (value.id && value.cloudinary) issue('To replace an image, remove it and add the new upload', 'cloudinary');
+  const fits = (size) => size > 0 && size <= MEDIA_MAX_DIMENSION;
+  if (value.cloudinary && !(fits(value.width) && fits(value.height))) {
+    issue(`Uploaded images need their width and height, up to ${MEDIA_MAX_DIMENSION} pixels`, 'width');
   }
 });
 

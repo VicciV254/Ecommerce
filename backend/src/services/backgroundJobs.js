@@ -1,4 +1,3 @@
-import { startImageHostServices } from './imageHostService.js';
 import { runMaintenance } from './maintenanceService.js';
 
 /**
@@ -20,7 +19,6 @@ export function startBackgroundJobs() {
     return () => {};
   }
 
-  const stopImages = startImageHostServices();
   const timers = JOBS.map(({ interval, steps }) => {
     let running = false;
     return setInterval(async () => {
@@ -34,8 +32,5 @@ export function startBackgroundJobs() {
     }, interval);
   });
 
-  return () => {
-    timers.forEach(clearInterval);
-    stopImages();
-  };
+  return () => timers.forEach(clearInterval);
 }

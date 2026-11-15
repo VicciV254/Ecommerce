@@ -58,6 +58,29 @@ describe("catalog snapshot boundary", () => {
     expect(() => parseCatalogSnapshot({ ...snapshot, returnPolicy: { ...snapshot.returnPolicy, deliveryFeeRefund: "SOMETIMES" } }, ["demo"]))
       .toThrow(/return policy/);
   });
+
+  it("reads media fields that older payloads omit as null and keeps uploaded-file facts", () => {
+    const { variantId: _variant, format: _format, bytes: _bytes, width: _width, height: _height, ...older } = linenShirt.images[0];
+    const uploaded = {
+      ...linenShirt.images[1], variantId: "var-linen-m-blue", format: "webp", bytes: 245_000, width: 2400, height: 3000,
+      url: "https://res.cloudinary.com/apex-test/image/upload/v1763200000/apex-cart/products/a.webp",
+    };
+    const parsed = parseCatalogSnapshot({ ...fixtureSnapshot(), products: [{ ...linenShirt, images: [older, uploaded] }] }, ["demo"]);
+    const [first, second] = parsed.products[0].images;
+    expect([first.variantId, first.format, first.bytes, first.width, first.height]).toEqual([null, null, null, null, null]);
+    expect([second.variantId, second.format, second.bytes, second.width, second.height]).toEqual(["var-linen-m-blue", "webp", 245_000, 2400, 3000]);
+  });
+
+  it.each([
+    ["variantId", 7],
+    ["format", 5],
+    ["bytes", -1],
+    ["bytes", 1.5],
+    ["width", "2400"],
+  ])("rejects a media %s of %j instead of guessing", (field, value) => {
+    const images = [{ ...linenShirt.images[0], [field]: value }];
+    expect(() => parseCatalogSnapshot({ ...fixtureSnapshot(), products: [{ ...linenShirt, images }] }, ["demo"])).toThrow(/products/);
+  });
 });
 
 describe("variant resolution", () => {

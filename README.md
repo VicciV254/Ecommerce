@@ -59,8 +59,7 @@ With the example configuration, the backend runs on `http://127.0.0.1:5000`.
 Importing the app/server does not start a listener or operational jobs.
 Background jobs are **off by default**; deliberately set
 `BACKGROUND_JOBS_ENABLED=true` only on an always-on host that should check
-pending payments, expire holds, retry customer emails and refresh image-host
-sessions. Serverless deployments use the protected daily maintenance endpoint
+pending payments, expire holds and retry customer emails. Serverless deployments use the protected daily maintenance endpoint
 instead (see [Backend setup](backend/SETUP.md)). Orders never advance on a
 timer: staff confirm each fulfilment step.
 

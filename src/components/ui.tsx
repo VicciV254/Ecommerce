@@ -4,6 +4,7 @@ import { Link, navigate } from "../router";
 import { useStore } from "../store/StoreContext";
 import { useCatalog } from "../store/CatalogContext";
 import { activeVariants, primaryImage, productPriceView, productStock, stockLevel, type StockLevel } from "../store/catalogModel";
+import { imageRendition, type ImagePreset } from "../store/mediaModel";
 import { useAuth } from "../contexts/AuthContext";
 import { formatKES } from "../utils/format";
 
@@ -44,21 +45,67 @@ export function MissingImage({ label = "Image not yet available" }: { label?: st
   );
 }
 
+/** A stored image address delivered at a preset's renditions; lazy unless it is the page's priority image. */
+export function ResponsiveImage({
+  url, preset, alt, className = "", sizes, width, height, priority = false, onLoad, onError,
+}: {
+  url: string;
+  preset: ImagePreset;
+  alt: string;
+  className?: string;
+  /** Replaces the preset's `sizes` where a layout renders the image at other widths. */
+  sizes?: string;
+  /** Intrinsic dimensions, when the catalog knows them. */
+  width?: number | null;
+  height?: number | null;
+  /** Only for the product-detail cover: loads eagerly with high fetch priority. */
+  priority?: boolean;
+  onLoad?: () => void;
+  onError?: () => void;
+}) {
+  const rendition = imageRendition(url, preset, sizes);
+  return (
+    <img
+      src={rendition.src}
+      srcSet={rendition.srcSet}
+      sizes={rendition.sizes}
+      width={width ?? undefined}
+      height={height ?? undefined}
+      alt={alt}
+      loading={priority ? "eager" : "lazy"}
+      fetchPriority={priority ? "high" : undefined}
+      decoding="async"
+      onLoad={onLoad}
+      onError={onError}
+      className={className}
+    />
+  );
+}
+
 /** A catalog image with its sample label, or an intentional placeholder when none exists. */
 export function MediaImage({
-  asset, alt, className = "", loading = "lazy",
-}: { asset: MediaAsset | undefined; alt: string; className?: string; loading?: "lazy" | "eager" }) {
+  asset, alt, className = "", preset = "card",
+}: { asset: MediaAsset | undefined; alt: string; className?: string; preset?: ImagePreset }) {
   if (!asset) return <MissingImage />;
   return (
     <>
-      <img src={asset.url} alt={asset.alt || alt} loading={loading} className={`h-full w-full object-cover ${className}`} />
+      <ResponsiveImage
+        url={asset.url}
+        preset={preset}
+        alt={asset.alt || alt}
+        width={asset.width}
+        height={asset.height}
+        className={`h-full w-full object-cover ${className}`}
+      />
       {asset.isPlaceholder && <SampleImageLabel />}
     </>
   );
 }
 
-export function ProductImage({ product, className = "" }: { product: Pick<CatalogProduct, "name" | "images">; className?: string }) {
-  return <MediaImage asset={primaryImage(product)} alt={product.name} className={className} />;
+export function ProductImage({
+  product, className = "", preset,
+}: { product: Pick<CatalogProduct, "name" | "images">; className?: string; preset?: ImagePreset }) {
+  return <MediaImage asset={primaryImage(product)} alt={product.name} className={className} preset={preset} />;
 }
 
 /* ---------- Badges ---------- */

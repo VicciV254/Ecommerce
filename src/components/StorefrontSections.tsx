@@ -1,19 +1,26 @@
 import type { CSSProperties, ReactNode } from "react";
 import type { CatalogCategory, MediaAsset, StorefrontSettings } from "../api/catalog";
 import { Link } from "../router";
-import { useCatalog } from "../store/CatalogContext";
+import { useCatalog, type CatalogValue } from "../store/CatalogContext";
+import { imageRendition, srcSetOf } from "../store/mediaModel";
 import {
   resolveCampaign,
   sectionCategories,
   sectionProducts,
   type ResolvedCampaign,
 } from "../store/storefrontModel";
-import { Container, ErrorPanel, LoadingPanel, MissingImage, ProductCard, SampleImageLabel, SectionTitle } from "./ui";
+import { Container, ErrorPanel, LoadingPanel, MissingImage, ProductCard, ResponsiveImage, SampleImageLabel, SectionTitle } from "./ui";
 
 type Section = StorefrontSettings["sections"][number];
 
 /** Viewport where campaign artwork switches to its mobile composition (Tailwind `md`). */
 const MOBILE_ARTWORK_QUERY = "(width < 48rem)";
+/**
+ * Rendered width of a department tile: 2, 3 then 5 columns with `gap-3` inside the page Container
+ * (16, 24 then 32px side padding; 1440px at most).
+ */
+const DEPARTMENT_TILE_SIZES =
+  "(min-width: 1440px) 266px, (min-width: 1024px) calc(20vw - 22.4px), (min-width: 640px) calc(33.34vw - 24px), calc(50vw - 22px)";
 
 type SectionsProps = {
   settings: StorefrontSettings;
@@ -22,10 +29,20 @@ type SectionsProps = {
   showProblems?: boolean;
 };
 
+/** Whether a section shows shoppers anything in the current catalog state; staff-only problem notes do not count. */
+function showsShoppersContent(section: Section, settings: StorefrontSettings, catalog: CatalogValue) {
+  if (section.type === "campaign") return settings.campaigns.some((campaign) => campaign.id === section.campaignId);
+  if (catalog.status !== "ready") return catalog.status === "loading";
+  const { items } = section.type === "departments" ? sectionCategories(section, catalog) : sectionProducts(section, catalog);
+  return items.length > 0;
+}
+
 export function StorefrontSections({ settings, mediaById, showProblems = false }: SectionsProps) {
   const catalog = useCatalog();
   const sections = settings.sections.filter((section) => section.enabled);
   const usesCatalog = sections.some((section) => section.type !== "campaign");
+  // The first section shoppers see is the likely largest paint, so only a campaign there loads its artwork eagerly.
+  const lead = sections.find((section) => showsShoppersContent(section, settings, catalog));
 
   if (!sections.length) {
     return (
@@ -54,7 +71,15 @@ export function StorefrontSections({ settings, mediaById, showProblems = false }
           if (!campaign) {
             return showProblems ? <ProblemList key={section.id} title={section.title} problems={[`Campaign ${section.campaignId ?? "(none)"} does not exist`]} /> : null;
           }
-          return <CampaignSection key={section.id} resolved={resolveCampaign(campaign, mediaById, catalog)} catalogReady={catalog.status === "ready"} showProblems={showProblems} />;
+          return (
+            <CampaignSection
+              key={section.id}
+              resolved={resolveCampaign(campaign, mediaById, catalog)}
+              catalogReady={catalog.status === "ready"}
+              showProblems={showProblems}
+              priority={section === lead}
+            />
+          );
         }
         if (catalog.status === "loading") {
           return <Container key={section.id} className="py-10"><LoadingPanel label={`Loading ${section.title.toLowerCase()}…`} /></Container>;
@@ -104,7 +129,13 @@ function DepartmentTile({ category }: { category: CatalogCategory }) {
   return (
     <Link to={`/shop?cat=${encodeURIComponent(category.slug)}`} className="group relative block aspect-[4/5] overflow-hidden rounded-lg bg-warm-beige">
       {category.image ? (
-        <img src={category.image} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-110" />
+        <ResponsiveImage
+          url={category.image}
+          preset="card"
+          sizes={DEPARTMENT_TILE_SIZES}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
+        />
       ) : (
         <span className="absolute inset-0"><MissingImage label="No department image" /></span>
       )}
@@ -149,7 +180,13 @@ function ProductsSection({ section, showProblems }: { section: Section; showProb
 
 type FocalStyle = CSSProperties & Record<"--focal-desktop" | "--focal-mobile", string>;
 
-function CampaignSection({ resolved, catalogReady, showProblems }: { resolved: ResolvedCampaign; catalogReady: boolean; showProblems: boolean }) {
+function CampaignSection({ resolved, catalogReady, showProblems, priority }: {
+  resolved: ResolvedCampaign;
+  catalogReady: boolean;
+  showProblems: boolean;
+  /** The page's leading section: its artwork (whichever source is chosen) loads eagerly with high priority. */
+  priority: boolean;
+}) {
   const { campaign, desktop, mobile } = resolved;
   // Catalog targets are only linked, or reported missing, once the catalog has loaded.
   const route = campaign.cta.target === "shop" || catalogReady ? resolved.ctaRoute : null;
@@ -161,17 +198,37 @@ function CampaignSection({ resolved, catalogReady, showProblems }: { resolved: R
     "--focal-mobile": `${campaign.mobileFocal.x}% ${campaign.mobileFocal.y}%`,
   };
 
-  const artwork: ReactNode = desktop ? (
-    <picture>
-      {mobile && <source media={MOBILE_ARTWORK_QUERY} srcSet={mobile.url} />}
-      <img
-        src={desktop.url}
-        alt={desktop.alt ?? ""}
-        style={focal}
-        className="absolute inset-0 h-full w-full object-cover [object-position:var(--focal-desktop)] max-md:[object-position:var(--focal-mobile)]"
-      />
-    </picture>
-  ) : null;
+  let artwork: ReactNode = null;
+  if (desktop) {
+    const desktopArt = imageRendition(desktop.url, "hero");
+    const mobileArt = mobile ? imageRendition(mobile.url, "hero") : null;
+    artwork = (
+      <picture>
+        {mobile && mobileArt && (
+          <source
+            media={MOBILE_ARTWORK_QUERY}
+            srcSet={srcSetOf(mobileArt)}
+            sizes={mobileArt.sizes}
+            width={mobile.width ?? undefined}
+            height={mobile.height ?? undefined}
+          />
+        )}
+        <img
+          src={desktopArt.src}
+          srcSet={desktopArt.srcSet}
+          sizes={desktopArt.sizes}
+          width={desktop.width ?? undefined}
+          height={desktop.height ?? undefined}
+          alt={desktop.alt ?? ""}
+          loading={priority ? "eager" : "lazy"}
+          fetchPriority={priority ? "high" : undefined}
+          decoding="async"
+          style={focal}
+          className="absolute inset-0 h-full w-full object-cover [object-position:var(--focal-desktop)] max-md:[object-position:var(--focal-mobile)]"
+        />
+      </picture>
+    );
+  }
   const placeholder = Boolean(desktop?.isPlaceholder || mobile?.isPlaceholder);
 
   const copy = (

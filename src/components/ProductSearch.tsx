@@ -4,6 +4,7 @@ import { useCatalog } from "../store/CatalogContext";
 import { primaryImage, productPriceView } from "../store/catalogModel";
 import { formatKES } from "../utils/format";
 import { searchSuggestions } from "../utils/search";
+import { ResponsiveImage } from "./ui";
 
 export function ProductSearch({ onNavigate }: { onNavigate?: () => void }) {
   const { products, status } = useCatalog();
@@ -105,7 +106,7 @@ export function ProductSearch({ onNavigate }: { onNavigate?: () => void }) {
                 className={`flex w-full items-center gap-2 border-b border-light-gray/60 px-3 py-2 text-left last:border-0 hover:bg-warm-beige ${index === activeIndex ? "bg-warm-beige" : ""}`}
               >
                 {image ? (
-                  <img src={image.url} alt="" width={40} height={40} className="h-10 w-10 shrink-0 rounded-sm object-cover" />
+                  <ResponsiveImage url={image.url} preset="thumbnail" width={image.width} height={image.height} alt="" className="h-10 w-10 shrink-0 rounded-sm object-cover" />
                 ) : (
                   <span aria-hidden="true" className="h-10 w-10 shrink-0 rounded-sm bg-warm-beige" />
                 )}

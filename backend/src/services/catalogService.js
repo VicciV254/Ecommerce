@@ -86,6 +86,7 @@ export function mediaDto(image) {
     isMain: image.isMain, order: image.order, width: image.width, height: image.height,
     isPlaceholder: image.isPlaceholder, sourceUrl: image.sourceUrl,
     license: image.license, credit: image.credit, version: image.version,
+    variantId: image.variantId ?? null, format: image.format ?? null, bytes: image.bytes ?? null,
   };
 }
 

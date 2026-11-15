@@ -8,7 +8,7 @@ import { buildCategoryTree } from "../store/catalogModel";
 import type { CatalogValue } from "../store/CatalogContext";
 import type { OrderIntent } from "../store/checkoutModel";
 import { StoreProvider, useStore, type CartLine } from "../store/StoreContext";
-import { fixtureSnapshot, linenShirt, poloShirt } from "../test-support/catalogFixtures";
+import { fixtureImage, fixtureSnapshot, linenShirt, poloShirt } from "../test-support/catalogFixtures";
 import {
   fixturePendingOrder,
   fixtureQuote,
@@ -358,6 +358,41 @@ describe("checkout reservation", () => {
 });
 
 describe("cart quote", () => {
+  /** The linen shirt with an in-stock M/Blue SKU and an image linked to it. */
+  const blueImage = fixtureImage({ id: "img-linen-blue", url: "https://media.example.test/linen-blue.jpg", alt: "Linen shirt in blue", order: 2, variantId: "var-linen-m-blue" });
+  const blueShirt = {
+    ...linenShirt,
+    images: [...linenShirt.images, blueImage],
+    variants: linenShirt.variants.map((variant) => (variant.id === "var-linen-m-blue" ? { ...variant, stock: 3, onHand: 3 } : variant)),
+  };
+  const blueLine = { ...linenLine, variantId: "var-linen-m-blue", sku: "VAR-LINEN-M-BLUE", attributes: { size: "M", color: "Blue" } };
+  const lineImage = () => within(screen.getByRole("list", { name: "Cart items" })).getAllByRole("listitem")[0];
+
+  function serveBlueCart() {
+    mocks.catalog = { ...mocks.catalog!, products: [blueShirt, poloShirt], productsById: new Map([[blueShirt.id, blueShirt], [poloShirt.id, poloShirt]]) };
+    seed("customer-a", [{ productId: blueShirt.id, variantId: "var-linen-m-blue", quantity: 1 }]);
+    const quote = deferred<{ data: unknown }>();
+    mocks.orders.createQuote.mockReturnValue(quote.promise);
+    return quote;
+  }
+
+  it("[4] shows the server's line image for a Blue line, not the product cover, once the line is priced", async () => {
+    const quote = serveBlueCart();
+    render(tree(<Cart />));
+    expect(lineImage().querySelector("img")?.getAttribute("src")).toBe("https://media.example.test/linen-front.jpg");
+    await act(async () => quote.resolve({ data: fixtureQuote({ lines: [{ ...blueLine, productImage: blueImage.url }] }) }));
+    await waitFor(() => expect(lineImage().querySelector("img")?.getAttribute("src")).toBe(blueImage.url), WAIT);
+    expect(lineImage().querySelector("img")?.getAttribute("alt")).toBe("Linen shirt in blue");
+  });
+
+  it("[4] shows the missing-image placeholder when the server has no image for the line", async () => {
+    const quote = serveBlueCart();
+    render(tree(<Cart />));
+    await act(async () => quote.resolve({ data: fixtureQuote({ lines: [{ ...blueLine, productImage: null }] }) }));
+    expect(await within(lineImage()).findByRole("img", { name: "Image not yet available" }, WAIT)).toBeTruthy();
+    expect(lineImage().querySelector("img")).toBeNull();
+  });
+
   it("shows server line totals, savings, VAT and delivery for the chosen delivery method", async () => {
     seed("customer-a", [linen]);
     mocks.orders.createQuote.mockImplementation((request: QuoteRequest) => Promise.resolve({

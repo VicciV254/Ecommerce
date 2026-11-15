@@ -58,13 +58,24 @@ function allocateDiscount(amount, weights) {
   return shares.map((share) => share.amount);
 }
 
+/**
+ * The picture kept with a cart or order line: the purchased variant's first image, otherwise the
+ * product cover, preferring images that are not tied to some other variant. Images arrive ordered.
+ */
+export function variantImage(images, variantId) {
+  const general = images.filter((image) => !image.variantId);
+  return images.find((image) => variantId && image.variantId === variantId)
+    ?? general.find((image) => image.isMain) ?? general[0]
+    ?? images.find((image) => image.isMain) ?? images[0] ?? null;
+}
+
 export function priceMerchandise(entries, discounts, couponCode, policy, now = new Date()) {
   const lines = entries.map(({ product, variant, quantity, categoryPath }) => {
     const pricing = unitPrice(product, variant, discounts, categoryPath, policy, now);
     return {
       productId: product.id, variantId: variant.id, productName: product.name,
       sku: variant.sku, attributes: variant.attributes, quantity,
-      productImage: (product.images.find((image) => image.isMain) ?? product.images[0])?.url ?? null,
+      productImage: variantImage(product.images, variant.id)?.url ?? null,
       originalUnitPrice: pricing.originalPrice, unitPrice: pricing.price,
       total: decimal(pricing.price).mul(quantity), couponDiscount: decimal(0),
       discountId: pricing.discountId,

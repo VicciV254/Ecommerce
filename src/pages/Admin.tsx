@@ -183,7 +183,7 @@ function AdminDashboard({ admin, onLogout }: { admin: AdminSession; onLogout: ()
             <>
               {tab === "Discounts" && <DiscountManager showToast={showToast} />}
               {tab === "Stock" && <StockManager showToast={showToast} />}
-              {tab === "Catalog" && <CatalogManager showToast={showToast} />}
+              {tab === "Catalog" && <CatalogManager role={admin.role} showToast={showToast} />}
             </>
           ) : !catalog.error && (
             <p role="status" className="rounded-lg bg-white p-6 text-sm text-gray-600 shadow-sm">Loading catalog data…</p>

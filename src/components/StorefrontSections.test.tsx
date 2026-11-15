@@ -1,11 +1,12 @@
 import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Campaign, CatalogProduct } from "../api/catalog";
+import type { Campaign, CatalogProduct, StorefrontSettings } from "../api/catalog";
 import { buildCategoryTree } from "../store/catalogModel";
 import type { CatalogValue } from "../store/CatalogContext";
 import {
   campaignMedia,
   fixtureCategories,
+  fixtureImage,
   fixtureReturnPolicy,
   fixtureStorefrontSettings,
   linenShirt,
@@ -82,6 +83,58 @@ describe("StorefrontSections", () => {
     expect(image.style.getPropertyValue("--focal-mobile")).toBe("70% 20%");
   });
 
+  it("offers hero renditions for each artwork while keeping its art direction and focal points", () => {
+    const desktop = fixtureImage({
+      id: "media-hero-desktop", url: "https://res.cloudinary.com/apex-test/image/upload/v7/apex-cart/storefront/hero.jpg", width: 2400, height: 1200,
+    });
+    const mobile = fixtureImage({ id: "media-hero-mobile", url: "https://images.unsplash.com/photo-9?w=1080&fit=crop&ixid=keep", width: 1080, height: 1350 });
+    const media = new Map([desktop, mobile].map((asset) => [asset.id, asset]));
+    render(<StorefrontSections settings={settingsWith(campaign({ desktopMediaId: desktop.id, mobileMediaId: mobile.id }))} mediaById={media} />);
+    const section = screen.getByRole("region", { name: "Workspace week" });
+    const source = section.querySelector("picture source")!;
+    expect(source.getAttribute("media")).toBe("(width < 48rem)");
+    expect(source.getAttribute("sizes")).toBe("100vw");
+    expect(source.getAttribute("srcset")!.split(", ").map((entry) => {
+      const [url, width] = entry.split(" ");
+      return [new URL(url).searchParams.get("w"), new URL(url).searchParams.get("ixid"), width];
+    })).toEqual([["640", "keep", "640w"], ["960", "keep", "960w"], ["1280", "keep", "1280w"], ["1920", "keep", "1920w"], ["2560", "keep", "2560w"]]);
+    const image = section.querySelector<HTMLImageElement>("picture img")!;
+    expect(image.getAttribute("srcset")).toContain("/upload/c_limit,w_2560/q_auto/f_auto/v7/apex-cart/storefront/hero.jpg 2560w");
+    expect(image.getAttribute("src")).toBe("https://res.cloudinary.com/apex-test/image/upload/c_limit,w_1280/q_auto/f_auto/v7/apex-cart/storefront/hero.jpg");
+    expect([image.getAttribute("sizes"), image.getAttribute("width"), image.getAttribute("height")]).toEqual(["100vw", "2400", "1200"]);
+    // The only section leads the page, so its artwork loads eagerly with high priority.
+    expect([image.getAttribute("loading"), image.getAttribute("fetchpriority"), image.getAttribute("decoding")]).toEqual(["eager", "high", "async"]);
+    expect(image.style.getPropertyValue("--focal-mobile")).toBe("70% 20%");
+  });
+
+  it("[7] keeps an artwork address that cannot be resized as a single srcset candidate", () => {
+    const sneaky = fixtureImage({ id: "media-sneaky", url: "https://media.example.test/hero.jpg 2000w, https://elsewhere.example/x.jpg" });
+    const media = new Map([...mediaById, [sneaky.id, sneaky]]);
+    render(<StorefrontSections settings={settingsWith(campaign({ mobileMediaId: sneaky.id }))} mediaById={media} />);
+    const source = screen.getByRole("region", { name: "Workspace week" }).querySelector("picture source")!;
+    expect(source.getAttribute("srcset")).toBe("https://media.example.test/hero.jpg%202000w,%20https://elsewhere.example/x.jpg");
+  });
+
+  it("sizes department artwork to the tile grid and keeps the missing-image fallback", () => {
+    state.catalog = {
+      ...catalogWith([linenShirt]),
+      categories: buildCategoryTree(fixtureCategories.map((category) =>
+        category.id === "cat-fashion" ? { ...category, image: "https://res.cloudinary.com/apex-test/image/upload/v3/apex-cart/storefront/fashion.jpg" } : category)),
+    };
+    const settings = fixtureStorefrontSettings({
+      sections: [{ id: "departments", type: "departments", title: "Shop by department", enabled: true, productIds: [], categoryIds: [], campaignId: null }],
+    });
+    render(<StorefrontSections settings={settings} mediaById={mediaById} />);
+    const [phones, fashion] = within(screen.getByRole("list", { name: "Shop by department" })).getAllByRole("link");
+    expect(within(phones).getByRole("img", { name: "No department image" })).toBeTruthy();
+    const tile = fashion.querySelector("img")!;
+    expect(tile.getAttribute("sizes")).toBe(
+      "(min-width: 1440px) 266px, (min-width: 1024px) calc(20vw - 22.4px), (min-width: 640px) calc(33.34vw - 24px), calc(50vw - 22px)");
+    expect(tile.getAttribute("srcset")!.split(", ").map((entry) => entry.split(" ")[1])).toEqual(["240w", "320w", "480w", "640w", "960w"]);
+    expect([tile.getAttribute("loading"), tile.getAttribute("alt")]).toEqual(["lazy", ""]);
+    expect(tile.getAttribute("class")).toContain("group-hover:scale-110");
+  });
+
   it("drops an unavailable call-to-action target instead of linking somewhere else, and reports it in preview", () => {
     const broken = campaign({ cta: { label: "Shop the phone", target: "product", targetId: "retired-product" } });
     const { unmount } = render(<StorefrontSections settings={settingsWith(broken)} mediaById={mediaById} />);
@@ -128,5 +181,42 @@ describe("StorefrontSections", () => {
     render(<StorefrontSections settings={fixtureStorefrontSettings()} mediaById={mediaById} />);
     expect(screen.getAllByRole("heading", { name: "Products are unavailable" })).toHaveLength(1);
     expect(screen.queryByRole("heading", { name: "Featured products" })).toBeNull();
+  });
+});
+
+describe("campaign loading priority", () => {
+  type Section = StorefrontSettings["sections"][number];
+  const featured: Section = { id: "featured", type: "featured", title: "Featured products", enabled: true, productIds: [], categoryIds: [], campaignId: null };
+  const campaignAt = (id: string, campaignId: string): Section =>
+    ({ id, type: "campaign", title: id, enabled: true, productIds: [], categoryIds: [], campaignId });
+  const artworkOf = (title: string) => screen.getByRole("region", { name: title }).querySelector("picture img")!;
+  const highPriority = () => document.querySelectorAll('img[fetchpriority="high"]');
+
+  it("loads only the leading campaign eagerly with high priority; a campaign further down stays lazy", () => {
+    const settings = fixtureStorefrontSettings({
+      sections: [campaignAt("top", "launch"), featured, campaignAt("lower", "later")],
+      campaigns: [campaign(), campaign({ id: "later", title: "Later offer" })],
+    });
+    render(<StorefrontSections settings={settings} mediaById={mediaById} />);
+    expect([artworkOf("Workspace week").getAttribute("loading"), artworkOf("Workspace week").getAttribute("fetchpriority")]).toEqual(["eager", "high"]);
+    expect([artworkOf("Later offer").getAttribute("loading"), artworkOf("Later offer").hasAttribute("fetchpriority")]).toEqual(["lazy", false]);
+    expect(highPriority()).toHaveLength(1);
+  });
+
+  it.each(["ready", "loading"] as const)("keeps a campaign lazy below products while the catalog is %s", (status) => {
+    state.catalog = catalogWith([linenShirt, poloShirt], status);
+    render(<StorefrontSections settings={fixtureStorefrontSettings({ sections: [featured, campaignAt("hero", "launch")], campaigns: [campaign()] })} mediaById={mediaById} />);
+    expect(artworkOf("Workspace week").getAttribute("loading")).toBe("lazy");
+    expect(highPriority()).toHaveLength(0);
+  });
+
+  it("leads with the first campaign shoppers see when earlier sections show them nothing", () => {
+    const settings = fixtureStorefrontSettings({
+      sections: [campaignAt("missing", "retired-campaign"), { ...featured, id: "picks", type: "products", productIds: ["retired-product"] }, campaignAt("hero", "launch")],
+      campaigns: [campaign()],
+    });
+    render(<StorefrontSections settings={settings} mediaById={mediaById} />);
+    expect(artworkOf("Workspace week").getAttribute("fetchpriority")).toBe("high");
+    expect(highPriority()).toHaveLength(1);
   });
 });

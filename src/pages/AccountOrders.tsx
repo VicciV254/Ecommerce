@@ -27,6 +27,7 @@ import { useStorefront } from "../store/StorefrontContext";
 import CancelOrderModal from "../components/CancelOrderModal";
 import ReturnOrderModal from "../components/ReturnOrderModal";
 import { ConfirmModal, ModalDialog } from "../components/Modal";
+import { ResponsiveImage } from "../components/ui";
 import { Disclosure, OrderProgress, OrderStatusBadge, OrderTimeline, OrderTotals } from "../components/OrderRecords";
 import { PaymentPanel } from "../components/PaymentPanel";
 import { ErrorPanel, LoadingPanel } from "../components/ui";
@@ -241,7 +242,7 @@ function OrderCard({ order, onDetails, onReceipt, onCancel, onReturn }: {
       <ul aria-label={`Items in order ${order.orderNumber}`} className="space-y-2 border-t border-light-gray px-4 py-3">
         {order.items.map((item) => (
           <li key={item.id} className="flex items-center gap-3 text-sm">
-            {item.productImage && <img src={item.productImage} alt="" className="h-12 w-12 shrink-0 rounded-sm object-cover" />}
+            {item.productImage && <ResponsiveImage url={item.productImage} preset="thumbnail" alt="" className="h-12 w-12 shrink-0 rounded-sm object-cover" />}
             <div className="min-w-0 flex-1">
               <p className="font-medium text-brand-primary">{item.productName}</p>
               <p className="text-xs text-gray-600">

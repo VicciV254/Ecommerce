@@ -4,6 +4,7 @@ import { apiStatus, describeApiError } from "../../api/errors";
 import { StorefrontSections } from "../../components/StorefrontSections";
 import { useStorefront } from "../../store/StorefrontContext";
 import { isMedia, isStorefrontSettings } from "../../store/storefrontModel";
+import { withMediaDefaults } from "../../store/catalogModel";
 import { COLOR_SLOTS, FONT_OPTIONS, ensureFontStylesheet, themeVariables, type ThemeVariables } from "../../store/storefrontTheme";
 import { isRecord } from "../../utils/storage";
 import { useAdminCatalog } from "./AdminCatalogContext";
@@ -25,7 +26,7 @@ function parseDraft(data: unknown): StorefrontDraft | null {
   if (!Array.isArray(unavailableMediaIds) || !unavailableMediaIds.every((id) => typeof id === "string")) return null;
   return {
     version: data.version, publishedVersion: data.publishedVersion, publishedAt: data.publishedAt,
-    settings: data.settings, media, unavailableMediaIds,
+    settings: data.settings, media: media.map(withMediaDefaults), unavailableMediaIds,
   };
 }
 

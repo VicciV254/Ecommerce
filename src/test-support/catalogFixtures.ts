@@ -37,8 +37,8 @@ export function fixtureVariant(overrides: Partial<CatalogVariant> & Pick<Catalog
 
 export function fixtureImage(overrides: Partial<MediaAsset> & Pick<MediaAsset, "id" | "url">): MediaAsset {
   return {
-    productId: null, alt: null, isMain: false, order: 0, width: null, height: null, isPlaceholder: false,
-    sourceUrl: null, license: null, credit: null, version: 1,
+    productId: null, variantId: null, alt: null, isMain: false, order: 0, width: null, height: null,
+    format: null, bytes: null, isPlaceholder: false, sourceUrl: null, license: null, credit: null, version: 1,
     ...overrides,
   };
 }

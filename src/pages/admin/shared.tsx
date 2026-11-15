@@ -11,6 +11,10 @@ export const primaryButtonClass =
 export const dangerButtonClass =
   "rounded-sm border border-error/40 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-error hover:bg-error hover:text-white disabled:cursor-not-allowed disabled:opacity-50";
 
+/** Roles the server lets change the catalog; viewers read only. */
+const CATALOG_WRITE_ROLES = ["ADMIN", "SUPER_ADMIN"];
+export const canEditCatalog = (role: string) => CATALOG_WRITE_ROLES.includes(role);
+
 export function Field({ label, hint, children }: { label: string; hint?: string; children: (id: string) => ReactNode }) {
   const id = useId();
   return (
@@ -101,8 +105,17 @@ export function todayInput(offsetDays = 0) {
   return toDateInput(date.toISOString());
 }
 
+/** Whitespace or a C0, DEL or C1 control character, none of which the catalog API accepts in an image address. */
+function hasUnsafeCharacter(value: string) {
+  return /\s/.test(value) || [...value].some((character) => {
+    const code = character.charCodeAt(0);
+    return code < 0x20 || (code >= 0x7f && code <= 0x9f);
+  });
+}
+
 /** HTTPS URLs or the site's own /images/ path, matching what the catalog API accepts. */
 export function isAcceptedImageUrl(value: string) {
+  if (hasUnsafeCharacter(value)) return false;
   if (value.startsWith("/images/")) return !value.includes("..");
   try {
     const url = new URL(value);

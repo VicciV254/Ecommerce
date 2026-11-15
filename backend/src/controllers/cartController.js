@@ -31,6 +31,7 @@ async function cartDto(db, userId) {
     items: cart.items.map((item) => ({
     id: item.id, productId: item.productId, variantId: item.variantId,
     quantity: item.quantity, price: prices.get(item.variantId).unitPrice, subtotal: prices.get(item.variantId).total,
+    productImage: prices.get(item.variantId).productImage,
     product: productDto(item.product, context),
     available: item.variant.isActive && item.product.isActive && !item.product.deletedAt &&
       context.visible.has(item.product.categoryId) && (!item.product.isDemo || demoCatalogEnabled()) &&

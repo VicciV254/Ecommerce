@@ -1,33 +1,31 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   catalogAdminAPI,
   type CatalogCategory,
   type CatalogDesigner,
   type CatalogProduct,
-  type MediaInput,
   type ProductInput,
   type VariantInput,
 } from "../../api/catalog";
 import { describeApiError } from "../../api/errors";
 import { ModalDialog } from "../../components/Modal";
-import { orderedImages } from "../../store/catalogModel";
 import { useAdminCatalog } from "./AdminCatalogContext";
 import { CategoryForm, DesignerForm } from "./CatalogForms";
+import { ProductImagesSection, buildImages, imageProblems, initialGallery, placeUpload, uploadedImageRow, type ImageRow } from "./ProductImages";
 import {
   Feedback,
   Field,
   categoryOptions,
   dangerButtonClass,
   inputClass,
-  isAcceptedImageUrl,
   primaryButtonClass,
   smallButtonClass,
 } from "./shared";
+import { MAX_PRODUCT_IMAGES, useImageUploads } from "./useImageUploads";
 
 const OPTION_KEY = /^[a-z][a-z0-9_-]{0,31}$/;
 const MAX_OPTION_KEYS = 8;
 const MAX_VARIANTS = 50;
-const MAX_IMAGES = 16;
 const MIN_NAME = 3;
 const MIN_DESCRIPTION = 10;
 /** Specification bounds accepted by the catalog API. */
@@ -45,17 +43,6 @@ type VariantRow = {
   initialOverride: string;
   isActive: boolean;
   initialStock: string;
-};
-
-type ImageRow = {
-  rowKey: string;
-  id?: string;
-  url: string;
-  alt: string;
-  isPlaceholder: boolean;
-  sourceUrl: string;
-  license: string;
-  credit: string;
 };
 
 type SpecRow = { rowKey: string; name: string; value: string };
@@ -79,23 +66,16 @@ function initialVariants(product: CatalogProduct | null): { keys: string[]; rows
   return { keys, rows };
 }
 
-function initialImages(product: CatalogProduct | null): ImageRow[] {
-  return product
-    ? orderedImages(product).map((image) => ({
-      rowKey: nextKey(), id: image.id, url: image.url, alt: image.alt ?? "", isPlaceholder: image.isPlaceholder,
-      sourceUrl: image.sourceUrl ?? "", license: image.license ?? "", credit: image.credit ?? "",
-    }))
-    : [];
-}
-
 function splitTags(value: string) {
   return [...new Set(value.split(",").map((tag) => tag.trim()).filter(Boolean))];
 }
 
 export function ProductEditor({
-  product, onClose, onSaved, onDelete,
+  product, canWrite, onClose, onSaved, onDelete,
 }: {
   product: CatalogProduct | null;
+  /** Viewers see images read-only. */
+  canWrite: boolean;
   onClose: () => void;
   onSaved: (message: string) => void;
   onDelete?: () => void;
@@ -104,6 +84,7 @@ export function ProductEditor({
   const designers = data?.snapshot.designers ?? [];
   const options = useMemo(() => categoryOptions(categories), [categories]);
   const variantSeed = useMemo(() => initialVariants(product), [product]);
+  const gallerySeed = useMemo(() => initialGallery(product), [product]);
 
   const [name, setName] = useState(product?.name ?? "");
   const [description, setDescription] = useState(product?.description ?? "");
@@ -120,8 +101,9 @@ export function ProductEditor({
   const [optionKeys, setOptionKeys] = useState<string[]>(variantSeed.keys);
   const [variants, setVariants] = useState<VariantRow[]>(variantSeed.rows);
   const [variantsDirty, setVariantsDirty] = useState(false);
-  const [images, setImages] = useState<ImageRow[]>(() => initialImages(product));
-  const [mainImage, setMainImage] = useState(0);
+  const [images, setImages] = useState<ImageRow[]>(gallerySeed.rows);
+  const imagesRef = useRef(gallerySeed.rows);
+  const [mainImage, setMainImage] = useState(gallerySeed.cover);
   const [imagesDirty, setImagesDirty] = useState(false);
   const [newOption, setNewOption] = useState("");
   const [saving, setSaving] = useState(false);
@@ -138,9 +120,18 @@ export function ProductEditor({
     setVariantsDirty(true);
   };
   const editImages = (update: (rows: ImageRow[]) => ImageRow[]) => {
-    setImages(update);
+    // Kept in step synchronously, so uploads finishing between renders are placed against the latest rows.
+    const next = update(imagesRef.current);
+    imagesRef.current = next;
+    setImages(next);
     setImagesDirty(true);
   };
+  const uploads = useImageUploads((target, upload) => {
+    const next = placeUpload(imagesRef.current, target, uploadedImageRow(upload));
+    if (!next) return `A product can have at most ${MAX_PRODUCT_IMAGES} images.`;
+    editImages(() => next);
+    return null;
+  }, images.map((row) => row.rowKey));
 
   const addOptionKey = () => {
     const key = newOption.trim();
@@ -189,12 +180,8 @@ export function ProductEditor({
     }
   }
   if (isActive && variants.length > 0 && !variants.some((row) => row.isActive)) problems.push("A visible product needs at least one active variant.");
-  for (const row of images) {
-    if (!isAcceptedImageUrl(row.url.trim())) problems.push("Image addresses must be HTTPS URLs or /images/ paths.");
-    if (row.isPlaceholder && (!isAcceptedImageUrl(row.sourceUrl.trim()) || !row.license.trim())) {
-      problems.push("Sample images need their source URL and reuse licence.");
-    }
-  }
+  problems.push(...imageProblems(images));
+  if (uploads.busy) problems.push("Wait for image uploads to finish, or cancel them, before saving.");
   const uniqueProblems = [...new Set(problems)];
 
   const buildVariants = (): VariantInput[] => variants.map((row) => {
@@ -215,18 +202,6 @@ export function ProductEditor({
       stock: { quantity: row.initialStock.trim() ? Number(row.initialStock) : 0 },
     };
   });
-
-  const buildImages = (): MediaInput[] => images.map((row, index) => ({
-    ...(row.id ? { id: row.id } : {}),
-    url: row.url.trim(),
-    alt: row.alt.trim() || null,
-    isMain: index === mainImage,
-    order: index,
-    isPlaceholder: row.isPlaceholder,
-    sourceUrl: row.sourceUrl.trim() || null,
-    license: row.license.trim() || null,
-    credit: row.credit.trim() || null,
-  }));
 
   const save = async () => {
     if (uniqueProblems.length) {
@@ -253,13 +228,13 @@ export function ProductEditor({
         await catalogAdminAPI.updateProduct(product.id, {
           ...fields,
           ...(variantsDirty ? { variants: buildVariants() } : {}),
-          ...(imagesDirty ? { images: buildImages() } : {}),
+          ...(imagesDirty ? { images: buildImages(images, mainImage) } : {}),
         });
       } else {
         await catalogAdminAPI.createProduct({
           ...fields,
           ...(variants.length ? { variants: buildVariants() } : {}),
-          images: buildImages(),
+          images: buildImages(images, mainImage),
         });
       }
       onSaved(product ? `Saved "${fields.name}"` : `Created "${fields.name}"`);
@@ -449,55 +424,24 @@ export function ProductEditor({
             </button>
           </section>
 
-          <section className="space-y-3">
-            <h3 className="text-[11px] font-bold uppercase tracking-wider text-brand-primary">Images</h3>
-            {!images.length && <p className="rounded-md bg-warning/10 p-3 text-xs font-semibold text-charcoal">Needs images: shoppers will see an “image not yet available” placeholder.</p>}
-            {images.map((row, index) => {
-              const valid = isAcceptedImageUrl(row.url.trim());
-              const update = (patch: Partial<ImageRow>) => editImages((rows) => rows.map((item) => item.rowKey === row.rowKey ? { ...item, ...patch } : item));
-              return (
-                <div key={row.rowKey} className="grid gap-3 rounded-md border border-light-gray p-3 md:grid-cols-[96px_1fr]">
-                  <div className="relative h-24 w-24 overflow-hidden rounded-sm bg-warm-beige">
-                    {valid && <img src={row.url.trim()} alt="" className="h-full w-full object-cover" />}
-                  </div>
-                  <div className="space-y-2">
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <input aria-label={`Image ${index + 1} URL`} value={row.url} onChange={(event) => update({ url: event.target.value })} placeholder="https://…" className={inputClass} aria-invalid={!valid} />
-                      <input aria-label={`Image ${index + 1} alt text`} value={row.alt} onChange={(event) => update({ alt: event.target.value })} placeholder="Describe the image" className={inputClass} />
-                    </div>
-                    <div className="flex flex-wrap items-center gap-3 text-xs">
-                      <label className="flex items-center gap-1.5">
-                        <input type="radio" name="main-image" checked={mainImage === index} onChange={() => { setMainImage(index); setImagesDirty(true); }} className="accent-brand-secondary" />
-                        Main image
-                      </label>
-                      <label className="flex items-center gap-1.5">
-                        <input type="checkbox" checked={row.isPlaceholder} onChange={(event) => update({ isPlaceholder: event.target.checked })} className="accent-brand-secondary" />
-                        Sample image
-                      </label>
-                      <button type="button" aria-label={`Move image ${index + 1} up`} disabled={index === 0} onClick={() => moveImage(index, -1)} className={smallButtonClass}>↑</button>
-                      <button type="button" aria-label={`Move image ${index + 1} down`} disabled={index === images.length - 1} onClick={() => moveImage(index, 1)} className={smallButtonClass}>↓</button>
-                      <button type="button" aria-label={`Remove image ${index + 1}`} onClick={() => removeImage(index)} className={dangerButtonClass}>Remove</button>
-                    </div>
-                    {row.isPlaceholder && (
-                      <div className="grid gap-2 sm:grid-cols-3">
-                        <input aria-label={`Image ${index + 1} source URL`} value={row.sourceUrl} onChange={(event) => update({ sourceUrl: event.target.value })} placeholder="Source page (https://…)" className={inputClass} />
-                        <input aria-label={`Image ${index + 1} licence`} value={row.license} onChange={(event) => update({ license: event.target.value })} placeholder="Reuse licence" className={inputClass} />
-                        <input aria-label={`Image ${index + 1} credit`} value={row.credit} onChange={(event) => update({ credit: event.target.value })} placeholder="Credit (optional)" className={inputClass} />
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-            <button
-              type="button"
-              disabled={images.length >= MAX_IMAGES}
-              onClick={() => editImages((rows) => [...rows, { rowKey: nextKey(), url: "", alt: "", isPlaceholder: false, sourceUrl: "", license: "", credit: "" }])}
-              className={smallButtonClass}
-            >
-              + Image
-            </button>
-          </section>
+          <ProductImagesSection
+            rows={images}
+            mainImage={mainImage}
+            canWrite={canWrite}
+            locked={saving}
+            variants={product?.variants ?? []}
+            variantHint={!product
+              ? "Images can be linked to variants after the product is saved."
+              : variants.some((row) => !row.id) ? "Images can be linked to new variants after the product is saved." : null}
+            uploads={uploads}
+            onEdit={editImages}
+            onMainChange={(index) => {
+              setMainImage(index);
+              setImagesDirty(true);
+            }}
+            onMove={moveImage}
+            onRemove={removeImage}
+          />
         </div>
       </div>
 

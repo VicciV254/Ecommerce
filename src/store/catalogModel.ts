@@ -30,6 +30,8 @@ const isStringArray = (value: unknown): value is string[] => Array.isArray(value
 const isStringRecord = (value: unknown): value is Record<string, string> =>
   isRecord(value) && Object.values(value).every(isString);
 const isCount = (value: unknown): value is number => Number.isInteger(value) && Number(value) >= 0;
+/** A field that older payloads omit: absent or null, or well formed when present. */
+const isOptional = (value: unknown, check: (value: unknown) => boolean) => value === undefined || value === null || check(value);
 
 /** Largest amount the API serializes. */
 const MAX_MONEY = 999_999_999_999.99;
@@ -58,9 +60,31 @@ function isCatalogReturnPolicy(value: unknown): value is CatalogReturnPolicy {
     typeof value.partialReturns === "boolean" && value.refundRounding === "UP_TO_WHOLE_KES";
 }
 
+/** Media fields added after the first catalog revision; payloads from before them omit them. */
+export function hasValidLaterMediaFields(value: Record<string, unknown>) {
+  return isOptional(value.variantId, isString) && isOptional(value.format, isString) && isOptional(value.bytes, isCount) &&
+    isOptional(value.width, isNumber) && isOptional(value.height, isNumber);
+}
+
+/** Reads fields an older payload omits as null, so `null` always means "not set". */
+export function withMediaDefaults(asset: MediaAsset): MediaAsset {
+  return {
+    ...asset,
+    variantId: asset.variantId ?? null,
+    format: asset.format ?? null,
+    bytes: asset.bytes ?? null,
+    width: asset.width ?? null,
+    height: asset.height ?? null,
+  };
+}
+
+export function withProductMediaDefaults<T extends CatalogProduct>(product: T): T {
+  return { ...product, images: product.images.map(withMediaDefaults) };
+}
+
 function isMediaAsset(value: unknown): value is MediaAsset {
   return isRecord(value) && isString(value.id) && isString(value.url) && typeof value.isPlaceholder === "boolean" &&
-    typeof value.isMain === "boolean" && isNumber(value.order) && isNullableString(value.alt);
+    typeof value.isMain === "boolean" && isNumber(value.order) && isNullableString(value.alt) && hasValidLaterMediaFields(value);
 }
 
 function isPricing(value: unknown): value is VariantPricing {
@@ -122,7 +146,7 @@ export function parseCatalogSnapshot(data: unknown, modes: readonly CatalogSnaps
   if (!Array.isArray(designers) || !designers.every(isDesigner)) throw new CatalogFormatError("designers");
   if (!Array.isArray(discounts) || !discounts.every(isDiscount)) throw new CatalogFormatError("discounts");
   if (!isCatalogReturnPolicy(returnPolicy)) throw new CatalogFormatError("return policy");
-  return { version: 2, mode, products, categories, designers, discounts, returnPolicy };
+  return { version: 2, mode, products: products.map(withProductMediaDefaults), categories, designers, discounts, returnPolicy };
 }
 
 /* ------------------------------------------------------------------ */

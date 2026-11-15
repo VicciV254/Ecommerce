@@ -7,6 +7,7 @@ import {
   mediaDto, productDto, productInclude, productWhere, serializable, stockStatus,
 } from '../services/catalogService.js';
 import { expireReservations } from '../services/inventoryService.js';
+import { verifiedCloudinaryMedia } from '../services/cloudinaryService.js';
 
 export const getCatalog = async (_req, res, next) => {
   try {
@@ -111,6 +112,8 @@ function mediaData(image, index, name) {
     width: image.width ?? null, height: image.height ?? null,
     isPlaceholder: image.isPlaceholder ?? false,
     sourceUrl: image.sourceUrl ?? null, license: image.license ?? null, credit: image.credit ?? null,
+    variantId: image.variantId ?? null,
+    cloudinaryPublicId: image.cloudinaryPublicId ?? null, format: image.format ?? null, bytes: image.bytes ?? null,
   };
 }
 
@@ -182,14 +185,30 @@ async function writeVariants(db, productId, variants, adminId) {
   }
 }
 
-async function writeImages(db, product, input, existing = []) {
+const mediaNotAllowed = (message) => httpError(400, message, 'MEDIA_NOT_ALLOWED');
+
+/** Merges one requested image with its stored row, keeping an uploaded file's identity fixed. */
+function resolveImage(image, stored, variantIds) {
+  if (image.variantId && !variantIds.has(image.variantId)) throw mediaNotAllowed('Image variants must belong to this product');
+  if (stored?.cloudinaryPublicId && ['url', 'width', 'height'].some((key) => image[key] !== undefined && image[key] !== stored[key])) {
+    throw mediaNotAllowed('An uploaded image cannot be changed in place. Remove it and upload the new image.');
+  }
+  const merged = stored ? { ...stored, ...image }
+    : image.cloudinary ? { ...image, ...verifiedCloudinaryMedia(image, 'PRODUCT') } : image;
+  if (merged.isPlaceholder && (!merged.sourceUrl || !merged.license)) {
+    throw httpError(400, 'Sample images need their source and reuse licence');
+  }
+  return merged;
+}
+
+async function writeImages(db, product, input, existing = [], variantIds = new Set()) {
   const byId = new Map(existing.map((image) => [image.id, image]));
   const retained = input.flatMap((image) => image.id ? [image.id] : []);
   if (new Set(retained).size !== retained.length || retained.some((id) => !byId.has(id))) {
     throw httpError(400, 'Image IDs must belong to this product and be unique');
   }
   const removed = existing.filter((image) => !retained.includes(image.id)).map((image) => image.id);
-  const ordered = input.map((image, index) => ({ ...byId.get(image.id), ...image, position: image.order ?? index }))
+  const ordered = input.map((image, index) => ({ ...resolveImage(image, byId.get(image.id), variantIds), position: image.order ?? index }))
     .sort((left, right) => left.position - right.position);
   if (ordered.filter((image) => image.isMain).length > 1) throw httpError(400, 'Only one product image can be the main image');
   const mainIndex = Math.max(0, ordered.findIndex((image) => image.isMain));
@@ -216,6 +235,7 @@ export const createProduct = async (req, res, next) => {
         specifications: input.specifications ?? {}, isActive: input.isActive ?? false,
       } });
       await writeVariants(db, product.id, variants, req.admin.id);
+      // Variants created in this request have no client-known IDs yet, so new images cannot target one.
       await writeImages(db, product, images ?? []);
       return productDto(await db.product.findUnique({ where: { id: product.id }, include: productInclude(true) }), context);
     });
@@ -240,7 +260,7 @@ export const updateProduct = async (req, res, next) => {
       }
       const product = await db.product.update({ where: { id: existing.id }, data: fields });
       if (variants) await writeVariants(db, existing.id, variants, req.admin.id);
-      if (images) await writeImages(db, product, images, existing.images);
+      if (images) await writeImages(db, product, images, existing.images, new Set(existing.variants.map((variant) => variant.id)));
       return productDto(await db.product.findUnique({ where: { id: existing.id }, include: productInclude(true) }), context);
     });
     res.json(result);
@@ -264,7 +284,9 @@ export const createMedia = async (req, res, next) => {
   try {
     const input = mediaSchema.parse(req.body);
     if (input.id) throw httpError(400, 'Media IDs are assigned by the server');
-    const media = await prisma.productImage.create({ data: mediaData(input, 0, input.alt ?? '') });
+    if (input.variantId) throw mediaNotAllowed('Only product images can belong to a variant');
+    const uploaded = input.cloudinary ? verifiedCloudinaryMedia(input, 'STOREFRONT') : {};
+    const media = await prisma.productImage.create({ data: mediaData({ ...input, ...uploaded }, 0, input.alt ?? '') });
     res.status(201).json(mediaDto(media));
   } catch (error) { next(error); }
 };

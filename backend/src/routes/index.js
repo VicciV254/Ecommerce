@@ -22,6 +22,7 @@ import mpesaRoutes from './mpesaRoutes.js';
 import settingsRoutes from './settingsRoutes.js';
 import subscriptionRoutes from './subscriptionRoutes.js';
 import { getCatalog, getAdminCatalog, createMedia } from '../controllers/productController.js';
+import { createUploadIntent } from '../controllers/mediaController.js';
 import { authenticateAdmin, authorize } from '../middleware/adminAuth.js';
 import { runScheduledMaintenance } from '../controllers/operationsController.js';
 
@@ -52,6 +53,7 @@ router.get('/internal/maintenance', runScheduledMaintenance);
 router.get('/catalog', getCatalog);
 router.get('/admin/catalog', authenticateAdmin, getAdminCatalog);
 router.post('/media', authenticateAdmin, authorize('SUPER_ADMIN', 'ADMIN'), createMedia);
+router.post('/media/uploads', authenticateAdmin, authorize('SUPER_ADMIN', 'ADMIN'), createUploadIntent);
 router.use('/auth', authRoutes);
 router.use('/products', productRoutes);
 router.use('/categories', categoryRoutes);

@@ -9,6 +9,7 @@ import {
   LoadingPanel,
   MissingImage,
   ProductCard,
+  ResponsiveImage,
   SampleImageLabel,
   Stars,
   StockBadge,
@@ -29,6 +30,7 @@ import {
   stockLevel,
   variantOptions,
   variantPriceView,
+  withProductMediaDefaults,
   type VariantSelection,
 } from "../store/catalogModel";
 import { useStore } from "../store/StoreContext";
@@ -39,6 +41,12 @@ import { formatKES } from "../utils/format";
 
 const RELATED_LIMIT = 4;
 const ADDED_FEEDBACK_MS = 1500;
+/**
+ * Rendered width of a strip thumbnail inside its 2px border: four columns with `gap-2` across the image column,
+ * which fills the page Container (16/24/32px side padding, 1440px at most) and from 1024px is half of it beside `gap-10`.
+ */
+const THUMBNAIL_STRIP_SIZES =
+  "(min-width: 1440px) 157px, (min-width: 1024px) calc(12.5vw - 23px), (min-width: 640px) calc(25vw - 22px), calc(25vw - 18px)";
 
 type DetailState =
   | { status: "loading" }
@@ -63,7 +71,7 @@ function useProductDetail(id: string) {
       .then(({ data }) => {
         if (!isCatalogProduct(data) || data.id !== id) throw new CatalogFormatError("product");
         const reviews = Array.isArray(data.reviewList) ? data.reviewList.filter(isReview) : [];
-        if (current) setState({ status: "ready", product: { ...data, reviewList: reviews } });
+        if (current) setState({ status: "ready", product: { ...withProductMediaDefaults(data), reviewList: reviews } });
       })
       .catch((error: unknown) => {
         if (!current) return;
@@ -220,9 +228,13 @@ function ProductContent({ id }: { id: string }) {
                     <p className="mt-1 text-xs">Try another image.</p>
                   </div>
                 ) : (
-                  <img
+                  <ResponsiveImage
                     key={currentImage.url}
-                    src={currentImage.url}
+                    url={currentImage.url}
+                    preset="detail"
+                    width={currentImage.width}
+                    height={currentImage.height}
+                    priority={imageIndex === 0}
                     alt={currentImage.alt || `${product.name} — image ${imageIndex + 1} of ${images.length}`}
                     className="absolute inset-0 h-full w-full object-cover transition-all duration-500 hover:scale-105"
                     onLoad={() => setLoadedImage(currentImage.url)}
@@ -247,7 +259,7 @@ function ProductContent({ id }: { id: string }) {
                     index === imageIndex ? "border-brand-primary" : "border-transparent hover:border-brand-secondary"
                   }`}
                 >
-                  <img src={image.url} alt="" className="h-full w-full object-cover" />
+                  <ResponsiveImage url={image.url} preset="thumbnail" sizes={THUMBNAIL_STRIP_SIZES} width={image.width} height={image.height} alt="" className="h-full w-full object-cover" />
                 </button>
               ))}
             </div>

@@ -1,3 +1,4 @@
+import { isRecord } from "../utils/storage";
 import api from "./client";
 import type { DeliveryFeeRefund, ReturnRule } from "./orders";
 import { staffRequest } from "./staffSession";
@@ -5,12 +6,17 @@ import { staffRequest } from "./staffSession";
 export type MediaAsset = {
   id: string;
   productId: string | null;
+  /** Product images only: the variant this image shows, or null for the whole product. */
+  variantId: string | null;
   url: string;
   alt: string | null;
   isMain: boolean;
   order: number;
   width: number | null;
   height: number | null;
+  /** Set only for uploaded files, so `format !== null` marks an image whose file cannot change in place. */
+  format: string | null;
+  bytes: number | null;
   isPlaceholder: boolean;
   sourceUrl: string | null;
   license: string | null;
@@ -139,9 +145,16 @@ export type CatalogSnapshot = {
 
 /** `quantity` is the on-hand count; the server rejects values below the reserved units. */
 export type StockInput = { quantity: number; maxStock?: number; minThreshold?: number };
+/** Cloudinary's response to a signed upload, in the shape the media API verifies. */
+export type CloudinaryUpload = { publicId: string; version: number; signature: string; format: string; bytes: number };
 export type MediaInput = {
   id?: string;
-  url: string;
+  /** Required for a new image unless `cloudinary` is given, and omitted when it is. */
+  url?: string;
+  /** A new upload; `width` and `height` are required alongside it. Retained images never carry it. */
+  cloudinary?: CloudinaryUpload;
+  /** Product images only; `null` means the whole product. New products can only use `null`. */
+  variantId?: string | null;
   alt?: string | null;
   isMain?: boolean;
   order?: number;
@@ -341,3 +354,51 @@ export const catalogAdminAPI = {
   publishStorefront: async (version: number) =>
     api.post<PublishedStorefront>("/settings/storefront/publish", { version }, staffRequest()),
 };
+
+export type MediaPurpose = "PRODUCT" | "STOREFRONT";
+
+/** Signed fields for one direct browser upload. Request a fresh intent for every file and every attempt. */
+export type UploadIntent = {
+  /** Cloudinary's upload endpoint: the file goes there directly, never through this API. */
+  uploadUrl: string;
+  /** Sent unchanged alongside the file, with nothing added. */
+  fields: Record<string, string>;
+  maxBytes: number;
+  acceptedTypes: string[];
+  expiresAt: string;
+};
+
+export class UploadIntentFormatError extends Error {
+  constructor() {
+    super("The upload service returned an unexpected response. Try again.");
+    this.name = "UploadIntentFormatError";
+  }
+}
+
+/** Files are only ever sent to Cloudinary's upload API. */
+const UPLOAD_ORIGIN = "https://api.cloudinary.com";
+
+function isUploadUrl(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  try {
+    const url = new URL(value);
+    return url.origin === UPLOAD_ORIGIN && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+}
+
+function isUploadIntent(value: unknown): value is UploadIntent {
+  return isRecord(value) && isUploadUrl(value.uploadUrl) &&
+    isRecord(value.fields) && Object.values(value.fields).every((field) => typeof field === "string") &&
+    Number.isInteger(value.maxBytes) && Number(value.maxBytes) > 0 &&
+    Array.isArray(value.acceptedTypes) && value.acceptedTypes.every((type) => typeof type === "string") &&
+    typeof value.expiresAt === "string";
+}
+
+/** `POST /media/uploads` for editing staff; 503 `MEDIA_UPLOADS_DISABLED` means uploads are not configured. */
+export async function requestMediaUpload(purpose: MediaPurpose): Promise<UploadIntent> {
+  const { data } = await api.post<unknown>("/media/uploads", { purpose }, staffRequest());
+  if (!isUploadIntent(data)) throw new UploadIntentFormatError();
+  return data;
+}

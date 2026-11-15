@@ -7,9 +7,10 @@ import {
   SubmissionNotice,
   primaryActionClass,
 } from "../components/checkout";
-import { Breadcrumb, Container, DemoBadge, DemoCatalogNotice, ErrorPanel, LoadingPanel, ProductImage } from "../components/ui";
+import { Breadcrumb, Container, DemoBadge, DemoCatalogNotice, ErrorPanel, LoadingPanel, MediaImage, MissingImage, ProductImage, ResponsiveImage } from "../components/ui";
 import { useAuth, type User } from "../contexts/AuthContext";
 import { Link } from "../router";
+import type { CatalogProduct } from "../api/catalog";
 import { useCatalog } from "../store/CatalogContext";
 import { describeVariant, variantPriceView } from "../store/catalogModel";
 import { quoteRequestFor, reviewCart } from "../store/checkoutModel";
@@ -134,7 +135,7 @@ function CartContent({ user }: { user: User }) {
             return (
               <li key={`${index}:${line.variantId}`} className="flex gap-3 p-4 sm:gap-4">
                 <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md bg-warm-beige sm:h-20 sm:w-20">
-                  <ProductImage product={product} />
+                  <CartLineImage product={product} lineImage={quoted?.productImage} />
                 </div>
                 <div className="flex min-w-0 flex-1 flex-col">
                   <div className="flex items-start justify-between gap-2">
@@ -217,4 +218,17 @@ function CartContent({ user }: { user: User }) {
       </div>
     </Container>
   );
+}
+
+/**
+ * The server's line image from the quote (the purchased variant's image, as orders keep it); `null` means the line
+ * has none. Until a quote line exists, the product cover stands in.
+ */
+function CartLineImage({ product, lineImage }: { product: CatalogProduct; lineImage: string | null | undefined }) {
+  if (lineImage === undefined) return <ProductImage product={product} preset="thumbnail" />;
+  if (lineImage === null) return <MissingImage />;
+  const asset = product.images.find((image) => image.url === lineImage);
+  return asset
+    ? <MediaImage asset={asset} alt={product.name} preset="thumbnail" />
+    : <ResponsiveImage url={lineImage} preset="thumbnail" alt={product.name} className="h-full w-full object-cover" />;
 }

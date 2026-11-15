@@ -10,6 +10,7 @@ import type { CheckoutQuote } from "../store/useCheckoutQuote";
 import type { SubmissionState } from "../store/useOrderSubmission";
 import { formatDateTime, formatKES } from "../utils/format";
 import { PaymentPanel } from "./PaymentPanel";
+import { ResponsiveImage } from "./ui";
 
 /** Quote errors shown beside the choice that caused them rather than in the totals. */
 export const CHOICE_ERRORS = { address: "ADDRESS_UNAVAILABLE", delivery: "DELIVERY_UNAVAILABLE", coupon: "COUPON_INVALID" } as const;
@@ -261,7 +262,7 @@ export function QuoteLines({ quote }: { quote: Quote }) {
         return (
           <li key={line.variantId} className="flex flex-wrap gap-3 py-3 first:pt-0 last:pb-0">
             <div className="h-16 w-16 shrink-0 overflow-hidden rounded-md bg-warm-beige">
-              {line.productImage && <img src={line.productImage} alt="" className="h-full w-full object-cover" />}
+              {line.productImage && <ResponsiveImage url={line.productImage} preset="thumbnail" alt="" className="h-full w-full object-cover" />}
             </div>
             <div className="min-w-0 flex-1 basis-40 [overflow-wrap:anywhere]">
               <p className="text-sm font-medium text-brand-primary">{line.productName}</p>

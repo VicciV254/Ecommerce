@@ -19,6 +19,8 @@ The real `.env` is ignored by Git and excluded from container builds.
 | `FRONTEND_URL` | Public storefront origin used for links in customer emails |
 | `BACKGROUND_JOBS_ENABLED` | Opt-in in-process maintenance for always-on hosts; defaults to `false` |
 | `CRON_SECRET` | Bearer secret for `GET /api/internal/maintenance`; empty disables the endpoint |
+| `CLOUDINARY_URL` | Server-only `cloudinary://<api_key>:<api_secret>@<cloud_name>`; empty disables image uploads |
+| `CLOUDINARY_UPLOAD_PREFIX` | Upload folder and public-ID prefix; defaults to `apex-cart` |
 | `RETURN_POLICY_JSON` | Optional complete validated return policy; empty uses `src/config/returnPolicy.js` defaults |
 | `DEMO_NOTIFICATIONS_ENABLED` | Development/test-only opt-in to email customers about labelled demo orders |
 | `ALLOW_DEMO_CATALOG` | Show labelled demo catalog records outside production; defaults to `false` |
@@ -60,7 +62,7 @@ Refunds are recorded, not executed: staff send money outside the application,
 then confirm it with the M-Pesa reference. A reservation or STK acknowledgement
 is not payment or permission to fulfil an order.
 
-External image-host, email and payment settings may remain empty/disabled
+Cloudinary, email and payment settings may remain empty/disabled
 for local checks. Do not pull or replace live Vercel/Neon credentials just
 to run the tests.
 
@@ -117,8 +119,8 @@ listener, stops scheduled jobs and disconnects Prisma. SIGINT/SIGTERM use
 the same cleanup.
 
 Set `BACKGROUND_JOBS_ENABLED=true` only on an intentional always-on host.
-It runs due payment reconciliation every 15 seconds, reservation expiry and
-due email delivery every 60 seconds, and optional image-host session work.
+It runs due payment reconciliation every 15 seconds, and reservation expiry
+and due email delivery every 60 seconds.
 These services can mutate orders and send messages; they are not health
 checks. A job does not overlap its previous invocation. `NODE_ENV=test`
 always prevents background startup, even if the opt-in flag is set.
@@ -138,11 +140,38 @@ Orders never progress on a timer. Staff confirm processing, dispatch or
 pickup readiness, and delivery or collection after payment is verified and
 inventory is committed.
 
-Image uploads authenticate lazily when requested. Optional startup/session
-refresh runs only with background jobs enabled and configured image-host
-credentials. `IMAGE_HOST_SESSION_REFRESH=0` disables periodic refresh; a
-configured host may still authenticate when background services start or
-an upload requires a session.
+## Product and storefront images (Cloudinary)
+
+An image is stored either as an HTTPS address or as a Cloudinary upload.
+Uploads are optional: set `CLOUDINARY_URL` in `backend/.env` or the host's
+secret settings to enable them. It stays on the server; never commit it,
+paste it into chat or expose it through a `VITE_` variable.
+`CLOUDINARY_UPLOAD_PREFIX` (default `apex-cart`) sets the upload folder.
+
+ADMIN and SUPER_ADMIN staff call `POST /api/media/uploads` with
+`{ "purpose": "PRODUCT" }` or `{ "purpose": "STOREFRONT" }`. The API signs
+one upload with a random public ID under `<prefix>/products` or
+`<prefix>/storefront`, `overwrite=false`, JPEG/PNG/WebP/AVIF only and a
+3000px incoming size limit. The browser sends the file straight to
+Cloudinary, so files never pass through the API (Vercel functions accept
+request bodies of at most 4.5 MB). Saving the product, or `POST /api/media`,
+then submits Cloudinary's upload result. The API checks its signature, folder,
+format and size and builds the delivery address itself. Without
+`CLOUDINARY_URL`, both return 503 `MEDIA_UPLOADS_DISABLED`.
+
+A product image may name one of that product's variants. Cart, quote and
+order lines keep the purchased variant's first image. Otherwise they use an
+image not tied to any variant (its cover first), then the product cover.
+Removing or replacing an image hides only that placement: the API never
+deletes Cloudinary files, so shared assets and order history stay intact.
+Uploads that are never saved stay in Cloudinary until removed manually.
+
+Signed upload fields are valid for one hour and go only to editing staff.
+Cloudinary does not tie the signature to the upload endpoint, so whoever
+received them could, within that hour, delete and re-upload that one file
+outside the app's edit history. Enable automatic backup (Cloudinary Console,
+Settings > Backup; available on all plans, counts towards storage) so earlier
+versions stay recoverable, and keep ADMIN accounts to trusted staff.
 
 ## Checks without external services
 
