@@ -30,12 +30,14 @@ const PROBLEM_MESSAGES: Record<ReturnFormProblem, string> = {
   comment: `Keep the comment to ${MAX_RETURN_COMMENT} characters or fewer.`,
 };
 
-const fieldClass = "min-h-11 w-full rounded-sm border border-light-gray bg-off-white px-3 py-2 text-base text-charcoal focus:border-brand-secondary aria-[invalid=true]:border-error";
-const labelClass = "block text-[11px] font-bold uppercase tracking-[0.12em] text-brand-primary";
+const fieldClass = "min-h-[44px] w-full rounded-sm border border-control bg-surface px-3 py-2 text-navy-900 aria-[invalid=true]:border-2 aria-[invalid=true]:border-error";
+const labelClass = "block text-sm font-semibold text-navy-900";
 // Touch targets are sized in CSS px so the stepper still fits a 360px screen when text is enlarged.
-const stepClass = "flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-sm border border-light-gray text-lg text-brand-primary hover:border-brand-primary aria-disabled:cursor-not-allowed aria-disabled:opacity-40";
-const secondaryClass = "min-h-11 flex-1 rounded-sm border border-light-gray px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-charcoal hover:bg-off-white sm:flex-none";
-const primaryClass = "min-h-11 flex-1 rounded-sm bg-brand-primary px-5 py-2.5 text-xs font-bold uppercase tracking-wider text-white hover:bg-brand-secondary hover:text-brand-primary aria-disabled:cursor-not-allowed aria-disabled:opacity-60 sm:flex-none";
+const stepClass = "flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-sm border border-control text-lg text-navy-900 hover:border-navy-900 aria-disabled:cursor-not-allowed aria-disabled:bg-surface-soft aria-disabled:text-muted";
+// The footer stays one row on a 360px phone: Cancel keeps its own width and the primary action takes the rest, in the
+// sentence case the other dialogs use, so its label does not wrap and push the form up.
+const secondaryClass = "min-h-[44px] flex-none rounded-sm border border-navy-900 px-[16px] py-2 text-sm font-semibold text-navy-900 transition-colors duration-(--motion-feedback) hover:bg-surface-soft";
+const primaryClass = "min-h-[44px] flex-1 rounded-sm bg-navy-900 px-[16px] py-2 text-sm font-semibold text-white transition-colors duration-(--motion-feedback) hover:bg-gold-500 hover:text-navy-900 aria-disabled:cursor-not-allowed aria-disabled:bg-surface-soft aria-disabled:text-muted sm:flex-none";
 
 const names = (lines: readonly ReturnEligibilityLine[]) => lines.map((line) => line.productName).join(", ");
 
@@ -158,21 +160,25 @@ export default function ReturnOrderModal({ order, ownerId, onClose, onReturned, 
   return (
     <ModalDialog open label="Request a return" placement="sheet" onClose={close}>
       <form noValidate onSubmit={submit} aria-labelledby={titleId}
-        className="flex h-full w-full flex-col bg-white text-charcoal shadow-2xl md:h-auto md:max-h-[calc(100dvh-2rem)] md:max-w-2xl md:rounded-lg">
-        <header className="flex shrink-0 items-start justify-between gap-3 border-b border-light-gray px-4 py-3 sm:px-6">
-          <div className="min-w-0">
-            <h2 id={titleId} className="font-display text-xl text-brand-primary">Request a return</h2>
-            <p className="font-mono text-xs text-gray-600 [overflow-wrap:anywhere]">Order {order.orderNumber}</p>
+        className="flex h-full w-full flex-col bg-surface text-navy-800 shadow-overlay md:h-auto md:max-h-[calc(100dvh-2rem)] md:max-w-2xl md:rounded-2xl">
+        <header className="flex shrink-0 items-start justify-between gap-[12px] border-b border-divider px-4 py-2 sm:px-6">
+          <div className="min-w-0 py-1 [overflow-wrap:anywhere]">
+            <h2 id={titleId} className="type-h3 text-navy-900">Request a return</h2>
+            <p className="font-mono text-sm text-muted [overflow-wrap:anywhere]">Order {order.orderNumber}</p>
           </div>
-          <button type="button" onClick={close} aria-disabled={submitting} className="min-h-11 rounded-sm px-3 text-xs font-bold uppercase tracking-wider text-gray-600 hover:text-brand-primary aria-disabled:opacity-50">
+          <button type="button" onClick={close} aria-disabled={submitting} className="min-h-[44px] shrink-0 rounded-sm px-[12px] text-sm font-semibold text-navy-900 hover:bg-surface-soft aria-disabled:cursor-not-allowed aria-disabled:text-muted">
             Close
           </button>
         </header>
 
-        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-4 py-4 [overflow-wrap:anywhere] sm:px-6">
+        {/* A text field reveals only its caret on focus (Chromium), which can leave the rest of it under the footer. */}
+        <div
+          onFocus={(event) => event.target.scrollIntoView?.({ block: "nearest" })}
+          className="focus-scroll-room min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-4 py-4 [overflow-wrap:anywhere] sm:px-6"
+        >
           {intent ? (
-            <section aria-label="Saved return request" className="space-y-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
-              <p className="font-semibold text-brand-primary">Your earlier request is saved on this device.</p>
+            <section aria-label="Saved return request" className="space-y-2 rounded-md border border-warning/40 bg-warning-tint p-3 text-sm">
+              <p className="font-semibold text-navy-900">Your earlier request is saved on this device.</p>
               <ul className="list-disc space-y-1 pl-5">
                 {intent.body.lines.map((line) => (
                   <li key={line.orderItemId}>{line.quantity} × {lineById.get(line.orderItemId)?.productName ?? "Item from this order"}</li>
@@ -182,10 +188,10 @@ export default function ReturnOrderModal({ order, ownerId, onClose, onReturned, 
               {intent.body.comment && <p>Comment: {intent.body.comment}</p>}
             </section>
           ) : blocked ? (
-            <p className="rounded-md bg-off-white p-3 text-sm">{returnWindowText(eligibility) ?? "This order cannot be returned right now."}</p>
+            <p className="rounded-md bg-surface-soft p-3 text-sm">{returnWindowText(eligibility) ?? "This order cannot be returned right now."}</p>
           ) : (
             <>
-              {windowText && <p className="text-sm font-semibold text-brand-primary">{windowText}</p>}
+              {windowText && <p className="text-sm font-semibold text-navy-900">{windowText}</p>}
               <fieldset aria-describedby={problem === "items" ? errorId : undefined}>
                 <legend className={labelClass}>Items to return</legend>
                 <ul className="mt-2 space-y-3">
@@ -195,11 +201,11 @@ export default function ReturnOrderModal({ order, ownerId, onClose, onReturned, 
                     const ruleId = `${id}-rule-${index}`;
                     const max = line.returnableQuantity;
                     return (
-                      <li key={line.orderItemId} className="rounded-md border border-light-gray p-3">
+                      <li key={line.orderItemId} className="rounded-md border border-divider p-3">
                         <div className="flex flex-wrap items-center justify-between gap-3">
                           <div className="min-w-0 flex-1 basis-48">
-                            <p id={nameId} className="font-semibold text-brand-primary">{line.productName}</p>
-                            <p id={ruleId} className="text-xs text-gray-600">
+                            <p id={nameId} className="font-semibold text-navy-900">{line.productName}</p>
+                            <p id={ruleId} className="text-sm text-muted">
                               {max > 0 ? `Up to ${max} of ${line.purchased} can be returned. ` : "Already in a return request. "}
                               {returnRuleText(line.returnRule, eligibility.policy.windowDays)}
                             </p>
@@ -214,7 +220,7 @@ export default function ReturnOrderModal({ order, ownerId, onClose, onReturned, 
                                 aria-label={`Quantity of ${line.productName} to return`} aria-describedby={ruleId}
                                 aria-invalid={problem === "items" || undefined}
                                 onChange={(event) => setQuantity(line, event.target.value === "" ? 0 : Number(event.target.value))}
-                                className="h-[44px] w-[64px] rounded-sm border border-light-gray bg-off-white text-center text-base aria-[invalid=true]:border-error"
+                                className="h-[44px] w-[64px] rounded-sm border border-control bg-surface text-center text-navy-900 aria-[invalid=true]:border-2 aria-[invalid=true]:border-error"
                               />
                               <button type="button" aria-label={`Return one more ${line.productName}`} aria-disabled={quantity >= max}
                                 onClick={() => { if (quantity < max) setQuantity(line, quantity + 1); }} className={stepClass}>+</button>
@@ -239,17 +245,17 @@ export default function ReturnOrderModal({ order, ownerId, onClose, onReturned, 
                   {choices.map((choice) => <option key={choice} value={choice}>{RETURN_REASON_LABELS[choice]}</option>)}
                 </select>
                 {faultOnly.length > 0 && (
-                  <p id={`${id}-reason-hint`} className="mt-1 text-xs text-gray-600">
+                  <p id={`${id}-reason-hint`} className="mt-1 text-sm text-muted">
                     {names(faultOnly)} can be returned only if faulty, damaged or wrong.
                   </p>
                 )}
               </div>
 
               {declarationNeeded && (
-                <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-md border border-light-gray p-3 text-sm">
+                <label className="flex min-h-[44px] cursor-pointer items-start gap-3 rounded-md border border-control p-3 text-sm">
                   <input ref={unopenedField} type="checkbox" checked={unopened} aria-invalid={problem === "unopened" || undefined}
                     onChange={(event) => { setUnopened(event.target.checked); setProblem(null); setError(""); }}
-                    className="mt-0.5 h-5 w-5 shrink-0 accent-brand-primary" />
+                    className="mt-0.5 h-5 w-5 shrink-0 accent-navy-900" />
                   <span>
                     I confirm {names(unopenedLines)} {unopenedLines.length === 1 ? "is" : "are"} unopened.
                     Staff check this when the return arrives.
@@ -265,8 +271,8 @@ export default function ReturnOrderModal({ order, ownerId, onClose, onReturned, 
             </>
           )}
 
-          <section aria-labelledby={`${id}-terms`} className="rounded-md bg-off-white p-3 text-xs">
-            <h3 id={`${id}-terms`} className="font-body text-[11px] font-bold uppercase tracking-[0.12em] text-brand-primary">Return terms</h3>
+          <section aria-labelledby={`${id}-terms`} className="rounded-md bg-surface-page p-3 text-sm">
+            <h3 id={`${id}-terms`} className="font-semibold text-navy-900">Return terms</h3>
             <ul className="mt-2 list-disc space-y-1 pl-4">
               {windowText && <li>{windowText}</li>}
               {returnPolicyTerms(eligibility.policy).map((line) => <li key={line}>{line}</li>)}
@@ -274,8 +280,8 @@ export default function ReturnOrderModal({ order, ownerId, onClose, onReturned, 
           </section>
         </div>
 
-        <footer className="shrink-0 space-y-2 border-t border-light-gray bg-white px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6">
-          {error && <p id={errorId} role="alert" className="rounded-md border border-error/30 bg-error/5 p-2 text-sm font-semibold text-error">{error}</p>}
+        <footer className="shrink-0 space-y-2 border-t border-divider bg-surface px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6">
+          {error && <p id={errorId} role="alert" className="rounded-md border border-error/40 bg-error-tint p-2 text-sm font-semibold text-error">{error}</p>}
           <p role="status" className="sr-only">{submitting ? "Sending your return request…" : ""}</p>
           <div className="flex flex-wrap justify-end gap-2">
             <button type="button" onClick={close} aria-disabled={submitting} className={secondaryClass}>Cancel</button>

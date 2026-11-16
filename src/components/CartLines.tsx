@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useLayoutEffect, useRef, useState } from "react";
+import type { Quote } from "../api/orders";
 import { Link } from "../router";
 import { lineKey, type CartEstimate, type CartLineView } from "../store/cartModel";
 import { useStore, type CartLine } from "../store/StoreContext";
@@ -166,6 +167,58 @@ export function CartEstimateSummary({ estimate, pendingFees }: { estimate: CartE
     </div>
   );
 }
+
+/**
+ * The cart's lines as checkout reviews them: the same image, name and options as the cart, read-only. Once the server
+ * has quoted the cart, each line shows the server's price for it; until then the browser's estimate, labelled as one.
+ */
+export function ReviewLines({ views, quote, label }: { views: CartLineView<CartLine>[]; quote: Quote | null; label: string }) {
+  const priced = new Map((quote?.lines ?? []).map((line) => [line.variantId, line]));
+  return (
+    <ul aria-label={label} className="divide-y divide-divider">
+      {views.map((view) => {
+        const name = view.product?.name ?? MISSING_NAME;
+        const server = priced.get(view.line.variantId);
+        return (
+          <li key={view.key} className="flex gap-3 py-4 first:pt-0 last:pb-0">
+            <div className="relative size-[64px] shrink-0 overflow-hidden rounded-md bg-surface-warm">
+              <LineImage view={view} name={name} />
+            </div>
+            <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+              <p className="font-medium text-navy-900">
+                {name}
+                {view.product?.isDemo && <>{" "}<DemoBadge className="ml-1 align-middle" /></>}
+              </p>
+              {view.variantLabel && <p className="mt-0.5 text-sm text-muted">{view.variantLabel}</p>}
+              {view.problem && <p className="mt-1 text-sm font-semibold text-error">{REVIEW_PROBLEM_TEXT[view.problem]}</p>}
+              <div className="mt-2 flex flex-wrap items-end justify-between gap-x-3 gap-y-1">
+                <p className="text-sm text-navy-800">Qty {view.line.quantity}</p>
+                {server ? (
+                  <p className="ml-auto text-right">
+                    <span className="block text-sm text-muted">{formatKES(server.unitPrice)} each excl. VAT</span>
+                    <span className="font-semibold tabular-nums text-navy-900">{formatKES(server.total)}</span>
+                    {server.discount > 0 && <span className="block text-sm font-semibold text-success">Saving {formatKES(server.discount)}</span>}
+                  </p>
+                ) : view.unitPrice !== null && view.subtotal !== null && (
+                  <p className="ml-auto text-right">
+                    <span className="block text-sm text-muted">{formatKES(view.unitPrice)} each excl. VAT (estimate)</span>
+                    <span className="font-semibold tabular-nums text-navy-900">{formatKES(view.subtotal)}</span>
+                  </p>
+                )}
+              </div>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+const REVIEW_PROBLEM_TEXT = {
+  unavailable: "No longer available. Edit your cart to remove it.",
+  "out-of-stock": "Out of stock. Edit your cart to remove it.",
+  "over-stock": "More than is available. Edit your cart to change the quantity.",
+} as const;
 
 /**
  * The cart's lines with editing, removal and Undo, identical in the mini-cart and on the cart page. The Undo row

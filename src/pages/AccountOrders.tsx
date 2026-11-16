@@ -1,6 +1,6 @@
 import { isCancel } from "axios";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
-import { Link, navigate } from "../router";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { Link, navigate, parseRoute, useEntryFocus, useRoute } from "../router";
 import { useAuth, type User } from "../contexts/AuthContext";
 import type { PaymentOrderSummary } from "../api/mpesa";
 import { ordersAPI, type CustomerOrder, type OrderReturn, type ReturnRequestResult } from "../api/orders";
@@ -23,7 +23,7 @@ import {
   returnWindowText,
 } from "../store/orderCopy";
 import { withPaymentSummary } from "../store/paymentModel";
-import { receiptDocument } from "../utils/receiptDocument";
+import { printReceipt } from "../utils/printReceipt";
 import { useStorefront } from "../store/StorefrontContext";
 import CancelOrderModal from "../components/CancelOrderModal";
 import ReturnOrderModal from "../components/ReturnOrderModal";
@@ -32,13 +32,24 @@ import { ResponsiveImage } from "../components/ui";
 import { Disclosure, OrderProgress, OrderStatusBadge, OrderTimeline, OrderTotals } from "../components/OrderRecords";
 import { PaymentPanel } from "../components/PaymentPanel";
 import { ErrorPanel, LoadingPanel } from "../components/ui";
+import { Notice as NoticeBox } from "../components/checkout";
 
 const ORDER_PAGE_LIMIT = 100;
-const buttonBase = "min-h-11 rounded-sm px-3 py-2 text-[11px] font-bold uppercase tracking-wider";
-const primaryButton = `${buttonBase} bg-brand-primary text-white hover:bg-brand-secondary hover:text-brand-primary`;
-const outlineButton = `${buttonBase} border border-brand-primary text-brand-primary hover:bg-brand-primary hover:text-white`;
-const quietButton = `${buttonBase} border border-light-gray text-charcoal hover:border-brand-primary`;
-const dangerButton = `${buttonBase} border border-error text-error hover:bg-error hover:text-white`;
+const ORDERS_ROUTE = "/account/orders";
+const buttonBase = "inline-flex min-h-[44px] items-center justify-center rounded-sm px-4 py-2 text-sm font-semibold transition-colors duration-(--motion-feedback)";
+const primaryButton = `${buttonBase} bg-navy-900 text-white hover:bg-gold-500 hover:text-navy-900`;
+const outlineButton = `${buttonBase} border border-navy-900 text-navy-900 hover:bg-surface-soft`;
+const quietButton = `${buttonBase} border border-control text-navy-900 hover:border-navy-900 hover:bg-surface-soft`;
+const dangerButton = `${buttonBase} border border-error text-error hover:bg-error-tint`;
+
+/** The one thing an order most likely needs next, judged only from what the server reports and permits. */
+type NextAction = "pay" | "return" | "track" | "receipt";
+export function nextOrderAction(order: Pick<CustomerOrder, "quoteId" | "status" | "paymentStatus" | "reservationStatus" | "customerActions">): NextAction {
+  if (order.quoteId && order.status === "PENDING" && order.paymentStatus === "PENDING" && order.reservationStatus === "HELD") return "pay";
+  if (order.customerActions.includes("REQUEST_RETURN")) return "return";
+  if (order.status === "PROCESSING" || order.status === "SHIPPED" || order.status === "READY_FOR_PICKUP") return "track";
+  return "receipt";
+}
 
 type OrdersState =
   | { status: "loading" }
@@ -88,33 +99,12 @@ function cancelLabel(order: CustomerOrder) {
   return cancellationRequestsRefund(order.paymentStatus) ? "Cancel & Request Refund" : "Cancel Order";
 }
 
-/** Longest wait for the brand fonts; after it the receipt prints in its fallback faces. */
-const RECEIPT_FONT_WAIT_MS = 3000;
-
-/** Opens the receipt in its own window and prints it once, after the brand fonts load, fail or time out. */
-function printReceipt(order: CustomerOrder, user: User | null, brandName: string) {
-  const popup = window.open("", "_blank", "width=720,height=900");
-  if (!popup) return;
-  popup.document.write(receiptDocument(order, user, brandName));
-  popup.document.close();
-  const loaded = new Promise<void>((resolve) => {
-    if (popup.document.readyState === "complete") resolve();
-    else popup.addEventListener("load", () => resolve(), { once: true });
-  });
-  const timeout = new Promise<void>((resolve) => window.setTimeout(resolve, RECEIPT_FONT_WAIT_MS));
-  void Promise.race([loaded.then(() => popup.document.fonts.ready), timeout]).then(() => {
-    if (popup.closed) return;
-    popup.focus();
-    popup.print();
-  });
-}
-
 /** Errors are announced as alerts; confirmations go to a status region that stays mounted. */
 function NoticeArea({ notice }: { notice: Notice | null }) {
   return (
     <>
-      {notice?.tone === "error" && <p role="alert" className="mt-4 rounded-md border border-error/30 bg-error/5 p-3 text-sm font-semibold text-error">{notice.text}</p>}
-      <p role="status" className={notice?.tone === "info" ? "mt-4 rounded-md border border-brand-secondary/30 bg-surface-soft p-3 text-sm text-navy-900" : "sr-only"}>
+      {notice?.tone === "error" && <p role="alert" className="mt-4 rounded-md border border-error/40 bg-error-tint p-3 text-sm font-semibold text-error">{notice.text}</p>}
+      <p role="status" className={notice?.tone === "info" ? "mt-4 rounded-md border border-success/40 bg-success-tint p-3 text-sm text-navy-900" : "sr-only"}>
         {notice?.tone === "info" ? notice.text : ""}
       </p>
     </>
@@ -141,42 +131,51 @@ function OrderCard({ order, onDetails, onReceipt, onCancel, onReturn }: {
   onCancel: () => void;
   onReturn: () => void;
 }) {
+  const next = nextOrderAction(order);
+  const track = () => navigate(`/track?order=${encodeURIComponent(order.orderNumber)}`);
+  const canCancel = order.customerActions.includes("CANCEL");
   return (
-    <li className="overflow-hidden rounded-lg border border-light-gray bg-white [overflow-wrap:anywhere]">
-      <div className="space-y-3 p-4">
+    <li className="overflow-hidden rounded-lg bg-surface shadow-card [overflow-wrap:anywhere]">
+      <div className="space-y-3 p-4 sm:p-5">
         <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
           <div className="min-w-0">
-            <p className="font-mono text-sm font-bold text-brand-primary">{order.orderNumber}</p>
-            <p className="text-xs text-gray-600">Placed {formatDateTime(order.createdAt)} · {DELIVERY_LABELS[order.deliveryMethod]}</p>
+            <p className="font-mono text-sm font-bold text-navy-900">{order.orderNumber}</p>
+            <p className="text-sm text-muted">Placed {formatDateTime(order.createdAt)} · {DELIVERY_LABELS[order.deliveryMethod]}</p>
           </div>
           <OrderStatusBadge order={order} />
         </div>
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-          <p className="text-xl font-semibold tabular-nums text-navy-900">{formatKES(order.total)}</p>
-          <p className="text-xs text-gray-600">Payment: {paymentLabel(order)}</p>
+          <p className="type-price-card text-navy-900">{formatKES(order.total)}</p>
+          <p className="text-sm text-navy-800">Payment: {paymentLabel(order)}</p>
         </div>
-        {orderNotes(order).map((note) => <p key={note} className="text-xs text-charcoal">{note}</p>)}
+        {orderNotes(order).map((note) => <p key={note} className="text-sm text-navy-800">{note}</p>)}
+        {/* The next action comes first and stands out; the rest follow, with cancelling last. */}
         <div className="flex flex-wrap gap-2">
-          <OrderActions order={order} onCancel={onCancel} onReturn={onReturn} />
+          {next === "pay" && <button type="button" onClick={onDetails} className={primaryButton}>Pay Now<span className="sr-only"> for order {order.orderNumber}</span></button>}
+          {next === "return" && <button type="button" onClick={onReturn} className={primaryButton}>Request a Return</button>}
+          {next === "track" && <button type="button" onClick={track} className={primaryButton}>Track Order</button>}
+          {next === "receipt" && <button type="button" onClick={onReceipt} className={primaryButton}>Receipt</button>}
           <button type="button" onClick={onDetails} className={quietButton}>Details</button>
-          <button type="button" onClick={onReceipt} className={quietButton}>Receipt</button>
-          <button type="button" onClick={() => navigate(`/track?order=${encodeURIComponent(order.orderNumber)}`)} className={quietButton}>
-            Track Order
-          </button>
+          {next !== "receipt" && <button type="button" onClick={onReceipt} className={quietButton}>Receipt</button>}
+          {next !== "track" && <button type="button" onClick={track} className={quietButton}>Track Order</button>}
+          {canCancel && <button type="button" onClick={onCancel} className={dangerButton}>{cancelLabel(order)}</button>}
         </div>
       </div>
-      <ul aria-label={`Items in order ${order.orderNumber}`} className="space-y-2 border-t border-light-gray px-4 py-3">
+      <ul aria-label={`Items in order ${order.orderNumber}`} className="space-y-2 border-t border-divider px-4 py-3 sm:px-5">
         {order.items.map((item) => (
           <li key={item.id} className="flex items-center gap-3 text-sm">
-            {item.productImage && <ResponsiveImage url={item.productImage} preset="thumbnail" alt="" className="h-12 w-12 shrink-0 rounded-sm object-cover" />}
-            <div className="min-w-0 flex-1">
-              <p className="font-medium text-brand-primary">{item.productName}</p>
-              <p className="text-xs text-gray-600">
-                Qty {item.quantity}
-                {item.variantAttributes && Object.values(item.variantAttributes).length > 0 && ` · ${Object.values(item.variantAttributes).join(" / ")}`}
-              </p>
+            {item.productImage && <ResponsiveImage url={item.productImage} preset="thumbnail" alt="" className="size-12 shrink-0 rounded-sm object-cover" />}
+            {/* The amount sits beside the name while it fits and moves under it when the text is enlarged. */}
+            <div className="flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-x-3">
+              <div className="min-w-0">
+                <p className="font-medium text-navy-900">{item.productName}</p>
+                <p className="text-muted">
+                  Qty {item.quantity}
+                  {item.variantAttributes && Object.values(item.variantAttributes).length > 0 && ` · ${Object.values(item.variantAttributes).join(" / ")}`}
+                </p>
+              </div>
+              <p className="font-semibold tabular-nums text-navy-900">{formatKES(item.subtotal)}</p>
             </div>
-            <p className="shrink-0 font-semibold">{formatKES(item.subtotal)}</p>
           </li>
         ))}
       </ul>
@@ -188,12 +187,12 @@ function CustomerReturns({ returns, onWithdraw }: { returns: OrderReturn[]; onWi
   return (
     <ul className="space-y-3">
       {returns.map((item) => (
-        <li key={item.id} className="rounded-md border border-light-gray p-3">
+        <li key={item.id} className="rounded-md border border-divider p-3">
           <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-            <p className="font-mono text-sm font-bold text-brand-primary">{item.number}</p>
-            <p className="text-sm font-semibold">{RETURN_STATUS_TEXT[item.status]}</p>
+            <p className="font-mono text-sm font-bold text-navy-900">{item.number}</p>
+            <p className="text-sm font-semibold text-navy-900">{RETURN_STATUS_TEXT[item.status]}</p>
           </div>
-          <p className="text-xs text-gray-600">
+          <p className="text-sm text-muted">
             Requested {formatDateTime(item.requestedAt)} · {RETURN_REASON_LABELS[item.reason]}{item.unopenedDeclared ? " · declared unopened" : ""}
           </p>
           <ul className="mt-2 space-y-1 text-sm">
@@ -204,11 +203,11 @@ function CustomerReturns({ returns, onWithdraw }: { returns: OrderReturn[]; onWi
               </li>
             ))}
           </ul>
-          {item.comment && <p className="mt-2 text-xs">Your comment: {item.comment}</p>}
-          {item.decisionNote && <p className="mt-2 text-xs">Note from staff: {item.decisionNote}</p>}
-          {item.inspectionNote && <p className="mt-2 text-xs">Inspection note: {item.inspectionNote}</p>}
+          {item.comment && <p className="mt-2 text-sm">Your comment: {item.comment}</p>}
+          {item.decisionNote && <p className="mt-2 text-sm">Note from staff: {item.decisionNote}</p>}
+          {item.inspectionNote && <p className="mt-2 text-sm">Inspection note: {item.inspectionNote}</p>}
           {item.status === "RECEIVED" && item.merchantFaultConfirmed !== null && (
-            <p className="mt-2 text-xs">{item.merchantFaultConfirmed ? "Staff confirmed the item was faulty, damaged or wrong." : "Staff did not find a fault."}</p>
+            <p className="mt-2 text-sm">{item.merchantFaultConfirmed ? "Staff confirmed the item was faulty, damaged or wrong." : "Staff did not find a fault."}</p>
           )}
           {item.status === "REQUESTED" && (
             <button type="button" onClick={() => onWithdraw(item)} className={`mt-3 ${quietButton}`}>
@@ -225,13 +224,13 @@ function CustomerRefunds({ order }: { order: CustomerOrder }) {
   return (
     <ul className="space-y-3">
       {order.refunds.map((refund) => (
-        <li key={refund.id} className="rounded-md border border-light-gray p-3">
+        <li key={refund.id} className="rounded-md border border-divider p-3">
           <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-            <p className="font-semibold text-brand-primary">{formatKES(refund.amount)}</p>
-            <p className="text-xs text-gray-600">{REFUND_SOURCE_TEXT[refund.source]}</p>
+            <p className="font-semibold tabular-nums text-navy-900">{formatKES(refund.amount)}</p>
+            <p className="text-sm text-muted">{REFUND_SOURCE_TEXT[refund.source]}</p>
           </div>
           <p className="mt-1 text-sm">{refundStatusText(refund)}</p>
-          <p className="text-xs text-gray-600">
+          <p className="text-sm text-muted">
             Requested {formatDateTime(refund.requestedAt)}{refund.includesDeliveryFee ? " · includes the delivery fee" : ""}
           </p>
         </li>
@@ -259,24 +258,24 @@ function OrderDetails({ order, user, notice, closeRef, onClose, onCancel, onRetu
   const notes = orderNotes(order).filter((note) => note !== windowNote);
   return (
     <ModalDialog open label="Receipt Details" onClose={onClose}>
-      <div className="relative max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-lg bg-white p-5 shadow-xl [overflow-wrap:anywhere] sm:p-6 md:max-w-4xl">
+      <div className="focus-scroll-room relative max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-2xl bg-surface p-5 text-navy-800 shadow-overlay [overflow-wrap:anywhere] sm:p-6 md:max-w-4xl">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <h3 className="font-display text-xl text-brand-primary">Receipt Details</h3>
-            <p className="font-mono text-sm text-gray-600">{order.orderNumber}</p>
+            <h2 className="type-h3 text-navy-900">Receipt details</h2>
+            <p className="font-mono text-sm text-muted">{order.orderNumber}</p>
           </div>
-          <button ref={closeRef} type="button" onClick={onClose} className="min-h-11 px-2 text-gray-600 hover:text-brand-primary">Close</button>
+          <button ref={closeRef} type="button" onClick={onClose} className="min-h-[44px] rounded-sm px-3 text-sm font-semibold text-navy-900 hover:bg-surface-soft">Close</button>
         </div>
         <NoticeArea notice={notice} />
 
         <section aria-label="Order summary" className="mt-5 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <OrderStatusBadge order={order} />
-            <p className="text-2xl font-semibold tabular-nums text-navy-900">{formatKES(order.total)}</p>
+            <p className="type-price text-navy-900">{formatKES(order.total)}</p>
           </div>
-          <p className="text-sm"><span className="text-gray-600">Payment:</span> {paymentLabel(order)}</p>
-          {notes.map((note) => <p key={note} className="text-sm text-charcoal">{note}</p>)}
-          {windowNote && <p className="text-sm text-charcoal">{windowNote}</p>}
+          <p className="text-sm"><span className="text-muted">Payment:</span> {paymentLabel(order)}</p>
+          {notes.map((note) => <p key={note} className="text-sm">{note}</p>)}
+          {windowNote && <p className="text-sm">{windowNote}</p>}
           {order.customerActions.length > 0 && (
             <div className="grid gap-2 sm:grid-cols-2 md:flex md:flex-wrap">
               <OrderActions order={order} onCancel={onCancel} onReturn={onReturn} />
@@ -293,25 +292,25 @@ function OrderDetails({ order, user, notice, closeRef, onClose, onCancel, onRetu
 
         <div className="mt-5 grid gap-5 md:grid-cols-2 md:items-start">
           <section aria-label="Order details" className="space-y-4">
-            <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
-              <dt className="text-gray-600">Customer</dt><dd>{customerName(user)}</dd>
-              <dt className="text-gray-600">Email</dt><dd>{user?.email ?? ""}</dd>
-              <dt className="text-gray-600">Delivery</dt><dd>{DELIVERY_LABELS[order.deliveryMethod]} · {deliveryAddress(order)}</dd>
-              {order.trackingNumber && <><dt className="text-gray-600">Tracking</dt><dd className="font-mono">{order.trackingNumber}</dd></>}
+            <dl className="grid grid-cols-[fit-content(50%)_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
+              <dt className="text-muted">Customer</dt><dd>{customerName(user)}</dd>
+              <dt className="text-muted">Email</dt><dd>{user?.email ?? ""}</dd>
+              <dt className="text-muted">Delivery</dt><dd>{DELIVERY_LABELS[order.deliveryMethod]} · {deliveryAddress(order)}</dd>
+              {order.trackingNumber && <><dt className="text-muted">Tracking</dt><dd className="font-mono">{order.trackingNumber}</dd></>}
             </dl>
             <Disclosure title="Items and totals" summary={`${order.items.length} ${order.items.length === 1 ? "item" : "items"}`}>
               <ul className="space-y-2">
                 {order.items.map((item) => (
                   <li key={item.id}>
-                    <div className="flex justify-between gap-3">
-                      <span>{item.quantity} × {item.productName}</span>
-                      <span className="shrink-0 font-semibold">{formatKES(item.subtotal)}</span>
+                    <div className="flex flex-wrap justify-between gap-x-3">
+                      <span className="min-w-0">{item.quantity} × {item.productName}</span>
+                      <span className="font-semibold tabular-nums">{formatKES(item.subtotal)}</span>
                     </div>
-                    {rules.has(item.id) && <p className="text-xs text-gray-600">{returnRuleText(rules.get(item.id) ?? "STANDARD", policy.windowDays)}</p>}
+                    {rules.has(item.id) && <p className="text-sm text-muted">{returnRuleText(rules.get(item.id) ?? "STANDARD", policy.windowDays)}</p>}
                   </li>
                 ))}
               </ul>
-              <div className="mt-3 border-t border-light-gray pt-3"><OrderTotals order={order} /></div>
+              <div className="mt-3 border-t border-divider pt-3"><OrderTotals order={order} /></div>
             </Disclosure>
             <div className="grid gap-2 sm:grid-cols-2">
               <button type="button" onClick={() => navigate(`/track?order=${encodeURIComponent(order.orderNumber)}`)} className={outlineButton}>
@@ -324,7 +323,7 @@ function OrderDetails({ order, user, notice, closeRef, onClose, onCancel, onRetu
           <section aria-label="Order history, returns and refunds" className="space-y-3">
             <Disclosure title="Progress">
               <OrderProgress order={order} fulfilment={order.fulfilment} />
-              <h4 className="mt-4 font-body text-[11px] font-bold uppercase tracking-[0.12em] text-brand-primary">Updates</h4>
+              <h4 className="mt-4 text-sm font-semibold text-navy-900">Updates</h4>
               <div className="mt-2"><OrderTimeline events={order.trackingHistory} /></div>
             </Disclosure>
             {order.returns.length > 0 && (
@@ -346,7 +345,9 @@ function OrderDetails({ order, user, notice, closeRef, onClose, onCancel, onRetu
 
 export default function AccountOrders() {
   const { user } = useAuth();
-  return <AccountOrdersContent key={user?.id ?? "guest"} user={user} />;
+  // An order named in the address (a link from checkout or tracking) opens once this account's orders have loaded.
+  const requestedId = parseRoute(useRoute()).params.get("order");
+  return <AccountOrdersContent key={user?.id ?? "guest"} user={user} requestedId={requestedId} />;
 }
 
 /** Moves focus to `target` only when an update removed the control that had it. */
@@ -355,11 +356,12 @@ function rescueFocus(target: HTMLElement | null) {
   if (!active || active === document.body || active.tagName === "DIALOG" || !active.isConnected) target?.focus();
 }
 
-function AccountOrdersContent({ user }: { user: User | null }) {
+function AccountOrdersContent({ user, requestedId }: { user: User | null; requestedId: string | null }) {
   const { brandName } = useStorefront();
   const [orders, setOrders] = useState<OrdersState>({ status: "loading" });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [missingOrder, setMissingOrder] = useState(false);
   const [cancelId, setCancelId] = useState<string | null>(null);
   const [returnId, setReturnId] = useState<string | null>(null);
   const [withdrawal, setWithdrawal] = useState<{ orderId: string; item: OrderReturn } | null>(null);
@@ -384,6 +386,17 @@ function AccountOrdersContent({ user }: { user: User | null }) {
   useLayoutEffect(() => {
     if (focusRequest) rescueFocus(detailsClose.current ?? pageHeading.current);
   }, [focusRequest]);
+  useEntryFocus(pageHeading);
+
+  // A requested order is looked up only in this account's own list, so no other account's order can open. The
+  // request is then dropped from the address, so a reload or Back does not open it again.
+  useEffect(() => {
+    if (requestedId === null || orders.status !== "ready") return;
+    const found = orders.orders.some((order) => order.id === requestedId);
+    setMissingOrder(!found);
+    if (found) setSelectedId(requestedId);
+    navigate(ORDERS_ROUTE, { replace: true });
+  }, [requestedId, orders]);
 
   const loadOrders = useCallback(async () => {
     try {
@@ -450,6 +463,7 @@ function AccountOrdersContent({ user }: { user: User | null }) {
 
   const openModal = (open: (id: string) => void, order: CustomerOrder) => {
     setNotice(null);
+    setMissingOrder(false);
     open(order.id);
   };
 
@@ -490,36 +504,19 @@ function AccountOrdersContent({ user }: { user: User | null }) {
     }
   };
 
-  if (orders.status === "loading") return <LoadingPanel label="Loading your orders…" />;
-  if (orders.status === "error") return <ErrorPanel title="Orders are unavailable" message={orders.message} onRetry={retry} />;
-
-  if (orders.orders.length === 0) {
-    return (
-      <div className="py-12 text-center">
-        <h2 className="font-display text-2xl text-brand-primary">Orders & Receipts</h2>
-        <p className="mt-3 text-sm text-gray-600">No orders yet. Orders you place will appear here.</p>
-        <Link to="/shop" className="mt-5 inline-block rounded-sm bg-brand-primary px-6 py-3 text-xs font-bold uppercase tracking-[0.12em] text-white hover:bg-brand-secondary hover:text-brand-primary">
-          Start Shopping
-        </Link>
+  let body: ReactNode;
+  if (orders.status === "loading") body = <LoadingPanel label="Loading your orders…" />;
+  else if (orders.status === "error") body = <ErrorPanel title="Orders are unavailable" message={orders.message} onRetry={retry} />;
+  else if (orders.orders.length === 0) {
+    body = (
+      <div className="rounded-lg bg-surface p-6 text-center shadow-card sm:p-8">
+        <p className="text-navy-800">No orders yet. Orders you place will appear here.</p>
+        <Link to="/shop" className={`mt-5 ${primaryButton}`}>Start shopping</Link>
       </div>
     );
-  }
-
-  return (
-    <div>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 ref={pageHeading} tabIndex={-1} className="font-display text-2xl text-brand-primary">Orders & Receipts</h2>
-          <p className="mt-1 text-sm text-gray-600">Track orders, request returns, reprint receipts and follow refunds.</p>
-        </div>
-        <Link to="/track" className="inline-flex min-h-11 items-center rounded-sm border border-brand-primary px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-brand-primary hover:bg-brand-primary hover:text-white">
-          Track an Order
-        </Link>
-      </div>
-
-      {!selected && <NoticeArea notice={notice} />}
-
-      <ul className="mt-6 space-y-4">
+  } else {
+    body = (
+      <ul aria-label="Your orders" className="space-y-4">
         {orders.orders.map((order) => (
           <OrderCard
             key={order.id}
@@ -531,6 +528,27 @@ function AccountOrdersContent({ user }: { user: User | null }) {
           />
         ))}
       </ul>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
+        <div className="min-w-0">
+          <h1 ref={pageHeading} tabIndex={-1} className="type-h1 text-navy-900">Orders and receipts</h1>
+          <p className="mt-1 text-navy-800">Pay, track and return orders, reprint receipts and follow refunds.</p>
+        </div>
+        <Link to="/track" className={outlineButton}>Track an order</Link>
+      </div>
+
+      {missingOrder && (
+        <NoticeBox tone="warning" role="alert" title="That order isn't in your account">
+          <p>Check the link you followed. Your own orders are listed here.</p>
+        </NoticeBox>
+      )}
+      {!selected && <NoticeArea notice={notice} />}
+
+      {body}
 
       {selected && (
         <OrderDetails

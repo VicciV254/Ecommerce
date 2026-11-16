@@ -5,6 +5,7 @@ import { STORAGE_KEYS, shopperStateKey } from "../utils/storage";
 import type { OrderIntent } from "./checkoutModel";
 import type { MergeOutcome } from "./cartModel";
 import { linenShirt, poloShirt } from "../test-support/catalogFixtures";
+import { readAddressDraft, saveAddressDraft } from "./addressModel";
 import { fromAnotherTab } from "../test-support/otherTab";
 
 const auth = vi.hoisted(() => ({ user: null as { id: string } | null }));
@@ -77,6 +78,26 @@ describe("shopper state", () => {
     rerender(<StoreProvider><Probe /></StoreProvider>);
     expect(store.state.cart).toEqual([]);
     expect(stored(null)).toEqual({ cart: [], wishlist: [], ...noCheckout });
+  });
+
+  it("forgets an address typed at checkout when the account changes or signs out, but keeps it on a reload", () => {
+    const typed = { street: "12 Moi Avenue", city: "Nairobi", county: "", postalCode: "" };
+    auth.user = { id: "customer-a" };
+    saveAddressDraft("customer-a", typed);
+    render(<StoreProvider><Probe /></StoreProvider>).unmount();
+    expect(readAddressDraft("customer-a")).toEqual(typed);
+    // A reload mounts the provider again for the same account: the draft stays.
+    const { rerender } = render(<StoreProvider><Probe /></StoreProvider>);
+    expect(readAddressDraft("customer-a")).toEqual(typed);
+
+    auth.user = { id: "customer-b" };
+    rerender(<StoreProvider><Probe /></StoreProvider>);
+    expect(sessionStorage.getItem(STORAGE_KEYS.checkoutAddressDraft)).toBeNull();
+
+    saveAddressDraft("customer-b", typed);
+    auth.user = null;
+    rerender(<StoreProvider><Probe /></StoreProvider>);
+    expect(sessionStorage.getItem(STORAGE_KEYS.checkoutAddressDraft)).toBeNull();
   });
 
   it("keeps quantities whole and at least one", () => {

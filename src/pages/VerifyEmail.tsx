@@ -3,11 +3,14 @@ import { authAPI } from "../api/auth";
 import { describeApiError } from "../api/errors";
 import { Link, navigate, parseRoute, useRoute } from "../router";
 import { AuthLayout, authStyles } from "../components/AuthLayout";
+import { loginRoute, safeReturnTo, verifiedSignInRoute } from "../store/returnTo";
 
 export default function VerifyEmail() {
   const route = useRoute();
   const { params } = parseRoute(route);
   const initialEmail = params.get("email") ?? "";
+  // Checked again here: only a safe internal route is passed on to sign-in.
+  const returnTo = safeReturnTo(params.get("returnTo"));
   const [email, setEmail] = useState(initialEmail);
   const [digits, setDigits] = useState(["", "", "", "", "", ""]);
   const [loading, setLoading] = useState(false);
@@ -52,8 +55,8 @@ export default function VerifyEmail() {
     setLoading(true);
     try {
       await authAPI.verifyOtp(email, code);
-      setMessage("Email verified. You can now sign in.");
-      window.setTimeout(() => navigate(`/login?verified=1&email=${encodeURIComponent(email)}`), 800);
+      // Sign-in confirms the verification and returns to where the shopper was going; Back skips this page.
+      navigate(verifiedSignInRoute(email, returnTo), { replace: true });
     } catch (err) {
       setError(describeApiError(err, "Could not verify that OTP."));
     } finally {
@@ -133,8 +136,8 @@ export default function VerifyEmail() {
         >
           {resending ? "Sending..." : "Resend OTP"}
         </button>
-        <Link to="/login" className={`inline-flex min-h-[44px] items-center text-sm ${authStyles.link}`}>
-          Back to Login
+        <Link to={loginRoute(returnTo)} className={`inline-flex min-h-[44px] items-center text-sm ${authStyles.link}`}>
+          Back to sign in
         </Link>
       </div>
     </AuthLayout>

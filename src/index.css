@@ -176,6 +176,14 @@ html:has([data-sticky-header] :focus) {
   scroll-padding-top: 0;
 }
 
+/*
+ * A text field that takes focus also reveals its caret, with an immediate scroll that cuts a smooth focus scroll short
+ * (Chromium), leaving the field and its ring under the window edge. While a text field has focus, scrolling is immediate.
+ */
+html:has(:is(input, textarea):focus) {
+  scroll-behavior: auto;
+}
+
 body {
   font-family: var(--font-body);
   background-color: var(--color-off-white);

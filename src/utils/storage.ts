@@ -11,9 +11,10 @@ export const STORAGE_KEYS = {
   adminToken: `${STORAGE_NAMESPACE}:admin:token`,
   adminRefreshToken: `${STORAGE_NAMESPACE}:admin:refresh-token`,
   adminUser: `${STORAGE_NAMESPACE}:admin:user`,
-  accountReturnPath: `${STORAGE_NAMESPACE}:account:return-path`,
   /** Session storage: the account this tab signed a guest in as; the guest cart joins it once the catalog has loaded. */
   pendingGuestMerge: `${STORAGE_NAMESPACE}:shopper:pending-merge`,
+  /** Session storage: an address typed at checkout but not saved yet, for this tab and one account. */
+  checkoutAddressDraft: `${STORAGE_NAMESPACE}:checkout:address-draft`,
 } as const;
 
 export const CUSTOMER_SESSION_KEYS = [

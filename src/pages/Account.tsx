@@ -1,119 +1,93 @@
-import { ReactNode, useState, useEffect } from 'react';
-import { Link, navigate, useLocation } from '../router';
-import { useAuth } from '../contexts/AuthContext';
-import { STORAGE_KEYS } from '../utils/storage';
+import type { ReactNode } from "react";
+import { Breadcrumb, Container } from "../components/ui";
+import { useAuth } from "../contexts/AuthContext";
+import { Link, navigate, useLocation } from "../router";
+import { loginRoute } from "../store/returnTo";
 
-interface AccountProps {
-  children: ReactNode;
+const NAV_ITEMS = [
+  { path: "/account/profile", label: "Profile" },
+  { path: "/account/orders", label: "Orders" },
+  { path: "/account/addresses", label: "Addresses" },
+] as const;
+
+/** The account's own page for a path; the bare `/account` shows the profile. */
+function currentItem(pathname: string) {
+  return NAV_ITEMS.find((item) => pathname.startsWith(item.path)) ?? NAV_ITEMS[0];
 }
 
-export default function Account({ children }: AccountProps) {
+const tabClass =
+  "inline-flex min-h-[44px] w-full items-center rounded-sm px-[16px] text-sm font-semibold transition-colors duration-(--motion-feedback) [overflow-wrap:anywhere] xl:px-[12px]";
+
+/**
+ * The account frame. Phones and tablets get a compact row of page tabs above the content; from 1280px the same links
+ * form a 224px column with the account holder's name. The current page is marked, and each page brings its own H1.
+ */
+export default function Account({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
-  const location = useLocation();
-  const currentPath = location.pathname;
-  const [previousPath, setPreviousPath] = useState('/');
-
-  useEffect(() => {
-    // Store the previous path when entering account pages
-    const handleBeforeUnload = () => {
-      sessionStorage.setItem(STORAGE_KEYS.accountReturnPath, currentPath);
-    };
-    handleBeforeUnload();
-    
-    // Get the last path from session storage
-    const lastPath = sessionStorage.getItem(STORAGE_KEYS.accountReturnPath);
-    if (lastPath && lastPath !== currentPath) {
-      setPreviousPath(lastPath);
-    }
-  }, [currentPath]);
-
-  const navItems = [
-    { path: '/account/profile', label: 'Profile' },
-    { path: '/account/orders', label: 'Orders' },
-    { path: '/account/addresses', label: 'Addresses' },
-  ];
-
-  const isActive = (path: string) => currentPath.startsWith(path);
-
-  const handleBack = () => {
-    navigate(previousPath);
-  };
+  const { pathname } = useLocation();
 
   if (!user) {
     return (
-      <div className="max-w-6xl mx-auto p-4 py-16 text-center">
-        <p className="text-gray-600 mb-4">Please sign in to view your account.</p>
-        <Link to="/login" className="btn-primary inline-block">
-          Sign In
-        </Link>
-      </div>
+      <Container className="py-12">
+        <section aria-labelledby="account-signed-out" className="mx-auto max-w-md rounded-lg bg-surface p-6 text-center shadow-card sm:p-8">
+          <h1 id="account-signed-out" className="type-h1 text-navy-900">Your account</h1>
+          <p className="mt-3 text-navy-800">Please sign in to view your account.</p>
+          <Link
+            to={loginRoute(pathname)}
+            className="mx-auto mt-6 flex min-h-[48px] max-w-xs items-center justify-center rounded-sm bg-navy-900 px-5 text-sm font-bold uppercase tracking-[0.12em] text-white transition-colors duration-(--motion-feedback) hover:bg-gold-500 hover:text-navy-900"
+          >
+            Sign in
+          </Link>
+        </section>
+      </Container>
     );
   }
 
+  const current = currentItem(pathname);
   return (
-    <div className="bg-off-white min-h-screen">
-      <div className="mx-auto max-w-6xl px-4 py-8">
-        <div className="mb-6">
-          <button
-            onClick={handleBack}
-            className="text-sm font-medium text-brand-primary hover:text-brand-secondary transition-colors flex items-center gap-2"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            Back
-          </button>
-        </div>
-        
-        <div className="flex flex-col md:flex-row gap-6">
-          <div className="md:w-64 shrink-0">
-            <div className="rounded-lg border border-brand-secondary/30 bg-surface-soft p-4 shadow-card">
-              <div className="text-center mb-4">
-                {user.profileImage ? (
-                  <img src={user.profileImage} alt="" className="mx-auto h-16 w-16 rounded-full object-cover ring-2 ring-brand-secondary/40" />
-                ) : (
-                  <div className="w-16 h-16 rounded-full bg-brand-secondary/20 mx-auto flex items-center justify-center text-2xl text-brand-primary">
-                    {user.firstName?.[0] || 'U'}
-                  </div>
-                )}
-                <p className="font-medium mt-2">
-                  {user.firstName} {user.lastName}
-                </p>
-                <p className="text-sm text-muted">{user.email}</p>
-              </div>
-              <hr className="my-4 border-brand-secondary/30" />
-              <nav className="space-y-1">
-                {navItems.map((item) => (
+    <Container className="py-6 md:py-8">
+      <Breadcrumb items={[{ label: "Account", to: "/account/profile" }, { label: current.label }]} />
+      <div className="mt-4 xl:grid xl:grid-cols-[224px_minmax(0,1fr)] xl:items-start xl:gap-8">
+        <nav aria-label="Account" className="rounded-lg bg-surface p-[8px] shadow-card xl:p-[16px]">
+          <div className="hidden border-b border-divider px-1 pb-4 xl:block [overflow-wrap:anywhere]">
+            {user.profileImage ? (
+              <img src={user.profileImage} alt="" className="size-14 rounded-full object-cover" />
+            ) : (
+              <span aria-hidden="true" className="flex size-14 items-center justify-center rounded-full bg-surface-soft text-xl font-semibold text-navy-900">
+                {user.firstName?.[0] ?? "A"}
+              </span>
+            )}
+            <p className="mt-2 font-semibold text-navy-900">{user.firstName} {user.lastName}</p>
+            <p className="text-sm text-muted">{user.email}</p>
+          </div>
+          <ul className="flex flex-wrap gap-1 xl:mt-3 xl:flex-col">
+            {NAV_ITEMS.map((item) => {
+              const active = item === current;
+              return (
+                <li key={item.path} className="min-w-0 flex-auto">
                   <Link
-                    key={item.path}
                     to={item.path}
-                    className={`block px-3 py-2 rounded-md text-sm transition-colors ${
-                      isActive(item.path)
-                        ? 'bg-brand-primary text-white font-medium'
-                        : 'hover:bg-white/70 text-charcoal'
-                    }`}
+                    aria-current={active ? "page" : undefined}
+                    className={`${tabClass} justify-center xl:justify-start ${active ? "bg-navy-900 text-white" : "text-navy-900 hover:bg-surface-soft"}`}
                   >
                     {item.label}
                   </Link>
-                ))}
-                <button
-                  onClick={() => {
-                    logout();
-                    navigate('/login');
-                  }}
-                  className="w-full text-left px-3 py-2 rounded-md text-sm font-medium text-error hover:bg-white/70 transition-colors"
-                >
-                  Logout
-                </button>
-              </nav>
-            </div>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="mt-1 flex justify-end border-t border-divider pt-1 xl:mt-3 xl:block xl:pt-3">
+            <button
+              type="button"
+              onClick={() => { logout(); navigate("/login"); }}
+              className={`${tabClass} w-auto text-error hover:bg-error-tint xl:w-full`}
+            >
+              Logout
+            </button>
           </div>
-
-          <div className="flex-1">
-            <div className="rounded-lg border border-light-gray bg-white p-6 shadow-card">{children}</div>
-          </div>
-        </div>
+        </nav>
+        <div className="mt-6 min-w-0 xl:mt-0">{children}</div>
       </div>
-    </div>
+    </Container>
   );
 }

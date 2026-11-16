@@ -67,12 +67,12 @@ export default function CancelOrderModal({ order, onClose, onOrderCancelled, onC
 
   return (
     <ModalDialog open label="Cancel Order" onClose={close}>
-      <div className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-lg bg-white p-6 shadow-xl [overflow-wrap:anywhere]">
-        <h2 className="mb-4 text-xl font-semibold text-brand-primary">Cancel Order</h2>
-        <p className="mb-4 text-sm text-charcoal">{cancellationText(order)}</p>
+      <div className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-2xl bg-surface p-6 text-navy-800 shadow-overlay [overflow-wrap:anywhere]">
+        <h2 className="type-h3 mb-3 text-navy-900">Cancel Order</h2>
+        <p className="mb-4">{cancellationText(order)}</p>
 
         <div className="mb-4">
-          <label htmlFor={reasonId} className="mb-2 block text-sm font-medium text-charcoal">
+          <label htmlFor={reasonId} className="mb-1 block text-sm font-semibold text-navy-900">
             Reason for cancellation (optional)
           </label>
           <textarea
@@ -83,17 +83,17 @@ export default function CancelOrderModal({ order, onClose, onOrderCancelled, onC
             onChange={(e) => setReason(e.target.value)}
             placeholder="Please let us know why you're cancelling..."
             rows={3}
-            className="w-full rounded-md border border-light-gray px-3 py-2 text-base focus:border-brand-secondary"
+            className="w-full rounded-sm border border-control bg-surface px-3 py-2 text-navy-900 placeholder:text-muted disabled:bg-surface-soft disabled:text-muted"
           />
         </div>
 
-        {errorMessage && <p role="alert" className="mb-4 text-sm text-error">{errorMessage}</p>}
+        {errorMessage && <p role="alert" className="mb-4 rounded-md bg-error-tint p-3 text-sm font-semibold text-error">{errorMessage}</p>}
         <div className="flex flex-wrap justify-end gap-3">
           <button
             type="button"
             onClick={close}
             disabled={isSubmitting}
-            className="min-h-11 rounded-md bg-off-white px-4 py-2 text-charcoal hover:bg-light-gray disabled:opacity-50"
+            className="min-h-[44px] rounded-sm border border-navy-900 px-4 text-sm font-semibold text-navy-900 transition-colors duration-(--motion-feedback) hover:bg-surface-soft disabled:cursor-not-allowed disabled:border-control disabled:text-muted"
           >
             Keep Order
           </button>
@@ -101,7 +101,7 @@ export default function CancelOrderModal({ order, onClose, onOrderCancelled, onC
             type="button"
             onClick={handleCancel}
             disabled={isSubmitting}
-            className="min-h-11 rounded-md bg-error px-4 py-2 text-white hover:bg-red-700 disabled:opacity-50"
+            className="min-h-[44px] rounded-sm bg-error px-4 text-sm font-semibold text-white transition-colors duration-(--motion-feedback) hover:bg-navy-900 disabled:cursor-not-allowed disabled:bg-surface-soft disabled:text-muted"
           >
             {isSubmitting ? "Cancelling..." : "Cancel Order"}
           </button>

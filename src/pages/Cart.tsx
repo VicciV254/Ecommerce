@@ -15,7 +15,7 @@ import { Link } from "../router";
 import { useCatalog } from "../store/CatalogContext";
 import { cartEstimate, cartLineViews } from "../store/cartModel";
 import { quoteRequestFor, reviewCart } from "../store/checkoutModel";
-import { CHECKOUT_SIGN_IN } from "../store/returnTo";
+import { CHECKOUT_REGISTER, CHECKOUT_SIGN_IN } from "../store/returnTo";
 import { useStore } from "../store/StoreContext";
 import { useCheckoutChoices } from "../store/useCheckoutChoices";
 import { useCheckoutQuote } from "../store/useCheckoutQuote";
@@ -113,7 +113,7 @@ function GuestCart() {
           <CartEstimateSummary estimate={cartEstimate(views)} pendingFees />
           <Link to={CHECKOUT_SIGN_IN} className={`flex min-h-[44px] items-center justify-center ${primaryActionClass}`}>Sign in to check out</Link>
           <p className="text-center text-sm text-navy-800">
-            New here? <Link to="/register" className="inline-flex min-h-[44px] items-center font-semibold text-link underline underline-offset-4 hover:text-link-hover">Create an account</Link>
+            New here? <Link to={CHECKOUT_REGISTER} className="inline-flex min-h-[44px] items-center font-semibold text-link underline underline-offset-4 hover:text-link-hover">Create an account</Link>
           </p>
           <p className="text-center text-xs text-muted">Your cart comes with you when you sign in.</p>
           <Link to="/shop" className="flex min-h-[44px] items-center justify-center text-sm text-gray-600 underline-offset-4 hover:text-brand-primary hover:underline">
@@ -157,7 +157,9 @@ function CartContent({ user }: { user: User }) {
   const current = quote.quote;
   // One idea of the subtotal at a time: the browser's estimate only until the server's figures are current.
   const quoted = current !== null && !quote.expired;
-  const canContinue = quoted && current.reservationsEnabled;
+  // Without a saved address there is nothing to quote yet: checkout's Delivery step takes the first address.
+  const needsAddress = choices.address === null && blocker === null;
+  const canContinue = (quoted && current.reservationsEnabled) || needsAddress;
   let unavailableReason = "Your total must be calculated before checkout.";
   if (current && !current.reservationsEnabled) unavailableReason = "Ordering is not available yet, so no order can be placed. Your cart is saved.";
   else if (current && quote.expired) unavailableReason = "Refresh prices to continue.";

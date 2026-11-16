@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { fixturePendingOrder, fixtureQuote } from "../test-support/checkoutFixtures";
 import { fixtureDeliveredOrder, fixtureRefund, fixtureStaffOrder, fixtureStaffRefund } from "../test-support/orderFixtures";
-import { OrderFormatError, parseCustomerOrder, parseStaffOrder } from "./orderModel";
+import { OrderFormatError, parseCustomerOrder, parseOrderTracking, parseStaffOrder } from "./orderModel";
 
 const order = fixturePendingOrder(fixtureQuote());
 
@@ -34,5 +34,24 @@ describe("order view validation", () => {
     ];
     for (const [data, detail] of invalidStaff) expect(() => parseStaffOrder(data)).toThrow(detail);
     expect(() => parseStaffOrder(null)).toThrow(OrderFormatError);
+  });
+});
+
+describe("public tracking validation", () => {
+  const step = { id: "event-1", status: "SHIPPED", description: "Shipped", location: null, createdAt: "2026-11-14T09:30:00.000Z", actorType: null };
+
+  it("accepts the tracking view as the server projects it, including an order with no steps yet", () => {
+    expect(parseOrderTracking({ orderNumber: "APX-1", status: "SHIPPED", trackingHistory: [step] }).trackingHistory).toEqual([step]);
+    expect(parseOrderTracking({ orderNumber: "APX-2", status: "PENDING", trackingHistory: [] }).trackingHistory).toEqual([]);
+  });
+
+  it.each([
+    ["an unknown status", { orderNumber: "APX-1", status: "TELEPORTED", trackingHistory: [] }],
+    ["no order number", { orderNumber: "", status: "SHIPPED", trackingHistory: [] }],
+    ["a step without a time", { orderNumber: "APX-1", status: "SHIPPED", trackingHistory: [{ ...step, createdAt: "soon" }] }],
+    ["a step with an unknown status", { orderNumber: "APX-1", status: "SHIPPED", trackingHistory: [{ ...step, status: "LOST" }] }],
+    ["no history list", { orderNumber: "APX-1", status: "SHIPPED" }],
+  ])("refuses a view with %s instead of showing it", (_, data) => {
+    expect(() => parseOrderTracking(data)).toThrow(OrderFormatError);
   });
 });

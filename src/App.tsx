@@ -91,12 +91,15 @@ function Router() {
   }
 
   // One shell for every shopper page, so the header and the guest-cart report persist across page changes.
+  // The listing keeps its page across its own URL changes, so focus and scroll survive filtering. Checkout and the
+  // account keep theirs across query changes (a checkout step, an order to open), so in-progress state is never lost.
+  const pathname = route.split("?")[0] || "/";
+  const pageKey = root === "shop" ? "/shop" : root === "checkout" || root === "account" ? pathname : route;
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
       <GuestCartMerge />
-      {/* The listing keeps its page across its own URL changes, so focus and scroll survive filtering. */}
-      <main key={root === "shop" ? "/shop" : route} className="flex-1 animate-fade-in">
+      <main key={pageKey} className="flex-1 animate-fade-in">
         {page}
       </main>
       {!isAdmin && <Footer />}

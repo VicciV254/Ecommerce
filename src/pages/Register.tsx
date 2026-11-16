@@ -1,14 +1,16 @@
 import { FormEvent, useState } from 'react';
-import { Link, navigate } from '../router';
+import { Link, navigate, parseRoute, useRoute } from '../router';
 import { useAuth } from '../contexts/AuthContext';
-import { authAPI } from '../api/auth';
 import { PasswordInput } from '../components/PasswordInput';
 import { AuthLayout, authStyles } from '../components/AuthLayout';
+import { loginRoute, safeReturnTo, verifyEmailRoute } from '../store/returnTo';
 
 /** The API's minimum password length. */
 const PASSWORD_MIN = 8;
 
 export default function Register() {
+  // Where the shopper was going (for example checkout): carried through verification and sign-in, checked at each step.
+  const returnTo = safeReturnTo(parseRoute(useRoute()).params.get('returnTo'));
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -18,9 +20,7 @@ export default function Register() {
     promotionalEmails: false,
   });
   const [loading, setLoading] = useState(false);
-  const [resending, setResending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const { register } = useAuth();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -36,51 +36,26 @@ export default function Register() {
     setLoading(true);
     setError(null);
 
-    const success = await register(formData);
-    if (success) {
-      setNotice('Account created. Enter the OTP sent to your email to verify your account.');
-      window.setTimeout(() => navigate(`/verify-email?email=${encodeURIComponent(formData.email)}`), 700);
+    const outcome = await register(formData);
+    setLoading(false);
+    if (outcome === 'signed-in') {
+      // Already verified and signed in: straight back to where the shopper was going; Back skips this page.
+      navigate(returnTo, { replace: true });
+    } else if (outcome === 'verify') {
+      // The account exists now; Back from verification leaves the flow rather than showing this form again.
+      navigate(verifyEmailRoute(formData.email, returnTo), { replace: true });
     } else {
       setError('Registration failed. Email may already be in use.');
-    }
-
-    setLoading(false);
-  };
-
-  const resendVerification = async () => {
-    setResending(true);
-    setError(null);
-    try {
-      const { data } = await authAPI.resendVerification(formData.email);
-      if (data?.verificationEmailSent === false) throw new Error('Email not sent');
-      setNotice('A fresh OTP has been sent. The previous code is now void.');
-    } catch {
-      setError('Could not resend OTP. Please try again.');
-    } finally {
-      setResending(false);
     }
   };
 
   return (
     <AuthLayout
       title="Create your account"
-      intro={<>Or <Link to="/login" className={authStyles.link}>sign in to an existing account</Link></>}
+      intro={<>Already have an account? <Link to={loginRoute(returnTo)} className={authStyles.link}>Sign in</Link></>}
     >
       <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
         {error && <p role="alert" className={`${authStyles.error} text-center`}>{error}</p>}
-        {notice && (
-          <div role="status" className={`${authStyles.success} text-center`}>
-            {notice}
-            <div className="mt-1 flex flex-wrap justify-center gap-x-4">
-              <button type="button" onClick={() => navigate(`/verify-email?email=${encodeURIComponent(formData.email)}`)} className="inline-flex min-h-[44px] items-center font-bold underline underline-offset-4">
-                Enter OTP
-              </button>
-              <button type="button" onClick={resendVerification} disabled={resending} className="inline-flex min-h-[44px] items-center font-bold underline underline-offset-4 disabled:cursor-not-allowed">
-                {resending ? 'Sending...' : 'Resend OTP'}
-              </button>
-            </div>
-          </div>
-        )}
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label htmlFor="firstName" className={authStyles.label}>First name</label>

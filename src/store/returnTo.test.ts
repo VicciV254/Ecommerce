@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { CHECKOUT_SIGN_IN, MAX_RETURN_LENGTH, loginRoute, safeReturnTo } from "./returnTo";
+import {
+  CHECKOUT_REGISTER,
+  CHECKOUT_SIGN_IN,
+  MAX_RETURN_LENGTH,
+  loginRoute,
+  registerRoute,
+  safeReturnTo,
+  verifiedSignInRoute,
+  verifyEmailRoute,
+} from "./returnTo";
 
 describe("sign-in return routes", () => {
   it.each([
@@ -25,4 +34,26 @@ describe("sign-in return routes", () => {
     expect(loginRoute("/login?returnTo=/cart")).toBe("/login");
     expect(loginRoute("//evil.example")).toBe("/login");
   });
+
+  it("carries a safe route from registration through verification to sign-in", () => {
+    const fromRegister = registerRoute("/checkout");
+    expect(fromRegister).toBe(CHECKOUT_REGISTER);
+    expect(fromRegister).toBe("/register?returnTo=%2Fcheckout");
+    const verify = new URLSearchParams(verifyEmailRoute("new+shopper@example.test", "/checkout?step=delivery").split("?")[1]);
+    expect(Object.fromEntries(verify)).toEqual({ email: "new+shopper@example.test", returnTo: "/checkout?step=delivery" });
+    const signIn = verifiedSignInRoute("new+shopper@example.test", "/checkout");
+    expect(signIn.startsWith("/login?")).toBe(true);
+    expect(Object.fromEntries(new URLSearchParams(signIn.split("?")[1]))).toEqual({
+      verified: "1", email: "new+shopper@example.test", returnTo: "/checkout",
+    });
+  });
+
+  it.each(["//evil.example/checkout", "https://evil.example", "/admin", "/login", "/register", "/verify-email", "/"])(
+    "drops returnTo=%s at every hop instead of carrying it",
+    (route) => {
+      expect(registerRoute(route)).toBe("/register");
+      expect(verifyEmailRoute("a@example.test", route)).toBe("/verify-email?email=a%40example.test");
+      expect(verifiedSignInRoute("a@example.test", route)).toBe("/login?verified=1&email=a%40example.test");
+    },
+  );
 });

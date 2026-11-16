@@ -8,10 +8,10 @@ import { formatDateTime, formatKES } from "../utils/format";
 
 type HeadingLevel = 2 | 3 | 4;
 
-const labelClass = "block text-[11px] font-bold uppercase tracking-[0.12em] text-brand-primary";
-const fieldClass = "mt-1.5 min-h-11 w-full min-w-0 rounded-sm border border-light-gray bg-off-white px-3 py-2.5 text-base focus:border-brand-secondary aria-[invalid=true]:border-error";
-const primaryClass = "min-h-11 w-full rounded-sm bg-brand-primary px-5 py-3 text-xs font-bold uppercase tracking-[0.12em] text-white hover:bg-brand-secondary hover:text-brand-primary aria-disabled:cursor-not-allowed aria-disabled:opacity-60";
-const secondaryClass = "min-h-11 rounded-sm border border-brand-primary px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider text-brand-primary hover:bg-brand-primary hover:text-white aria-disabled:cursor-not-allowed aria-disabled:opacity-50";
+const labelClass = "block text-sm font-semibold text-navy-900";
+const fieldClass = "mt-1 min-h-[44px] w-full min-w-0 rounded-sm border border-control bg-surface px-3 py-2 text-navy-900 aria-[invalid=true]:border-2 aria-[invalid=true]:border-error";
+const primaryClass = "min-h-[48px] w-full rounded-sm bg-navy-900 px-5 py-3 text-sm font-bold uppercase tracking-[0.12em] text-white transition-colors duration-(--motion-feedback) hover:bg-gold-500 hover:text-navy-900 aria-disabled:cursor-not-allowed aria-disabled:bg-surface-soft aria-disabled:text-muted";
+const secondaryClass = "min-h-[44px] rounded-sm border border-navy-900 px-4 py-2 text-sm font-semibold text-navy-900 transition-colors duration-(--motion-feedback) hover:bg-surface-soft aria-disabled:cursor-not-allowed aria-disabled:border-control aria-disabled:text-muted";
 const columnsClass = "mt-4 grid grid-cols-1 gap-4 @lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)] @lg:items-start @lg:gap-6";
 
 const BUSY_TEXT: Record<PaymentBusy, string> = {
@@ -57,15 +57,15 @@ function PanelFrame({ title, level, busy, notice, children }: {
   const status = busy ? BUSY_TEXT[busy] : notice && notice.tone !== "error" ? notice.text : "";
   return (
     <section aria-labelledby={titleId} onFocus={focus.onFocus} onBlur={focus.onBlur}
-      className="@container rounded-lg border border-light-gray bg-white p-4 text-left text-sm text-charcoal [overflow-wrap:anywhere] sm:p-5">
-      <Heading id={titleId} ref={focus.heading} tabIndex={-1} className="text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">
+      className="@container rounded-lg border border-divider bg-surface p-4 text-left text-navy-800 shadow-card [overflow-wrap:anywhere] sm:p-6">
+      <Heading id={titleId} ref={focus.heading} tabIndex={-1} className="type-h3 text-navy-900">
         {title}
       </Heading>
       {children}
       {notice?.tone === "error" && (
-        <p role="alert" className="mt-3 rounded-md border border-error/30 bg-error/5 p-3 font-semibold text-error">{notice.text}</p>
+        <p role="alert" className="mt-3 rounded-md border border-error/40 bg-error-tint p-3 font-semibold text-error">{notice.text}</p>
       )}
-      <p role="status" className={`text-xs text-charcoal ${status ? "mt-3" : ""}`}>{status}</p>
+      <p role="status" className={`text-sm text-navy-800 ${status ? "mt-3" : ""}`}>{status}</p>
     </section>
   );
 }
@@ -89,7 +89,7 @@ function LoadFailure({ message, busy, onRetry }: { message: string | null; busy:
   if (!message) return null;
   return (
     <div className="mt-3 space-y-3">
-      <p role="alert" className="rounded-md border border-error/30 bg-error/5 p-3 font-semibold text-error">{message}</p>
+      <p role="alert" className="rounded-md border border-error/40 bg-error-tint p-3 font-semibold text-error">{message}</p>
       <ActionButton busy={busy} onPress={onRetry}>Try again</ActionButton>
     </div>
   );
@@ -98,14 +98,14 @@ function LoadFailure({ message, busy, onRetry }: { message: string | null; busy:
 function EnvironmentLabel({ environment }: { environment: PaymentEnvironment | null }) {
   if (environment === "sandbox") {
     return (
-      <p className="rounded-md border-2 border-warning bg-warning/10 px-3 py-2 text-sm font-bold text-charcoal">
+      <p className="rounded-md border-2 border-warning bg-warning-tint px-3 py-2 text-sm font-bold text-navy-900">
         Sandbox test: real funds may be deducted
       </p>
     );
   }
   if (environment === "production") {
     return (
-      <p className="inline-block rounded-full border border-success/40 bg-success/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-success">
+      <p className="inline-block rounded-full border border-success/40 bg-success-tint px-3 py-1 text-sm font-semibold text-success">
         Live M-Pesa payment
       </p>
     );
@@ -118,29 +118,29 @@ function Amount({ id, label, amount }: { id?: string; label: string; amount: num
     <div id={id}>
       <p className={labelClass}>{label}</p>
       <p className="mt-1 text-2xl font-semibold tabular-nums text-navy-900">{formatKES(amount)}</p>
-      <p className="text-xs text-gray-600">The saved total for this order.</p>
+      <p className="text-sm text-muted">The saved total for this order.</p>
     </div>
   );
 }
 
 function AttemptDetails({ attempt }: { attempt: PaymentAttempt }) {
   return (
-    <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5">
-      <dt className="text-gray-600">Amount</dt>
-      <dd className="font-semibold text-brand-primary">{formatKES(attempt.amount)}</dd>
-      <dt className="text-gray-600">Phone</dt>
+    <dl className="grid grid-cols-[fit-content(50%)_minmax(0,1fr)] gap-x-4 gap-y-1.5">
+      <dt className="text-muted">Amount</dt>
+      <dd className="font-semibold text-navy-900">{formatKES(attempt.amount)}</dd>
+      <dt className="text-muted">Phone</dt>
       <dd>{attempt.phoneMasked}</dd>
       {attempt.receiptNumber && (
         <>
-          <dt className="text-gray-600">M-Pesa receipt</dt>
+          <dt className="text-muted">M-Pesa receipt</dt>
           <dd className="font-mono font-semibold">{attempt.receiptNumber}</dd>
         </>
       )}
-      <dt className="text-gray-600">Requested</dt>
+      <dt className="text-muted">Requested</dt>
       <dd>{formatDateTime(attempt.createdAt)}</dd>
       {attempt.confirmedAt && (
         <>
-          <dt className="text-gray-600">Confirmed</dt>
+          <dt className="text-muted">Confirmed</dt>
           <dd>{formatDateTime(attempt.confirmedAt)}</dd>
         </>
       )}
@@ -150,10 +150,10 @@ function AttemptDetails({ attempt }: { attempt: PaymentAttempt }) {
 
 function FailedAttempt({ attempt }: { attempt: PaymentAttempt }) {
   return (
-    <div className="rounded-md border border-error/30 bg-error/5 p-3">
+    <div className="rounded-md border border-error/40 bg-error-tint p-3">
       <p className="font-semibold text-error">Payment not completed</p>
       <p className="mt-1">{attempt.message}</p>
-      <p className="mt-1 text-xs text-gray-600">Requested {formatDateTime(attempt.createdAt)} for {attempt.phoneMasked}.</p>
+      <p className="mt-1 text-sm text-muted">Requested {formatDateTime(attempt.createdAt)} for {attempt.phoneMasked}.</p>
     </div>
   );
 }
@@ -170,12 +170,12 @@ const STAGE_TITLES: Record<CustomerStage, string> = {
 };
 
 const STAGE_TONES: Record<CustomerStage, string> = {
-  submitting: "border-ocean-blue/30 bg-ocean-blue/10",
-  waiting: "border-ocean-blue/30 bg-ocean-blue/10",
-  unconfirmed: "border-warning/40 bg-warning/10",
-  verifying: "border-warning/40 bg-warning/10",
-  "received-review": "border-warning/40 bg-warning/10",
-  paid: "border-success/40 bg-success/10",
+  submitting: "border-info/30 bg-info-tint",
+  waiting: "border-info/30 bg-info-tint",
+  unconfirmed: "border-warning/40 bg-warning-tint",
+  verifying: "border-warning/40 bg-warning-tint",
+  "received-review": "border-warning/40 bg-warning-tint",
+  paid: "border-success/40 bg-success-tint",
 };
 
 function stageText(attempt: PaymentAttempt, stage: CustomerStage, orderStatus: OrderStatus): string {
@@ -262,10 +262,10 @@ function CustomerPayment({ ownerId, orderId, defaultPhone, level, onOrderChange 
               onChange={(event) => { setPhone(event.target.value); payment.editPhone(); }}
               className={fieldClass}
             />
-            <p id={hintId} className="mt-1 text-xs text-gray-600">For example 0712 345 678 or +254 712 345 678.</p>
-            {payment.phoneError && <p id={errorId} role="alert" className="mt-1.5 text-xs font-semibold text-error">{payment.phoneError}</p>}
+            <p id={hintId} className="mt-1 text-sm text-muted">For example 0712 345 678 or +254 712 345 678.</p>
+            {payment.phoneError && <p id={errorId} role="alert" className="mt-1.5 text-sm font-semibold text-error">{payment.phoneError}</p>}
           </div>
-          <p id={pinId} className="rounded-md border border-ocean-blue/30 bg-ocean-blue/10 p-3 text-xs font-semibold text-ocean-blue-dark">
+          <p id={pinId} className="rounded-md border border-info/30 bg-info-tint p-3 text-sm font-semibold text-info">
             Enter your M-Pesa PIN only on your phone, in the M-Pesa prompt. Never type it on this website.
           </p>
           <button type="submit" aria-disabled={busy} aria-describedby={`${amountId} ${pinId}`} className={primaryClass}>
@@ -281,8 +281,8 @@ function CustomerPayment({ ownerId, orderId, defaultPhone, level, onOrderChange 
           <Amount label="Order total" amount={overview.order.total} />
           <EnvironmentLabel environment={overview.environment} />
         </div>
-        <div className="rounded-md border border-warning/40 bg-warning/10 p-3">
-          <p className="font-semibold text-brand-primary">Your payment request has not been confirmed</p>
+        <div className="rounded-md border border-warning/40 bg-warning-tint p-3">
+          <p className="font-semibold text-navy-900">Your payment request has not been confirmed</p>
           <p className="mt-1">It may have reached M-Pesa, so do not start another payment for this order.</p>
           <p className="mt-1">
             {view.retryable
@@ -309,7 +309,7 @@ function CustomerPayment({ ownerId, orderId, defaultPhone, level, onOrderChange 
         </div>
         <div className="space-y-3">
           <div aria-live="polite" className={`rounded-md border p-3 ${STAGE_TONES[stage]}`}>
-            <p className="font-semibold text-brand-primary">{inactive ? "Payment pending on an inactive order" : STAGE_TITLES[stage]}</p>
+            <p className="font-semibold text-navy-900">{inactive ? "Payment pending on an inactive order" : STAGE_TITLES[stage]}</p>
             <p className="mt-1">{inactive
               ? "This order is no longer awaiting payment on an active reservation. Do not approve an outstanding prompt. Check its outcome; any late payment needs staff review."
               : stageText(attempt, stage, overview.order.status)}</p>
@@ -319,7 +319,7 @@ function CustomerPayment({ ownerId, orderId, defaultPhone, level, onOrderChange 
           </div>
           {open && <ActionButton busy={busy} onPress={() => void payment.check(attempt)}>Check payment status</ActionButton>}
           {open && payment.autoStopped && (
-            <p className="text-xs text-gray-600">Automatic checks have stopped. Use Check payment status to ask again.</p>
+            <p className="text-sm text-muted">Automatic checks have stopped. Use Check payment status to ask again.</p>
           )}
         </div>
       </div>
@@ -333,8 +333,8 @@ function CustomerPayment({ ownerId, orderId, defaultPhone, level, onOrderChange 
         </div>
         <div className="space-y-3">
           {view.failed && <FailedAttempt attempt={view.failed} />}
-          <div className="rounded-md border border-light-gray bg-off-white p-3">
-            <p className="font-semibold text-brand-primary">{view.waiting ? "Try again shortly" : "M-Pesa payment unavailable"}</p>
+          <div className="rounded-md border border-divider bg-surface-page p-3">
+            <p className="font-semibold text-navy-900">{view.waiting ? "Try again shortly" : "M-Pesa payment unavailable"}</p>
             <p className="mt-1">{view.message}</p>
           </div>
           {view.waiting && <ActionButton busy={busy} onPress={() => void payment.refresh(true)}>Check again</ActionButton>}
@@ -388,16 +388,16 @@ function StaffPayment({ orderId, canCheck, level, attemptActions }: {
     body = (
       <div className="mt-3 space-y-4">
         <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 @3xl:grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)]">
-          <dt className="text-gray-600">Order total</dt>
+          <dt className="text-muted">Order total</dt>
           <dd className="font-semibold">{formatKES(order.total)}</dd>
-          <dt className="text-gray-600">Payment status</dt>
+          <dt className="text-muted">Payment status</dt>
           <dd className="font-semibold">{order.paymentStatus}</dd>
-          <dt className="text-gray-600">Reservation</dt>
+          <dt className="text-muted">Reservation</dt>
           <dd>{order.reservationStatus}{order.reservationExpiresAt ? ` until ${formatDateTime(order.reservationExpiresAt)}` : ""}</dd>
-          <dt className="text-gray-600">Environment</dt>
+          <dt className="text-muted">Environment</dt>
           <dd>{overview.environment ?? "Not configured"}</dd>
         </dl>
-        <p className="rounded-md bg-off-white p-3 text-xs">
+        <p className="rounded-md bg-surface-page p-3 text-sm">
           {overview.available ? "The customer can request a new M-Pesa prompt." : `No new prompt: ${overview.message ?? "not available"}`}
         </p>
         {overview.attempts.length ? (
@@ -410,7 +410,7 @@ function StaffPayment({ orderId, canCheck, level, attemptActions }: {
         ) : (
           <p>No M-Pesa attempts for this order.</p>
         )}
-        {!canCheck && checkable && <p id={noteId} className="text-xs text-gray-600">Your role can view payments but cannot request M-Pesa checks.</p>}
+        {!canCheck && checkable && <p id={noteId} className="text-sm text-muted">Your role can view payments but cannot request M-Pesa checks.</p>}
         <ActionButton busy={busy} onPress={() => void payment.refresh(true)}>Refresh payments</ActionButton>
       </div>
     );
@@ -429,14 +429,14 @@ function StaffAttempt({ attempt, canCheck, busy, noteId, onCheck, extra }: {
 }) {
   const guidance = staffGuidance(attempt);
   return (
-    <li className="rounded-md border border-light-gray p-3 text-xs">
+    <li className="rounded-md border border-divider p-3 text-sm">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="text-sm font-semibold text-brand-primary">{STAFF_STAGES[attemptStage(attempt)]}</p>
-        <p className="font-mono text-[11px] text-gray-600">{attempt.status} · {attempt.environment}</p>
+        <p className="text-sm font-semibold text-navy-900">{STAFF_STAGES[attemptStage(attempt)]}</p>
+        <p className="font-mono text-sm text-muted">{attempt.status} · {attempt.environment}</p>
       </div>
-      {attempt.reviewRequired && <p className="mt-2 rounded-sm border border-warning/40 bg-warning/10 px-2 py-1 font-bold text-charcoal">Review required</p>}
+      {attempt.reviewRequired && <p className="mt-2 rounded-sm border border-warning/40 bg-warning-tint px-2 py-1 font-bold text-navy-900">Review required</p>}
       <div className="mt-2"><AttemptDetails attempt={attempt} /></div>
-      <p className="mt-2 text-gray-600">
+      <p className="mt-2 text-muted">
         Updated {formatDateTime(attempt.updatedAt)}{attempt.nextCheckAt ? ` · next check from ${formatDateTime(attempt.nextCheckAt)}` : ""}
       </p>
       {guidance && <p className="mt-2 font-semibold">{guidance}</p>}

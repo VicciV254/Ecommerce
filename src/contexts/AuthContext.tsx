@@ -10,6 +10,7 @@ import {
 import { isAxiosError, isCancel } from 'axios';
 import {
   authAPI,
+  isAddress,
   isUser,
   type Address,
   type AuthSession,
@@ -17,6 +18,7 @@ import {
   type RegisterData,
   type User,
 } from '../api/auth';
+import { clearAddressDraft } from '../store/addressModel';
 import { markGuestMerge } from '../store/guestMerge';
 import {
   CUSTOMER_SESSION_KEYS,
@@ -30,14 +32,18 @@ interface AuthContextValue {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<{ ok: boolean; error?: string; requiresOtp?: boolean; email?: string }>;
-  register: (data: RegisterData) => Promise<boolean>;
+  register: (data: RegisterData) => Promise<RegisterOutcome>;
   logout: () => void;
   updateProfile: (data: Partial<User>) => Promise<void>;
-  addAddress: (address: Omit<Address, 'id'>) => Promise<void>;
+  /** Saves a new address and resolves to the server's record of it. */
+  addAddress: (address: Omit<Address, 'id'>) => Promise<Address>;
   updateAddress: (id: string, address: Partial<Address>) => Promise<void>;
   deleteAddress: (id: string) => Promise<void>;
   updatePromotionalEmails: (enabled: boolean) => Promise<void>;
 }
+
+/** A new account is either signed in at once (already verified) or waits for its email to be verified. */
+export type RegisterOutcome = 'signed-in' | 'verify' | 'failed';
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -135,21 +141,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const register = useCallback(async (formData: RegisterData) => {
+  const register = useCallback(async (formData: RegisterData): Promise<RegisterOutcome> => {
     try {
       const { data } = await authAPI.register(formData);
-      if (data.user.emailVerified) {
-        establishSession(data);
-        setUser(data.user);
-      }
-      return true;
+      if (!data.user.emailVerified) return 'verify';
+      establishSession(data);
+      setUser(data.user);
+      return 'signed-in';
     } catch {
-      return false;
+      return 'failed';
     }
   }, []);
 
   const logout = useCallback(() => {
     authAPI.logout().catch(() => undefined);
+    // Typed but unsaved checkout details belong to this account only.
+    clearAddressDraft();
     clearSession();
     setUser(null);
   }, []);
@@ -165,12 +172,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const addAddress = useCallback(async (address: Omit<Address, 'id'>) => {
     const { data } = await authAPI.addAddress(address);
+    if (!isAddress(data)) throw new Error('The saved address was not in the expected format.');
     setUser((prev) => {
       if (!prev) return prev;
       const next = { ...prev, addresses: [...(prev.addresses ?? []), data] };
       persistUser(next);
       return next;
     });
+    return data;
   }, []);
 
   const updateAddress = useCallback(async (id: string, address: Partial<Address>) => {

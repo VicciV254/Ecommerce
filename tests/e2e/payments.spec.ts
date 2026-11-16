@@ -79,7 +79,7 @@ test("a confirmed prompt asks for the saved total once and shows payment only af
   await panel.getByRole("textbox", { name: "M-Pesa phone number" }).fill("0712 345 678");
   await panel.getByRole("button", { name: "Send M-Pesa prompt" }).click();
   await expect(panel.getByText("Approve the payment on your phone")).toBeVisible();
-  await expect(page.getByText("Pending · not paid")).toBeVisible();
+  await expect(page.getByText(/^Unpaid — held until /)).toBeVisible();
   expect(prompts).toEqual([{
     key: expect.stringMatching(REQUEST_KEY), authorization: `Bearer ${CUSTOMER_TOKEN}`, body: { orderId: placed.id, phone: "254712345678" },
   }]);

@@ -323,3 +323,44 @@ describe("order actions, returns and refunds", () => {
     expect(mocks.orders.getMyOrders).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("order links", () => {
+  const at = (hash: string) => window.history.replaceState(null, "", hash);
+
+  it("opens the order named in the address once the list loads, then drops it from the address", async () => {
+    at(`#/account/orders?order=${legacy.id}`);
+    render(<AccountOrders />);
+    expect(screen.getByRole("heading", { level: 1, name: "Orders and receipts" })).toBeTruthy();
+    const receipt = await screen.findByRole("dialog", { name: "Receipt Details" }, WAIT);
+    expect(within(receipt).getByText(legacy.orderNumber)).toBeTruthy();
+    expect(window.location.hash).toBe("#/account/orders");
+    expect(screen.queryByText("That order isn't in your account")).toBeNull();
+  });
+
+  it("says an order is not in this account instead of opening anything, so another account's order never shows", async () => {
+    at("#/account/orders?order=order-of-another-account");
+    render(<AccountOrders />);
+    expect(await screen.findByText("That order isn't in your account", undefined, WAIT)).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(window.location.hash).toBe("#/account/orders");
+    // Only this account's own list was asked for; the named order was never requested on its own.
+    expect(mocks.orders.get).not.toHaveBeenCalled();
+    expect(screen.getAllByRole("button", { name: "Details" })).toHaveLength(2);
+  });
+
+  it("keeps one H1 while loading, on failure and when there are no orders", async () => {
+    at("#/account/orders");
+    let fail!: (error: unknown) => void;
+    mocks.orders.getMyOrders.mockReturnValueOnce(new Promise((_, reject) => { fail = reject; })).mockResolvedValue(page([]));
+    render(<AccountOrders />);
+    expect(screen.getAllByRole("heading", { level: 1 }).map((heading) => heading.textContent)).toEqual(["Orders and receipts"]);
+    expect(screen.getByText("Loading your orders…")).toBeTruthy();
+    await act(async () => fail(new AxiosError("offline", "ERR_NETWORK")));
+    expect(await screen.findByRole("heading", { level: 2, name: "Orders are unavailable" })).toBeTruthy();
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Try Again" }));
+    expect(await screen.findByText(/No orders yet\./, undefined, WAIT)).toBeTruthy();
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole("link", { name: "Start shopping" }).getAttribute("href")).toBe("#/shop");
+  });
+});

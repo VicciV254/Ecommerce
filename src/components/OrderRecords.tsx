@@ -24,24 +24,24 @@ export function Disclosure({ title, summary, defaultOpen = false, id, children }
     if (defaultOpen || (typeof window.matchMedia === "function" && window.matchMedia(OPEN_FROM).matches)) details.open = true;
   }, [defaultOpen]);
   return (
-    <details ref={ref} id={id} className="group rounded-md border border-light-gray bg-white">
-      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-2 [&::-webkit-details-marker]:hidden">
-        <span className="min-w-0 text-[11px] font-bold uppercase tracking-[0.12em] text-brand-primary">
+    <details ref={ref} id={id} className="group rounded-md border border-divider bg-surface">
+      <summary className="flex min-h-[44px] cursor-pointer list-none items-center justify-between gap-3 rounded-md px-4 py-2 [&::-webkit-details-marker]:hidden">
+        <span className="min-w-0 text-sm font-semibold text-navy-900">
           {title}
-          {summary && <span className="ml-2 font-semibold normal-case tracking-normal text-gray-600">{summary}</span>}
+          {summary && <span className="ml-2 font-normal text-muted">{summary}</span>}
         </span>
-        <svg aria-hidden="true" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 shrink-0 text-gray-600 transition-transform group-open:rotate-180 motion-reduce:transition-none">
+        <svg aria-hidden="true" viewBox="0 0 20 20" fill="currentColor" className="size-5 shrink-0 text-navy-800 transition-transform duration-(--motion-feedback) group-open:rotate-180 motion-reduce:transition-none">
           <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.17l3.71-3.94a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clipRule="evenodd" />
         </svg>
       </summary>
-      <div className="border-t border-light-gray px-4 py-3 text-sm text-charcoal [overflow-wrap:anywhere]">{children}</div>
+      <div className="border-t border-divider px-4 py-3 text-sm text-navy-800 [overflow-wrap:anywhere]">{children}</div>
     </details>
   );
 }
 
 export function OrderStatusBadge({ order }: { order: Pick<Order, "status" | "deliveryMethod"> }) {
   return (
-    <span className={`inline-block rounded-full px-3 py-1 text-xs font-semibold ${ORDER_STATUS_TONES[order.status]}`}>
+    <span className={`inline-block rounded-full px-3 py-1 text-sm font-semibold ${ORDER_STATUS_TONES[order.status]}`}>
       {orderStatusLabel(order)}
     </span>
   );
@@ -62,7 +62,7 @@ export function OrderTotals({ order }: { order: Pick<Order, "subtotal" | "discou
           <dt>{label}:</dt>{" "}<dd className="text-right">{value}</dd>
         </div>
       ))}
-      <div className="contents font-bold text-brand-primary">
+      <div className="contents font-bold text-navy-900">
         <dt>Total:</dt>{" "}<dd className="text-right">{formatKES(order.total)}</dd>
       </div>
     </dl>
@@ -92,10 +92,10 @@ export function OrderProgress({ order, fulfilment }: {
     <ol aria-label="Order progress" className="space-y-2">
       {fulfilmentSteps(order, fulfilment).map((step) => (
         <li key={step.label} className="flex items-start gap-3">
-          <span aria-hidden="true" className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${step.at ? "bg-success" : "border border-gray-400 bg-white"}`} />
+          <span aria-hidden="true" className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${step.at ? "bg-success" : "border border-control bg-surface"}`} />
           <span className="min-w-0">
-            <span className={`block text-sm ${step.at ? "font-semibold text-brand-primary" : "text-gray-600"}`}>{step.label}</span>
-            <span className="block text-xs text-gray-600">{step.at ? formatDateTime(step.at) : "Not yet"}</span>
+            <span className={`block text-sm ${step.at ? "font-semibold text-navy-900" : "text-muted"}`}>{step.label}</span>
+            <span className="block text-sm text-muted">{step.at ? formatDateTime(step.at) : "Not yet"}</span>
           </span>
         </li>
       ))}
@@ -108,18 +108,18 @@ export function OrderTimeline({ events, label = "Order history" }: {
   events: readonly (TrackingEvent & { reason?: string | null })[];
   label?: string;
 }) {
-  if (!events.length) return <p className="text-sm text-gray-600">No updates have been recorded yet.</p>;
+  if (!events.length) return <p className="text-sm text-muted">No updates have been recorded yet.</p>;
   return (
     <ol aria-label={label} className="space-y-3">
       {events.map((event) => (
-        <li key={event.id} className="border-l-2 border-light-gray pl-3">
-          <p className="text-sm font-semibold text-brand-primary">{event.description}</p>
-          <p className="text-xs text-gray-600">
+        <li key={event.id} className="border-l-2 border-divider pl-3">
+          <p className="text-sm font-semibold text-navy-900">{event.description}</p>
+          <p className="text-sm text-muted">
             {formatDateTime(event.createdAt)}
             {event.actorType ? ` · ${ACTOR_LABELS[event.actorType]}` : ""}
             {event.location ? ` · ${event.location}` : ""}
           </p>
-          {event.reason && <p className="mt-1 text-xs text-charcoal">Reason: {event.reason}</p>}
+          {event.reason && <p className="mt-1 text-sm text-navy-800">Reason: {event.reason}</p>}
         </li>
       ))}
     </ol>

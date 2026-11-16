@@ -1,5 +1,13 @@
-import { FormEvent, useState, useEffect } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
+import { fieldClass, fieldLabelClass } from '../components/AddressForm';
 import { useAuth } from '../contexts/AuthContext';
+import { useEntryFocus } from '../router';
+
+const panelClass = 'rounded-lg bg-surface p-4 shadow-card sm:p-6';
+const saveClass =
+  'inline-flex min-h-[48px] items-center justify-center rounded-sm bg-navy-900 px-6 text-sm font-bold uppercase tracking-[0.12em] text-white transition-colors duration-(--motion-feedback) hover:bg-gold-500 hover:text-navy-900 disabled:cursor-not-allowed disabled:bg-surface-soft disabled:text-muted';
+
+type Message = { tone: 'success' | 'error'; text: string };
 
 export default function AccountProfile() {
   const { user, updateProfile, updatePromotionalEmails } = useAuth();
@@ -10,10 +18,12 @@ export default function AccountProfile() {
     profileImage: user?.profileImage ?? '',
   });
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<Message | null>(null);
   const [promotionalEmails, setPromotionalEmails] = useState(user?.promotionalEmails ?? false);
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEntryFocus(heading);
 
-  // Sync promotionalEmails when user data changes
+  // Follow the saved preference when the profile is refreshed.
   useEffect(() => {
     if (user?.promotionalEmails !== undefined) {
       setPromotionalEmails(user.promotionalEmails);
@@ -41,9 +51,9 @@ export default function AccountProfile() {
     setMessage(null);
     try {
       await updateProfile(formData);
-      setMessage('Profile updated successfully.');
+      setMessage({ tone: 'success', text: 'Profile updated.' });
     } catch {
-      setMessage('Failed to update profile.');
+      setMessage({ tone: 'error', text: 'Your profile could not be updated. Try again.' });
     } finally {
       setSaving(false);
     }
@@ -55,123 +65,93 @@ export default function AccountProfile() {
     try {
       await updatePromotionalEmails(newValue);
       setPromotionalEmails(newValue);
-      setMessage('Email preferences updated.');
+      setMessage({ tone: 'success', text: 'Email preferences updated.' });
     } catch {
-      setMessage('Failed to update email preferences.');
+      setMessage({ tone: 'error', text: 'Your email preferences could not be updated. Try again.' });
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div>
-      <div className="mb-6 rounded-lg bg-brand-primary p-5 text-white">
-        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-brand-secondary">Account</p>
-        <h2 className="mt-1 font-display text-2xl">Profile Settings</h2>
+    <div className="space-y-6">
+      <div>
+        <h1 ref={heading} tabIndex={-1} className="type-h1 text-navy-900">Profile</h1>
+        <p className="mt-1 text-navy-800">Your name, phone number and email preferences.</p>
       </div>
-      <form onSubmit={handleSubmit} className="max-w-md space-y-4">
-        <div className="rounded-md border border-brand-secondary/30 bg-surface-soft p-4">
-          <div className="flex items-center gap-4">
-            {formData.profileImage ? (
-              <img src={formData.profileImage} alt="" className="h-20 w-20 rounded-full object-cover ring-2 ring-brand-secondary" />
-            ) : (
-              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-brand-secondary/20 text-2xl font-bold text-brand-primary">
-                {user?.firstName?.[0] ?? 'U'}
-              </div>
-            )}
-            <div className="min-w-0 flex-1">
-              <label htmlFor="profile-photo" className="block text-sm font-semibold text-brand-primary mb-1">Profile Photo</label>
-              <input id="profile-photo" type="file" accept="image/*" onChange={handlePhotoFile} className="block w-full max-w-full text-sm" />
-            </div>
+      <form onSubmit={handleSubmit} className={`max-w-2xl space-y-4 ${panelClass}`}>
+        <div className="flex flex-wrap items-center gap-4">
+          {formData.profileImage ? (
+            <img src={formData.profileImage} alt="" className="size-20 rounded-full object-cover" />
+          ) : (
+            <span aria-hidden="true" className="flex size-20 items-center justify-center rounded-full bg-surface-soft text-2xl font-semibold text-navy-900">
+              {user?.firstName?.[0] ?? 'A'}
+            </span>
+          )}
+          <div className="min-w-0 flex-1 basis-48">
+            <label htmlFor="profile-photo" className={fieldLabelClass}>Profile photo</label>
+            <input id="profile-photo" type="file" accept="image/*" onChange={handlePhotoFile} className="mt-1 block min-h-[44px] w-full max-w-full text-sm text-navy-800" />
           </div>
         </div>
-
-        <div>
-          <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">
-            First Name
-          </label>
-          <input
-            id="firstName"
-            name="firstName"
-            type="text"
-            value={formData.firstName}
-            onChange={handleChange}
-            className="w-full rounded-md border border-light-gray bg-off-white p-2 focus:border-brand-secondary focus:outline-none"
-            required
-          />
-        </div>
-        <div>
-          <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-1">
-            Last Name
-          </label>
-          <input
-            id="lastName"
-            name="lastName"
-            type="text"
-            value={formData.lastName}
-            onChange={handleChange}
-            className="w-full rounded-md border border-light-gray bg-off-white p-2 focus:border-brand-secondary focus:outline-none"
-            required
-          />
-        </div>
-        <div>
-          <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
-            Phone
-          </label>
-          <input
-            id="phone"
-            name="phone"
-            type="tel"
-            value={formData.phone}
-            onChange={handleChange}
-            className="w-full rounded-md border border-light-gray bg-off-white p-2 focus:border-brand-secondary focus:outline-none"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-          <input
-            type="email"
-            value={user?.email ?? ''}
-            disabled
-            className="w-full rounded-md border border-light-gray bg-surface-soft p-2 text-muted"
-          />
-        </div>
-        <div className="rounded-md border border-brand-secondary/30 bg-surface-soft p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-semibold text-brand-primary">Promotional Emails</h3>
-              <p className="mt-1 text-xs text-muted">Receive updates about new products and special offers.</p>
-            </div>
-            <button
-              type="button"
-              onClick={handlePromotionalEmailsToggle}
-              disabled={saving}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                promotionalEmails ? 'bg-brand-primary' : 'bg-gray-300'
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  promotionalEmails ? 'translate-x-6' : 'translate-x-1'
-                }`}
-              />
-            </button>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label htmlFor="firstName" className={fieldLabelClass}>First name</label>
+            <input id="firstName" name="firstName" type="text" autoComplete="given-name" required value={formData.firstName} onChange={handleChange} className={fieldClass} />
+          </div>
+          <div>
+            <label htmlFor="lastName" className={fieldLabelClass}>Last name</label>
+            <input id="lastName" name="lastName" type="text" autoComplete="family-name" required value={formData.lastName} onChange={handleChange} className={fieldClass} />
           </div>
         </div>
-        <div className="rounded-md border border-brand-secondary/30 bg-surface-soft p-4">
-          <h3 className="text-sm font-semibold text-brand-primary">M-Pesa Payments</h3>
-          <p className="mt-1 text-xs text-muted">Payment availability and status are shown on each order. Enter your M-Pesa PIN only in the prompt on your phone, never on this website.</p>
+        <div>
+          <label htmlFor="phone" className={fieldLabelClass}>Phone</label>
+          <input id="phone" name="phone" type="tel" inputMode="tel" autoComplete="tel" value={formData.phone} onChange={handleChange} className={fieldClass} />
+        </div>
+        <div>
+          <label htmlFor="profile-email" className={fieldLabelClass}>Email</label>
+          <input id="profile-email" type="email" value={user?.email ?? ''} disabled aria-describedby="profile-email-note" className={fieldClass} />
+          <p id="profile-email-note" className="mt-1 text-sm text-muted">Your sign-in email cannot be changed here.</p>
         </div>
         {message && (
-          <p className={`text-sm ${message.includes('success') ? 'text-green-600' : 'text-red-600'}`}>
-            {message}
+          <p role={message.tone === 'error' ? 'alert' : 'status'} className={`rounded-md p-3 text-sm font-semibold ${message.tone === 'error' ? 'bg-error-tint text-error' : 'bg-success-tint text-success'}`}>
+            {message.text}
           </p>
         )}
-        <button type="submit" disabled={saving} className="btn-primary">
-          {saving ? 'Saving...' : 'Save Changes'}
+        <button type="submit" disabled={saving} className={saveClass}>
+          {saving ? 'Saving…' : 'Save changes'}
         </button>
       </form>
+
+      <section aria-labelledby="profile-emails" className={`max-w-2xl ${panelClass}`}>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="min-w-0 flex-1 basis-56">
+            <h2 id="profile-emails" className="type-h3 text-navy-900">Promotional emails</h2>
+            <p id="profile-emails-note" className="mt-1 text-sm text-navy-800">Receive updates about new products and special offers.</p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={promotionalEmails}
+            aria-labelledby="profile-emails"
+            aria-describedby="profile-emails-note"
+            onClick={handlePromotionalEmailsToggle}
+            disabled={saving}
+            className="inline-flex min-h-[44px] items-center gap-3 rounded-sm px-1 text-sm font-semibold text-navy-900 disabled:cursor-not-allowed"
+          >
+            <span aria-hidden="true" className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full border-2 transition-colors duration-(--motion-feedback) ${promotionalEmails ? 'border-navy-900 bg-navy-900' : 'border-control bg-surface'}`}>
+              <span className={`inline-block size-5 rounded-full transition-transform duration-(--motion-feedback) ${promotionalEmails ? 'translate-x-5 bg-white' : 'translate-x-0.5 bg-control'}`} />
+            </span>
+            <span aria-hidden="true">{promotionalEmails ? 'On' : 'Off'}</span>
+          </button>
+        </div>
+      </section>
+
+      <section aria-labelledby="profile-mpesa" className={`max-w-2xl ${panelClass}`}>
+        <h2 id="profile-mpesa" className="type-h3 text-navy-900">M-Pesa payments</h2>
+        <p className="mt-1 text-sm text-navy-800">
+          Payment availability and status are shown on each order. Enter your M-Pesa PIN only in the prompt on your phone, never on this website.
+        </p>
+      </section>
     </div>
   );
 }
-

@@ -135,21 +135,21 @@ export function DemoBadge({ className = "" }: { className?: string }) {
 /* ---------- Async status panels ---------- */
 export function LoadingPanel({ label }: { label: string }) {
   return (
-    <div role="status" className="flex flex-col items-center justify-center gap-3 rounded-lg bg-white p-12 text-center shadow-sm">
-      <span aria-hidden="true" className="h-8 w-8 animate-spin rounded-full border-2 border-brand-secondary border-t-transparent" />
-      <p className="text-sm text-gray-500">{label}</p>
+    <div role="status" className="flex flex-col items-center justify-center gap-3 rounded-lg bg-surface p-12 text-center shadow-card">
+      <span aria-hidden="true" className="size-8 animate-spin rounded-full border-2 border-navy-900 border-t-transparent" />
+      <p className="text-sm text-muted">{label}</p>
     </div>
   );
 }
 
 export function ErrorPanel({ title, message, onRetry, children }: { title: string; message: string; onRetry?: () => void; children?: ReactNode }) {
   return (
-    <div role="alert" className="rounded-lg border border-error/30 bg-white p-8 text-center shadow-sm">
-      <h2 className="font-display text-xl text-brand-primary">{title}</h2>
-      <p className="mx-auto mt-2 max-w-lg text-sm text-charcoal">{message}</p>
-      <div className="mt-5 flex flex-wrap justify-center gap-3">
+    <div role="alert" className="rounded-lg border border-error/40 bg-surface p-6 text-center shadow-card sm:p-8">
+      <h2 className="type-h3 text-navy-900">{title}</h2>
+      <p className="mx-auto mt-2 max-w-lg text-navy-800">{message}</p>
+      <div className="mt-5 flex flex-wrap items-center justify-center gap-x-6 gap-y-3">
         {onRetry && (
-          <button type="button" onClick={onRetry} className="rounded-sm bg-brand-primary px-6 py-2.5 text-xs font-bold uppercase tracking-wider text-white hover:bg-brand-secondary hover:text-brand-primary">
+          <button type="button" onClick={onRetry} className="inline-flex min-h-[44px] items-center justify-center rounded-sm bg-navy-900 px-6 text-sm font-bold uppercase tracking-[0.12em] text-white transition-colors duration-(--motion-feedback) hover:bg-gold-500 hover:text-navy-900">
             Try Again
           </button>
         )}
@@ -173,19 +173,19 @@ export function DemoCatalogNotice() {
 /* ---------- Breadcrumb ---------- */
 export function Breadcrumb({ items }: { items: { label: string; to?: string }[] }) {
   return (
-    <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5 text-xs tracking-wide text-gray-500">
-      <Link to="/" className="transition-colors hover:text-brand-secondary">
+    <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5 text-xs tracking-wide text-muted">
+      <Link to="/" className="transition-colors hover:text-link hover:underline">
         Home
       </Link>
       {items.map((item, index) => (
         <span key={`${item.label}-${index}`} className="flex items-center gap-1.5">
           <span aria-hidden="true">/</span>
           {item.to ? (
-            <Link to={item.to} className="transition-colors hover:text-brand-secondary">
+            <Link to={item.to} className="transition-colors hover:text-link hover:underline">
               {item.label}
             </Link>
           ) : (
-            <span aria-current="page" className="font-medium text-brand-primary">{item.label}</span>
+            <span aria-current="page" className="font-medium text-navy-900">{item.label}</span>
           )}
         </span>
       ))}

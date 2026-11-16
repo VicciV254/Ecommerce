@@ -71,7 +71,9 @@ describe("single display discount from the canonical catalog", () => {
     expect(within(summary).getByText(/^Estimated from current prices\./)).toBeTruthy();
     expect(within(summary).queryByText("Total")).toBeNull();
     expect(screen.getByText("Add a delivery address to see delivery, VAT and your total.")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Continue to Checkout" }).hasAttribute("disabled")).toBe(true);
+    // Checkout's Delivery step takes the first address, so the way on is open while nothing is priced or reserved here.
+    expect(screen.getByRole("link", { name: "Add your address at checkout" }).getAttribute("href")).toBe("#/checkout");
+    expect(screen.getByRole("link", { name: "Continue to Checkout" }).getAttribute("href")).toBe("#/checkout");
     expect(orders.createQuote).not.toHaveBeenCalled();
   });
 

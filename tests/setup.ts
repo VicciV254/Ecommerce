@@ -30,4 +30,6 @@ if (typeof Element.prototype.scrollTo !== "function") {
 afterEach(() => {
   cleanup();
   localStorage.clear();
+  // Per-tab state (sign-in merge notes, checkout drafts) never carries from one test into the next.
+  sessionStorage.clear();
 });

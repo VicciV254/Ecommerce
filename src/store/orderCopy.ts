@@ -41,13 +41,14 @@ export function orderStatusLabel(order: Pick<Order, "status" | "deliveryMethod">
   return order.status === "DELIVERED" && order.deliveryMethod === "STORE_PICKUP" ? "Collected" : ORDER_STATUS_LABELS[order.status];
 }
 
+/** Semantic text-on-tint pairs from the design system (each at least 4.5:1); gold never stands for progress. */
 export const ORDER_STATUS_TONES: Record<OrderStatus, string> = {
-  PENDING: "bg-warning/15 text-warning",
-  PROCESSING: "bg-ocean-blue/10 text-ocean-blue",
-  READY_FOR_PICKUP: "bg-coral/10 text-coral",
-  SHIPPED: "bg-brand-secondary/20 text-brand-accent",
-  DELIVERED: "bg-success/10 text-success",
-  CANCELLED: "bg-error/10 text-error",
+  PENDING: "bg-warning-tint text-warning",
+  PROCESSING: "bg-info-tint text-info",
+  READY_FOR_PICKUP: "bg-info-tint text-info",
+  SHIPPED: "bg-info-tint text-info",
+  DELIVERED: "bg-success-tint text-success",
+  CANCELLED: "bg-error-tint text-error",
 };
 
 /** `REFUNDED` and `PARTIALLY_REFUNDED` are set only by refunds confirmed as sent. */

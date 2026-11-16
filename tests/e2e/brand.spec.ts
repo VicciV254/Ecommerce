@@ -135,6 +135,16 @@ test("the printed receipt carries the navy mark and brand name on white paper, t
   await expect(printed.locator("body")).toHaveCSS("background-color", "rgb(255, 255, 255)");
   await expect(printed.locator(".totals .grand")).toContainText(`KES ${order.total.toLocaleString("en-KE")}`);
   await expect.poll(() => printed.evaluate(() => (window as PrintCounter).printCalls ?? 0)).toBe(1);
+  // A phone lays the receipt out at the screen's width, not as a 980px desktop page shrunk to fit, and nothing
+  // scrolls sideways, down to 360px.
+  for (const width of [printed.viewportSize()?.width ?? 0, 360]) {
+    await printed.setViewportSize({ width, height: 800 });
+    const layout = await printed.evaluate(() => ({
+      width: document.documentElement.clientWidth,
+      overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    }));
+    expect(layout, `receipt layout in a ${width}px window`).toEqual({ width, overflow: 0 });
+  }
   await printed.close();
 });
 

@@ -5,7 +5,8 @@ export interface Address {
   street: string;
   city: string;
   county: string;
-  postalCode?: string;
+  /** The server stores a missing postal code as `null`. */
+  postalCode?: string | null;
   isDefault: boolean;
 }
 
@@ -77,4 +78,14 @@ export function isUser(value: unknown): value is User {
   const candidate = value as Record<string, unknown>;
   return ['id', 'email', 'firstName', 'lastName'].every((key) => typeof candidate[key] === 'string') &&
     (candidate.addresses === undefined || Array.isArray(candidate.addresses));
+}
+
+/** Accepts the server's record of a saved address only with its identity and text fields intact. */
+export function isAddress(value: unknown): value is Address {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return typeof candidate.id === 'string' && candidate.id !== '' &&
+    ['street', 'city', 'county'].every((key) => typeof candidate[key] === 'string') &&
+    (candidate.postalCode === undefined || candidate.postalCode === null || typeof candidate.postalCode === 'string') &&
+    typeof candidate.isDefault === 'boolean';
 }

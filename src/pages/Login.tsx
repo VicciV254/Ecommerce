@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { authAPI } from '../api/auth';
 import { PasswordInput } from '../components/PasswordInput';
 import { AuthLayout, authStyles } from '../components/AuthLayout';
-import { safeReturnTo } from '../store/returnTo';
+import { registerRoute, safeReturnTo, verifyEmailRoute } from '../store/returnTo';
 
 export default function Login() {
   const route = useRoute();
@@ -31,7 +31,7 @@ export default function Login() {
       // The sign-in page leaves history: Back from the returned-to page skips it.
       navigate(returnTo, { replace: true });
     } else if (result.requiresOtp) {
-      navigate(`/verify-email?email=${encodeURIComponent(result.email || email)}`);
+      navigate(verifyEmailRoute(result.email || email, returnTo));
     } else {
       setError(result.error || 'Could not sign in. Please check your details.');
     }
@@ -61,7 +61,7 @@ export default function Login() {
   return (
     <AuthLayout
       title="Sign in to your account"
-      intro={<>Or <Link to="/register" className={authStyles.link}>create a new account</Link></>}
+      intro={<>New here? <Link to={registerRoute(returnTo)} className={authStyles.link}>Create an account</Link></>}
     >
       <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
         {verified && <p role="status" className={`${authStyles.success} text-center`}>Email verified. Sign in to continue.</p>}

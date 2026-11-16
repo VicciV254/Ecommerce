@@ -55,8 +55,7 @@ test("a cart quote with a coupon is reviewed and reserved as one unpaid pending 
 
   await expect(page.getByRole("heading", { name: "Order reserved" })).toBeFocused();
   await expect(page.getByText("APX-QUOTE-COUPON")).toBeVisible();
-  await expect(page.getByText("Pending · not paid")).toBeVisible();
-  await expect(page.getByText("Items held until")).toBeVisible();
+  await expect(page.getByText(/^Unpaid — held until /)).toBeVisible();
   expect(placed).toEqual([{ key: expect.stringMatching(REQUEST_KEY), body: { quoteId: "quote-coupon" } }]);
   await expect.poll(() => shopperState(page)).toMatchObject({
     cart: [], couponCode: null, pendingOrder: null, acknowledgedOrderIds: ["order-quote-coupon"],

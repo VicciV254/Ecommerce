@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider, useAuth } from "./AuthContext";
 import { fromAnotherTab } from "../test-support/otherTab";
 import { STORAGE_KEYS } from "../utils/storage";
+import { saveAddressDraft } from "../store/addressModel";
 
 const api = vi.hoisted(() => ({ getMe: vi.fn(), login: vi.fn(), register: vi.fn(), logout: vi.fn() }));
 vi.mock("../api/auth", async (importOriginal) => {
@@ -67,6 +68,19 @@ describe("customer session storage", () => {
     render(<AuthProvider><Probe /></AuthProvider>);
     expect(screen.getByText("loading")).toBeTruthy();
     expect(screen.queryByText(/signed-in/)).toBeNull();
+  });
+});
+
+describe("checkout details on sign-out", () => {
+  it("forgets an address typed at checkout when the customer signs out", async () => {
+    localStorage.setItem(STORAGE_KEYS.customerToken, "v2-token");
+    localStorage.setItem(STORAGE_KEYS.customerUser, JSON.stringify(account));
+    api.getMe.mockResolvedValue({ data: account });
+    render(<AuthProvider><Capture /></AuthProvider>);
+    saveAddressDraft(account.id, { street: "12 Moi Avenue", city: "Nairobi", county: "Nairobi", postalCode: "" });
+    act(() => auth.logout());
+    expect(auth.user).toBeNull();
+    expect(sessionStorage.getItem(STORAGE_KEYS.checkoutAddressDraft)).toBeNull();
   });
 });
 

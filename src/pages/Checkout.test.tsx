@@ -31,6 +31,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("../contexts/AuthContext", () => ({ useAuth: () => ({ user: mocks.user }) }));
 vi.mock("../store/CatalogContext", () => ({ useCatalog: () => mocks.catalog }));
+vi.mock("../store/StorefrontContext", () => ({ useStorefront: () => ({ brandName: "Apex Cart", storefront: null, mediaById: new Map() }) }));
 vi.mock("../api/orders", async (importOriginal) => ({ ...await importOriginal<typeof import("../api/orders")>(), checkoutAPI: mocks.orders }));
 vi.mock("../api/mpesa", () => ({ paymentsAPI: mocks.payments, staffPaymentsAPI: {} }));
 
@@ -71,7 +72,7 @@ function deferred<T>() {
 }
 
 async function reserveButton() {
-  const button = await screen.findByRole("button", { name: "Reserve Order" }, WAIT);
+  const button = await screen.findByRole("button", { name: "Reserve order" }, WAIT);
   await waitFor(() => expect(button.hasAttribute("disabled")).toBe(false), WAIT);
   return button;
 }
@@ -81,6 +82,8 @@ const paymentOrders = new Map<string, Order>();
 const servePayments = (...orders: Order[]) => { for (const placed of orders) paymentOrders.set(placed.id, placed); };
 
 beforeEach(() => {
+  // Each test starts at checkout itself; a reservation records its payment step in the address.
+  window.history.replaceState(null, "", "#/checkout");
   mocks.user = customerA;
   const snapshot = fixtureSnapshot({ mode: "live" });
   mocks.catalog = {
@@ -106,7 +109,7 @@ describe("checkout reservation", () => {
     mocks.orders.placeOrder.mockReturnValue(placed.promise);
     render(tree(<Checkout />));
     const reserve = await reserveButton();
-    const summary = screen.getByRole("region", { name: "Order Total" });
+    const summary = screen.getByRole("region", { name: "Order total" });
     expect(within(summary).getByText("VAT (16%)")).toBeTruthy();
     expect(within(summary).getByText("KES 144")).toBeTruthy();
     expect(within(summary).getByText("KES 1,244")).toBeTruthy();
@@ -131,8 +134,7 @@ describe("checkout reservation", () => {
 
     expect(await screen.findByRole("heading", { name: "Order reserved" }, WAIT)).toBeTruthy();
     expect(screen.getByText("APX-QUOTE-1")).toBeTruthy();
-    expect(screen.getByText("Pending · not paid")).toBeTruthy();
-    expect(screen.getByText("Items held until")).toBeTruthy();
+    expect(screen.getByText(/^Unpaid — held until /)).toBeTruthy();
     expect(screen.getByRole("link", { name: "View or cancel in your orders" }).getAttribute("href")).toBe("#/account/orders");
     await persisted("customer-a", { cart: [linen, polo], pendingOrder: null, acknowledgedOrderIds: ["order-quote-1"] });
     expect(screen.getByText("Your cart still has 2 items that were not part of this order.")).toBeTruthy();
@@ -141,7 +143,7 @@ describe("checkout reservation", () => {
     expect(mocks.payments.getOverview).toHaveBeenCalledWith("order-quote-1");
     expect(screen.queryByRole("button", { name: /Send/ })).toBeNull();
     expect(mocks.payments.requestPrompt).not.toHaveBeenCalled();
-    expect(screen.getByText("Pending · not paid")).toBeTruthy();
+    expect(screen.getByText(/^Unpaid — held until /)).toBeTruthy();
   });
 
   it("updates the reservation summary when the payment service reports the order paid", async () => {
@@ -156,13 +158,14 @@ describe("checkout reservation", () => {
     render(tree(<Checkout />));
     fireEvent.click(await reserveButton());
 
-    expect(await screen.findByRole("heading", { name: "Order reserved" }, WAIT)).toBeTruthy();
+    // Once the payment service reports the order paid, the step says so in its heading as well as its status.
+    expect(await screen.findByRole("heading", { name: "Order paid" }, WAIT)).toBeTruthy();
     expect(await screen.findByText("Payment received", undefined, WAIT)).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Order reserved" })).toBeNull();
     expect(screen.getByText("Payment confirmed")).toBeTruthy();
     expect(screen.getByText("SBX1234567")).toBeTruthy();
-    expect(screen.queryByText("Pending · not paid")).toBeNull();
+    expect(screen.queryByText(/^Unpaid/)).toBeNull();
     expect(screen.queryByText(/No payment has been taken/)).toBeNull();
-    expect(screen.queryByText("Items held until")).toBeNull();
     expect(screen.queryByRole("button", { name: /Send/ })).toBeNull();
     expect(mocks.payments.requestPrompt).not.toHaveBeenCalled();
   });
@@ -196,7 +199,7 @@ describe("checkout reservation", () => {
     expect(mocks.orders.getQuote).toHaveBeenCalledWith("quote-1");
     const key = mocks.orders.placeOrder.mock.calls[0][1];
     expect(stored("customer-a").pendingOrder.idempotencyKey).toBe(key);
-    expect(screen.queryByRole("button", { name: "Reserve Order" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Reserve order" })).toBeNull();
 
     mocks.orders.placeOrder.mockResolvedValueOnce({ data: fixturePendingOrder(fixtureQuote()) });
     fireEvent.click(screen.getByRole("button", { name: "Retry the same request" }));
@@ -254,11 +257,11 @@ describe("checkout reservation", () => {
 
     expect(await screen.findByText(/Your total changed from KES 1,244 to KES 1,360\./, undefined, WAIT)).toBeTruthy();
     expect(screen.getByText("Prices, delivery or your address changed since you reviewed this order. Nothing was reserved.")).toBeTruthy();
-    const reserve = screen.getByRole("button", { name: "Reserve Order" });
+    const reserve = screen.getByRole("button", { name: "Reserve order" });
     expect(reserve.hasAttribute("disabled")).toBe(true);
     await persisted("customer-a", { pendingOrder: null });
 
-    fireEvent.click(screen.getByRole("button", { name: "I Have Reviewed the New Total" }));
+    fireEvent.click(screen.getByRole("button", { name: "I have reviewed the new total" }));
     expect(reserve.hasAttribute("disabled")).toBe(false);
     mocks.orders.placeOrder.mockResolvedValueOnce({ data: fixturePendingOrder(changed) });
     fireEvent.click(reserve);
@@ -285,7 +288,7 @@ describe("checkout reservation", () => {
     mocks.orders.placeOrder.mockRejectedValueOnce(apiError(409, { error: "Changed", code: "QUOTE_CHANGED" }));
     render(tree(<Checkout />));
     fireEvent.click(await reserveButton());
-    fireEvent.click(await screen.findByRole("button", { name: "I Have Reviewed the New Total" }, WAIT));
+    fireEvent.click(await screen.findByRole("button", { name: "I have reviewed the new total" }, WAIT));
 
     fireEvent.click(await screen.findByRole("button", { name: "Refresh prices" }, WAIT));
     await waitFor(() => expect(calls).toBe(3), WAIT);
@@ -314,7 +317,7 @@ describe("checkout reservation", () => {
     await waitFor(() => expect(mocks.orders.createQuote).toHaveBeenCalledTimes(1), WAIT);
 
     act(() => store.setQuantity(0, 2));
-    const summary = screen.getByRole("region", { name: "Order Total" });
+    const summary = screen.getByRole("region", { name: "Order total" });
     expect(await within(summary).findByText("KES 2,288", undefined, WAIT)).toBeTruthy();
     await act(async () => slow.resolve({ data: fixtureQuote() }));
     expect(within(summary).queryByText("KES 1,244")).toBeNull();
@@ -343,7 +346,7 @@ describe("checkout reservation", () => {
 
     mocks.user = customerB;
     view.rerender(tree(<Checkout />));
-    const summary = await screen.findByRole("region", { name: "Order Total" }, WAIT);
+    const summary = await screen.findByRole("region", { name: "Order total" }, WAIT);
     expect(await within(summary).findByText("KES 2,752", undefined, WAIT)).toBeTruthy();
     for (const [request] of mocks.orders.createQuote.mock.calls.slice(before)) {
       expect(request).toEqual({ items: [polo], addressId: officeAddress.id, deliveryMethod: "STANDARD", couponCode: null, notes: null });

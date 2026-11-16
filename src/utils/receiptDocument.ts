@@ -1,5 +1,5 @@
 import type { User } from "../api/auth";
-import type { CustomerOrder } from "../api/orders";
+import type { Order } from "../api/orders";
 import { describeVariant } from "../store/catalogModel";
 import { DELIVERY_LABELS } from "../store/checkoutModel";
 import { customerName, deliveryAddress, orderStatusLabel, paymentLabel } from "../store/orderCopy";
@@ -31,7 +31,7 @@ const STYLES = `
   .lockup { display: flex; align-items: center; gap: 10px; color: ${BRAND_NAVY}; }
   .lockup svg { flex: none; }
   .name { font-family: Marcellus, Georgia, "Times New Roman", serif; font-weight: 400; font-size: 18pt; letter-spacing: .14em; text-transform: uppercase; }
-  .title { text-align: right; }
+  .title { margin-left: auto; text-align: right; }
   .title h1 { margin: 0; font-size: 15pt; font-weight: 600; color: ${BRAND_NAVY}; }
   .title p { margin: 2px 0 0; color: #475569; }
   .facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 24px; margin: 18px 0 20px; overflow-wrap: anywhere; }
@@ -53,7 +53,7 @@ const STYLES = `
  * The printable receipt as a standalone HTML document. Every value from the order, the customer or the
  * published brand name is escaped: the document is written into a same-origin window.
  */
-export function receiptDocument(order: CustomerOrder, user: User | null, brandName: string) {
+export function receiptDocument(order: Order, user: User | null, brandName: string) {
   const brand = escapeHtml(brandName);
   const orderNumber = escapeHtml(order.orderNumber);
   const items = order.items.map((item) => {
@@ -69,6 +69,7 @@ export function receiptDocument(order: CustomerOrder, user: User | null, brandNa
 <html lang="en">
   <head>
     <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Receipt ${orderNumber} · ${brand}</title>
     <link rel="stylesheet" href="${FONT_STYLESHEET}">
     <style>${STYLES}</style>

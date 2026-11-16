@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { catalogAPI, type CatalogProduct, type CatalogProductDetail, type CatalogReview } from "../api/catalog";
 import { apiStatus, describeApiError } from "../api/errors";
 import { useMiniCart } from "../components/MiniCart";
@@ -15,7 +15,7 @@ import {
 import { PurchaseBar } from "../components/PurchaseBar";
 import { ProductCard } from "../components/ProductCard";
 import { Breadcrumb, Container, DemoBadge, ErrorPanel, LoadingPanel, Stars } from "../components/ui";
-import { Link, useRouteState } from "../router";
+import { Link, useEntryFocus } from "../router";
 import { useCatalog } from "../store/CatalogContext";
 import { CatalogFormatError, describeVariant, inCategory, isCatalogProduct, withProductMediaDefaults } from "../store/catalogModel";
 import { productReturnFact } from "../store/orderCopy";
@@ -110,17 +110,6 @@ function ProductContent({ id }: { id: string }) {
       : <Container className="py-16"><LoadingPanel label="Loading product…" /></Container>;
   }
   return <ProductView product={product} detail={detail} retry={retry} />;
-}
-
-/** On an in-app arrival (a followed link, or Back/Forward), focus moves to the H1 unless it stayed in the site header. */
-function useEntryFocus(heading: RefObject<HTMLElement | null>) {
-  const { kind } = useRouteState();
-  const arrival = useRef(kind);
-  useLayoutEffect(() => {
-    if (arrival.current !== "push" && arrival.current !== "traverse") return;
-    if (document.activeElement?.closest("[data-site-header]")) return;
-    heading.current?.focus({ preventScroll: true });
-  }, [heading]);
 }
 
 const actionButton =

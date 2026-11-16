@@ -34,3 +34,29 @@ export function loginRoute(route?: string | null) {
 }
 
 export const CHECKOUT_SIGN_IN = loginRoute("/checkout");
+
+/*
+ * Creating an account returns to the same place: register → verify the email → sign in → `returnTo`. Each page reads
+ * the value again through `safeReturnTo`, so a link edited at any hop can only lead to an internal shopper route.
+ */
+
+/** `path` with `params`, plus `returnTo` when the route is a safe internal route other than home. */
+function withReturnTo(path: string, route: string | null | undefined, params: Record<string, string> = {}) {
+  const query = new URLSearchParams(params);
+  const target = safeReturnTo(route);
+  if (target !== HOME_ROUTE) query.set("returnTo", target);
+  const text = query.toString();
+  return text ? `${path}?${text}` : path;
+}
+
+/** The registration page, carrying `route` through verification and sign-in. */
+export const registerRoute = (route?: string | null) => withReturnTo("/register", route);
+
+/** The verification page for `email`, carrying `route` on to sign-in. */
+export const verifyEmailRoute = (email: string, route?: string | null) => withReturnTo("/verify-email", route, { email });
+
+/** Sign-in once the email is verified, with the address filled in. */
+export const verifiedSignInRoute = (email: string, route?: string | null) =>
+  withReturnTo("/login", route, { verified: "1", email });
+
+export const CHECKOUT_REGISTER = registerRoute("/checkout");

@@ -16,6 +16,7 @@ import type {
   CustomerAction,
   CustomerOrder,
   OrderReturn,
+  OrderTracking,
   Pagination,
   RefundSource,
   RefundStatus,
@@ -211,6 +212,15 @@ function parsePage<T>(data: unknown, key: string, parse: (item: unknown) => T): 
 export function parseCustomerOrderPage(data: unknown): { orders: CustomerOrder[]; pagination: Pagination } {
   const { items, pagination } = parsePage(data, "orders", (item) => parseCustomerOrder(item));
   return { orders: items, pagination };
+}
+
+/** Validates public tracking (`GET /orders/track/:number`): the order's status and each recorded step with its time. */
+export function parseOrderTracking(data: unknown): OrderTracking {
+  if (!isRecord(data) || !isId(data.orderNumber) || !isOrderStatus(data.status) ||
+    !listOf(data.trackingHistory, (event) => isEvent(event, false))) {
+    throw new OrderFormatError("tracking");
+  }
+  return data as unknown as OrderTracking;
 }
 
 export function parseStaffOrderPage(data: unknown): StaffOrderPage {

@@ -14,6 +14,7 @@ import type { CatalogProduct } from "../api/catalog";
 import type { DeliveryMethod } from "../api/orders";
 import { useAuth } from "../contexts/AuthContext";
 import { STORAGE_NAMESPACE, isRecord, readStoredJson, shopperStateKey, writeStoredJson } from "../utils/storage";
+import { clearAddressDraft } from "./addressModel";
 import { mergeGuestCart, type MergeOutcome } from "./cartModel";
 import { clearGuestMerge, pendingGuestMerge } from "./guestMerge";
 import {
@@ -254,6 +255,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const previous = seenOwner.current;
     seenOwner.current = owner;
     if (previous === owner) return;
+    // An address typed at checkout belongs to the account that typed it: a sign-out or switch forgets it.
+    clearAddressDraft();
     // Only a sign-in this tab made from a guest session brings the guest cart along. A sign-in learned from another
     // tab, an account switch and a sign-out never move lines.
     const merging = previous === null ? pendingGuestMerge(owner) : null;

@@ -120,15 +120,15 @@ export function ConfirmModal({
   const widthCls = size === "lg" ? "max-w-xl" : "max-w-md";
   return (
     <ModalDialog open={open} onClose={onCancel} label={title}>
-      <div className={`relative w-full ${widthCls} animate-fade-in rounded-lg bg-white p-6 shadow-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain`}>
-        <h3 className="font-display text-lg uppercase tracking-wider text-brand-primary">{title}</h3>
-        {message && <p className="mt-2 text-sm text-gray-500">{message}</p>}
+      <div className={`relative w-full ${widthCls} animate-fade-in rounded-2xl bg-surface p-6 text-navy-800 shadow-overlay max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain [overflow-wrap:anywhere]`}>
+        <h3 className="type-h3 text-navy-900">{title}</h3>
+        {message && <p className="mt-2 text-navy-800">{message}</p>}
         {children}
-        <div className="mt-6 flex gap-3">
+        <div className="mt-6 flex flex-wrap gap-3">
           <button
             type="button"
             onClick={onCancel}
-            className="flex-1 rounded-sm border border-light-gray py-2.5 text-xs font-bold uppercase tracking-wider text-charcoal transition-colors hover:bg-off-white"
+            className="min-h-[44px] flex-1 basis-32 rounded-sm border border-navy-900 px-4 text-sm font-semibold text-navy-900 transition-colors duration-(--motion-feedback) hover:bg-surface-soft"
           >
             {cancelLabel}
           </button>
@@ -136,8 +136,8 @@ export function ConfirmModal({
             type="button"
             onClick={onConfirm}
             disabled={confirmDisabled}
-            className={`flex-1 rounded-sm py-2.5 text-xs font-bold uppercase tracking-wider text-white transition-colors disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 ${
-              tone === "danger" ? "bg-error hover:bg-red-700" : "bg-brand-primary hover:bg-brand-secondary hover:text-brand-primary"
+            className={`min-h-[44px] flex-1 basis-32 rounded-sm px-4 text-sm font-semibold text-white transition-colors duration-(--motion-feedback) disabled:cursor-not-allowed disabled:bg-surface-soft disabled:text-muted ${
+              tone === "danger" ? "bg-error hover:bg-navy-900" : "bg-navy-900 hover:bg-gold-500 hover:text-navy-900"
             }`}
           >
             {confirmLabel}

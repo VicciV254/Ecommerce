@@ -1,25 +1,30 @@
-import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useId, useState, type FormEvent, type ReactNode } from "react";
 import type { Address } from "../api/auth";
-import type { PaymentOrderSummary } from "../api/mpesa";
 import { MAX_QUOTE_ITEMS, type DeliveryMethod, type Order, type Quote } from "../api/orders";
 import { Link } from "../router";
-import { describeVariant } from "../store/catalogModel";
 import { DELIVERY_LABELS, DELIVERY_METHODS, normalizeCouponCode } from "../store/checkoutModel";
-import { withPaymentSummary } from "../store/paymentModel";
+import { summaryRows } from "../store/checkoutSummary";
 import type { CheckoutQuote } from "../store/useCheckoutQuote";
 import type { SubmissionState } from "../store/useOrderSubmission";
-import { formatDateTime, formatKES } from "../utils/format";
-import { PaymentPanel } from "./PaymentPanel";
-import { ResponsiveImage } from "./ui";
+import { formatDateTime } from "../utils/format";
+import { fieldClass, fieldLabelClass } from "./AddressForm";
+import { FigureRows } from "./CheckoutSummary";
 
 /** Quote errors shown beside the choice that caused them rather than in the totals. */
 export const CHOICE_ERRORS = { address: "ADDRESS_UNAVAILABLE", delivery: "DELIVERY_UNAVAILABLE", coupon: "COUPON_INVALID" } as const;
+/** Choices made on the Delivery step; a quote refused for one of them sends the shopper back there. */
+export const DELIVERY_CHOICE_ERRORS: readonly string[] = [CHOICE_ERRORS.address, CHOICE_ERRORS.delivery];
 const STOCK_ERRORS = ["OUT_OF_STOCK", "ITEM_UNAVAILABLE"];
 
-const labelClass = "block text-[11px] font-bold uppercase tracking-[0.12em] text-brand-primary";
-const fieldClass = "w-full min-w-0 rounded-sm border border-light-gray bg-off-white px-3 py-2.5 text-sm focus:border-brand-secondary disabled:cursor-not-allowed disabled:opacity-60";
-const secondaryButtonClass = "shrink-0 rounded-sm border border-brand-primary px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider text-brand-primary hover:bg-brand-primary hover:text-white disabled:cursor-not-allowed disabled:opacity-50";
-export const primaryActionClass = "block w-full rounded-sm bg-brand-primary py-3.5 text-center text-xs font-bold uppercase tracking-[0.12em] text-white hover:bg-brand-secondary hover:text-brand-primary disabled:cursor-not-allowed disabled:bg-light-gray disabled:text-charcoal";
+const secondaryButtonClass =
+  "inline-flex min-h-[44px] shrink-0 items-center justify-center rounded-sm border border-navy-900 px-4 text-sm font-semibold text-navy-900 transition-colors duration-(--motion-feedback) hover:bg-surface-soft disabled:cursor-not-allowed disabled:border-control disabled:bg-surface-soft disabled:text-muted";
+/** The page's main action: the commerce button (navy, gold on hover); disabled reads muted on soft, with a stated reason. */
+export const primaryActionClass =
+  "flex min-h-[48px] w-full items-center justify-center rounded-sm bg-navy-900 px-[20px] text-center text-sm font-bold uppercase tracking-[0.12em] text-white transition-colors duration-(--motion-feedback) hover:bg-gold-500 hover:text-navy-900 disabled:cursor-not-allowed disabled:bg-surface-soft disabled:text-muted";
+export const secondaryActionClass =
+  "flex min-h-[48px] w-full items-center justify-center rounded-sm border border-navy-900 px-[20px] text-center text-sm font-semibold text-navy-900 transition-colors duration-(--motion-feedback) hover:bg-surface-soft";
+export const textLinkClass = "inline-flex min-h-[44px] items-center font-semibold text-link underline underline-offset-4 hover:text-link-hover";
+const inlineLinkClass = "font-semibold text-link underline underline-offset-4 hover:text-link-hover";
 
 export function formatAddress(address: Pick<Address, "street" | "city" | "county">) {
   return `${address.street}, ${address.city}, ${address.county}`;
@@ -27,10 +32,43 @@ export function formatAddress(address: Pick<Address, "street" | "city" | "county
 
 function FieldError({ id, message }: { id: string; message: string | null }) {
   if (!message) return null;
-  return <p id={id} role="alert" className="mt-1.5 text-xs font-semibold text-error">{message}</p>;
+  return <p id={id} role="alert" className="mt-1.5 text-sm font-semibold text-error">{message}</p>;
 }
 
-/** Saved address and delivery method; fees appear only in the server quote. */
+/** Choice cards for the delivery method; the fee for each appears only in the server's quote. */
+export function DeliveryMethodChoices({ deliveryMethod, disabled, error, onDelivery }: {
+  deliveryMethod: DeliveryMethod;
+  disabled: boolean;
+  error: string | null;
+  onDelivery: (method: DeliveryMethod) => void;
+}) {
+  const id = useId();
+  return (
+    <fieldset className="min-w-0" aria-describedby={error ? `${id}-delivery-error` : undefined}>
+      <legend className={fieldLabelClass}>Delivery method</legend>
+      <div className="mt-1.5 space-y-2">
+        {DELIVERY_METHODS.map((method) => (
+          <label key={method} className="flex min-h-[48px] cursor-pointer items-center gap-3 rounded-md border border-control bg-surface px-3 text-navy-900 has-[:checked]:border-2 has-[:checked]:border-navy-900 has-[:checked]:bg-surface-page has-[:disabled]:cursor-not-allowed">
+            <input
+              type="radio"
+              name={`${id}-delivery`}
+              value={method}
+              checked={deliveryMethod === method}
+              disabled={disabled}
+              onChange={() => onDelivery(method)}
+              className="size-5 shrink-0 accent-navy-900"
+            />
+            <span className="min-w-0 [overflow-wrap:anywhere]">{DELIVERY_LABELS[method]}</span>
+          </label>
+        ))}
+      </div>
+      <p className="mt-1.5 text-sm text-muted">The fee for the method you choose is added to your total.</p>
+      <FieldError id={`${id}-delivery-error`} message={error} />
+    </fieldset>
+  );
+}
+
+/** The cart page's saved address and delivery method; fees appear only in the server quote. */
 export function DeliveryChoices({
   addresses, address, deliveryMethod, disabled, errorCode, errorMessage, onAddress, onDelivery,
 }: {
@@ -46,11 +84,9 @@ export function DeliveryChoices({
   const id = useId();
   if (!address) {
     return (
-      <div className="rounded-md border border-warning/40 bg-warning/10 p-3 text-xs text-charcoal">
+      <div className="rounded-md border border-warning/40 bg-warning-tint p-3 text-sm text-navy-800">
         <p className="font-semibold">Add a delivery address to see delivery, VAT and your total.</p>
-        <Link to="/account/addresses" className="mt-2 inline-block font-bold text-brand-primary underline underline-offset-4">
-          Add an address
-        </Link>
+        <Link to="/checkout" className={textLinkClass}>Add your address at checkout</Link>
       </div>
     );
   }
@@ -59,7 +95,7 @@ export function DeliveryChoices({
   return (
     <div className="space-y-4">
       <div>
-        <label htmlFor={`${id}-address`} className={labelClass}>Delivery address</label>
+        <label htmlFor={`${id}-address`} className={fieldLabelClass}>Delivery address</label>
         <select
           id={`${id}-address`}
           value={address.id}
@@ -67,37 +103,16 @@ export function DeliveryChoices({
           aria-invalid={Boolean(addressError)}
           aria-describedby={addressError ? `${id}-address-error` : undefined}
           onChange={(event) => onAddress(event.target.value)}
-          className={`mt-1.5 ${fieldClass}`}
+          className={fieldClass}
         >
           {addresses.map((item) => (
             <option key={item.id} value={item.id}>{formatAddress(item)}{item.isDefault ? " (default)" : ""}</option>
           ))}
         </select>
         <FieldError id={`${id}-address-error`} message={addressError} />
-        <Link to="/account/addresses" className="mt-1.5 inline-block text-[11px] text-gray-600 underline underline-offset-4 hover:text-brand-primary">
-          Manage addresses
-        </Link>
+        <Link to="/account/addresses" className={`${textLinkClass} text-sm`}>Manage addresses</Link>
       </div>
-      <fieldset className="min-w-0" aria-describedby={deliveryError ? `${id}-delivery-error` : undefined}>
-        <legend className={labelClass}>Delivery method</legend>
-        <div className="mt-1.5 space-y-1.5">
-          {DELIVERY_METHODS.map((method) => (
-            <label key={method} className="flex min-h-11 cursor-pointer items-center gap-3 rounded-sm border border-light-gray px-3 text-sm has-[:checked]:border-brand-primary has-[:disabled]:cursor-not-allowed">
-              <input
-                type="radio"
-                name={`${id}-delivery`}
-                value={method}
-                checked={deliveryMethod === method}
-                disabled={disabled}
-                onChange={() => onDelivery(method)}
-                className="h-4 w-4 shrink-0 accent-brand-primary"
-              />
-              <span className="min-w-0 [overflow-wrap:anywhere]">{DELIVERY_LABELS[method]}</span>
-            </label>
-          ))}
-        </div>
-        <FieldError id={`${id}-delivery-error`} message={deliveryError} />
-      </fieldset>
+      <DeliveryMethodChoices deliveryMethod={deliveryMethod} disabled={disabled} error={deliveryError} onDelivery={onDelivery} />
     </div>
   );
 }
@@ -127,10 +142,10 @@ export function CouponField({
     else if (priced) outcome = priced.couponMessage ?? "Not applied to this order.";
     return (
       <div>
-        <p className={labelClass}>Coupon</p>
-        <div className="mt-1.5 flex items-center justify-between gap-3 rounded-sm border border-light-gray bg-off-white px-3 py-2">
-          <p className="min-w-0 text-xs text-charcoal">
-            <span className="font-mono font-bold text-brand-primary">{couponCode}</span>
+        <p className={fieldLabelClass}>Coupon</p>
+        <div className="mt-1 flex flex-wrap items-center justify-between gap-3 rounded-md border border-control bg-surface-page px-3 py-2">
+          <p className="min-w-0 text-sm text-navy-800 [overflow-wrap:anywhere]">
+            <span className="font-mono font-bold text-navy-900">{couponCode}</span>
             <span className="block">{outcome}</span>
           </p>
           <button type="button" disabled={disabled} onClick={onRemove} aria-label={`Remove coupon ${couponCode}`} className={secondaryButtonClass}>
@@ -152,8 +167,8 @@ export function CouponField({
   };
   return (
     <form onSubmit={apply} noValidate>
-      <label htmlFor={`${id}-coupon`} className={labelClass}>Coupon code (optional)</label>
-      <div className="mt-1.5 flex gap-2">
+      <label htmlFor={`${id}-coupon`} className={fieldLabelClass}>Coupon code (optional)</label>
+      <div className="mt-1 flex flex-wrap gap-2">
         <input
           id={`${id}-coupon`}
           value={draft}
@@ -164,7 +179,7 @@ export function CouponField({
           aria-invalid={invalid}
           aria-describedby={invalid ? `${id}-coupon-error` : undefined}
           onChange={(event) => { setDraft(event.target.value); setInvalid(false); }}
-          className={`flex-1 uppercase ${fieldClass}`}
+          className="min-h-[44px] min-w-0 flex-1 basis-40 rounded-sm border border-control bg-surface px-3 py-2 uppercase text-navy-900 aria-[invalid=true]:border-2 aria-[invalid=true]:border-error disabled:cursor-not-allowed disabled:bg-surface-soft disabled:text-muted"
         />
         <button type="submit" disabled={disabled || !draft.trim()} className={secondaryButtonClass}>Apply</button>
       </div>
@@ -173,62 +188,49 @@ export function CouponField({
   );
 }
 
-function TotalRow({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
-  return (
-    <div className={`flex items-baseline justify-between gap-4 ${strong ? "border-t border-light-gray pt-3 text-base font-semibold text-brand-primary" : ""}`}>
-      <dt className={strong ? "" : "text-gray-600"}>{label}</dt>
-      <dd className={strong ? "text-lg" : "text-charcoal"}>{value}</dd>
-    </div>
-  );
-}
-
 /** Server totals: VAT and delivery stay separate lines, nothing is added up in the browser. */
 export function QuoteTotals({ quote }: { quote: Quote }) {
-  return (
-    <dl className="space-y-2.5 text-sm tabular-nums">
-      <TotalRow label="Items subtotal" value={formatKES(quote.subtotal)} />
-      {quote.discount > 0 && (
-        <>
-          <TotalRow label={quote.couponApplied ? `Savings (incl. coupon ${quote.couponCode})` : "Savings"} value={`−${formatKES(quote.discount)}`} />
-          <TotalRow label="Subtotal after savings" value={formatKES(quote.discountedSubtotal)} />
-        </>
-      )}
-      <TotalRow label={`VAT (${quote.vatRate}%)`} value={formatKES(quote.tax)} />
-      <TotalRow label={DELIVERY_LABELS[quote.deliveryMethod]} value={formatKES(quote.shippingCost)} />
-      <TotalRow label="Total" value={formatKES(quote.total)} strong />
-    </dl>
-  );
+  return <FigureRows rows={summaryRows({ kind: "quote", quote })} />;
 }
 
 /**
  * Totals panel for the current request: why nothing is quoted yet, progress, errors, expiry and the
- * server's totals. A previous quote is never presented as current while a new one is loading.
+ * server's totals. A previous quote is never presented as current while a new one is loading. A refusal caused by a
+ * delivery choice made elsewhere shows `changeDelivery` (a way back to that choice) instead of a retry.
  */
-export function QuoteSummary({ blocker, quote, onRefreshAvailability }: {
+export function QuoteSummary({ blocker, quote, onRefreshAvailability, changeDelivery }: {
   blocker: string | null;
   quote: CheckoutQuote;
   onRefreshAvailability: () => void;
+  changeDelivery?: ReactNode;
 }) {
-  if (blocker) return <p role="status" className="rounded-md bg-off-white p-3 text-xs font-semibold text-charcoal">{blocker}</p>;
+  if (blocker) return <p role="status" className="rounded-md bg-surface-soft p-3 text-sm font-semibold text-navy-800">{blocker}</p>;
   if (quote.status === "idle") return null;
   if (quote.status === "loading") {
     return (
-      <p role="status" className="flex items-center gap-2 rounded-md bg-off-white p-3 text-xs text-charcoal">
-        <span aria-hidden="true" className="h-4 w-4 animate-spin rounded-full border-2 border-brand-secondary border-t-transparent" />
+      <p role="status" className="flex items-center gap-2 rounded-md bg-surface-soft p-3 text-sm text-navy-800">
+        <span aria-hidden="true" className="size-4 shrink-0 animate-spin rounded-full border-2 border-navy-900 border-t-transparent" />
         Calculating your total with current prices…
       </p>
     );
   }
   if (quote.error) {
-    const choice = Object.values(CHOICE_ERRORS).some((code) => code === quote.error?.code);
-    const stock = STOCK_ERRORS.includes(quote.error.code ?? "");
+    const code = quote.error.code ?? "";
+    const choice = Object.values(CHOICE_ERRORS).some((item) => item === code);
+    const stock = STOCK_ERRORS.includes(code);
+    const elsewhere = changeDelivery !== undefined && DELIVERY_CHOICE_ERRORS.includes(code);
     return (
-      <div role="alert" className="rounded-md border border-error/30 bg-error/5 p-3 text-xs text-charcoal">
-        <p className="font-semibold text-error">{choice ? "Your total can't be calculated until the highlighted choice is changed." : quote.error.message}</p>
+      <div role="alert" className="rounded-md border border-error/40 bg-error-tint p-3 text-sm text-navy-800">
+        <p className="font-semibold text-error">
+          {elsewhere ? "Your total can't be calculated for the delivery you chose." : choice ? "Your total can't be calculated until the highlighted choice is changed." : quote.error.message}
+        </p>
+        {elsewhere && <p className="mt-1">{quote.error.message}</p>}
         {stock && <p className="mt-1">Reduce or remove that item, then check again.</p>}
-        <button type="button" onClick={stock ? onRefreshAvailability : quote.refresh} className="mt-2 font-bold text-brand-primary underline underline-offset-4">
-          {stock ? "Refresh availability" : "Try again"}
-        </button>
+        {elsewhere ? changeDelivery : (
+          <button type="button" onClick={stock ? onRefreshAvailability : quote.refresh} className={textLinkClass}>
+            {stock ? "Refresh availability" : "Try again"}
+          </button>
+        )}
       </div>
     );
   }
@@ -237,15 +239,15 @@ export function QuoteSummary({ blocker, quote, onRefreshAvailability }: {
     <div className="space-y-3">
       <QuoteTotals quote={quote.quote} />
       {quote.expired ? (
-        <div role="alert" className="rounded-md border border-warning/40 bg-warning/10 p-3 text-xs text-charcoal">
+        <div role="alert" className="rounded-md border border-warning/40 bg-warning-tint p-3 text-sm text-navy-800">
           <p className="font-semibold">These prices expired at {formatDateTime(quote.quote.expiresAt)}.</p>
-          <button type="button" onClick={quote.refresh} className="mt-1 font-bold text-brand-primary underline underline-offset-4">Refresh prices</button>
+          <button type="button" onClick={quote.refresh} className={textLinkClass}>Refresh prices</button>
         </div>
       ) : (
-        <p className="text-[11px] text-gray-600">Prices held until {formatDateTime(quote.quote.expiresAt)}.</p>
+        <p className="text-sm text-muted">Prices held until {formatDateTime(quote.quote.expiresAt)}.</p>
       )}
       {quote.quote.mode === "demo" && (
-        <p role="note" className="rounded-md border border-ocean-blue/30 bg-ocean-blue/10 p-2.5 text-[11px] text-ocean-blue-dark">
+        <p role="note" className="rounded-md border border-info/30 bg-info-tint p-3 text-sm text-info">
           Demo quote: these are sample products in a development store, not a real purchase.
         </p>
       )}
@@ -253,40 +255,23 @@ export function QuoteSummary({ blocker, quote, onRefreshAvailability }: {
   );
 }
 
-/** Lines exactly as the server priced them. */
-export function QuoteLines({ quote }: { quote: Quote }) {
-  return (
-    <ul className="divide-y divide-light-gray">
-      {quote.lines.map((line) => {
-        const options = describeVariant(line);
-        return (
-          <li key={line.variantId} className="flex flex-wrap gap-3 py-3 first:pt-0 last:pb-0">
-            <div className="h-16 w-16 shrink-0 overflow-hidden rounded-md bg-warm-beige">
-              {line.productImage && <ResponsiveImage url={line.productImage} preset="thumbnail" alt="" className="h-full w-full object-cover" />}
-            </div>
-            <div className="min-w-0 flex-1 basis-40 [overflow-wrap:anywhere]">
-              <p className="text-sm font-medium text-brand-primary">{line.productName}</p>
-              {options && <p className="mt-0.5 text-[11px] text-gray-600">{options}</p>}
-              <p className="mt-0.5 text-[11px] text-gray-600">Qty {line.quantity} · {formatKES(line.unitPrice)} each</p>
-              {line.discount > 0 && <p className="mt-0.5 text-[11px] font-semibold text-success">Saving {formatKES(line.discount)}</p>}
-            </div>
-            <p className="ml-auto max-w-full text-sm font-semibold text-brand-primary">{formatKES(line.total)}</p>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
+const NOTICE_TONES = {
+  info: { box: "border-info/30 bg-info-tint", title: "text-info" },
+  warning: { box: "border-warning/40 bg-warning-tint", title: "text-warning" },
+  error: { box: "border-error/40 bg-error-tint", title: "text-error" },
+  success: { box: "border-success/40 bg-success-tint", title: "text-success" },
+} as const;
 
-function Notice({ tone, role, title, children }: { tone: "info" | "warning" | "error"; role: "status" | "alert"; title?: string; children: ReactNode }) {
-  const tones = {
-    info: "border-ocean-blue/30 bg-ocean-blue/10 text-ocean-blue-dark",
-    warning: "border-warning/40 bg-warning/10 text-charcoal",
-    error: "border-error/30 bg-error/5 text-charcoal",
-  };
+/** A message in its semantic tint: the title in the tone's colour, the text in body navy, so both stay legible. */
+export function Notice({ tone, role, title, children }: {
+  tone: keyof typeof NOTICE_TONES;
+  role: "status" | "alert";
+  title?: string;
+  children: ReactNode;
+}) {
   return (
-    <div role={role} className={`rounded-md border p-4 text-sm ${tones[tone]}`}>
-      {title && <p className="font-semibold text-brand-primary">{title}</p>}
+    <div role={role} className={`rounded-md border p-4 text-sm text-navy-800 [overflow-wrap:anywhere] ${NOTICE_TONES[tone].box}`}>
+      {title && <p className={`font-semibold ${NOTICE_TONES[tone].title}`}>{title}</p>}
       <div className={title ? "mt-1" : ""}>{children}</div>
     </div>
   );
@@ -296,12 +281,6 @@ function lapsedReason(order: Order) {
   return order.reservationStatus === "EXPIRED"
     ? "Its reservation expired before payment, so the items were released."
     : "It was cancelled, so the items were released.";
-}
-
-function placedStatus(order: Order) {
-  if (order.paymentStatus === "PENDING") return "Pending · not paid";
-  if (order.paymentStatus === "PAID") return "Payment received";
-  return `Payment ${order.paymentStatus.toLowerCase()}`;
 }
 
 /** Outcome of an earlier or failed request; placed orders get their own panel. */
@@ -333,52 +312,6 @@ export function SubmissionNotice({ state, actions }: { state: SubmissionState; a
   }
 }
 
-/** A real pending order from the server: number, payment status, how long the items are held, and M-Pesa payment. */
-export function PlacedOrderPanel({ order: placed, remainingItems }: { order: Order; remainingItems: number }) {
-  const heading = useRef<HTMLHeadingElement>(null);
-  useEffect(() => { heading.current?.focus(); }, []);
-  /** The payment service's latest view of this order, so this summary never contradicts the payment below. */
-  const [summary, setSummary] = useState<PaymentOrderSummary | null>(null);
-  const order = summary ? withPaymentSummary(placed, summary) : placed;
-  const paid = order.paymentStatus === "PAID";
-  const lapsed = ["RELEASED", "EXPIRED"].includes(order.reservationStatus ?? "");
-  return (
-    <section aria-labelledby="order-placed-title" className="mx-auto mt-8 max-w-xl rounded-lg bg-white p-6 shadow-sm sm:p-8 md:max-w-3xl">
-      <h1 id="order-placed-title" ref={heading} tabIndex={-1} className="font-display text-2xl text-brand-primary">{lapsed ? "Order no longer reserved" : "Order reserved"}</h1>
-      <dl className="mt-5 space-y-3 text-sm">
-        <div className="flex flex-wrap justify-between gap-2"><dt className="text-gray-600">Order number</dt><dd className="font-mono font-bold text-brand-primary">{order.orderNumber}</dd></div>
-        <div className="flex flex-wrap justify-between gap-2"><dt className="text-gray-600">Status</dt><dd className="font-semibold">{placedStatus(order)}</dd></div>
-        <div className="flex flex-wrap justify-between gap-2"><dt className="text-gray-600">Order total</dt><dd>{formatKES(order.total)}</dd></div>
-        {order.reservationStatus === "HELD" && order.reservationExpiresAt && (
-          <div className="flex flex-wrap justify-between gap-2"><dt className="text-gray-600">Items held until</dt><dd className="font-semibold">{formatDateTime(order.reservationExpiresAt)}</dd></div>
-        )}
-      </dl>
-      <p className="mt-5 text-sm text-charcoal">
-        {paid
-          ? "Payment has been received for this order. Its payment details and next steps are shown below."
-          : lapsed ? "This order's hold has ended. Do not approve an outstanding payment prompt; check its status below or in your order history."
-          : "Payment has not been confirmed for this order yet. Check its status below before requesting another prompt. An unpaid reservation can expire; you can review or cancel it in your order history."}
-      </p>
-      <div className="mt-5">
-        <PaymentPanel orderId={placed.id} onOrderChange={setSummary} />
-      </div>
-      {remainingItems > 0 && (
-        <p className="mt-3 text-sm text-charcoal">
-          Your cart still has {remainingItems} {remainingItems === 1 ? "item" : "items"} that were not part of this order.
-        </p>
-      )}
-      <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-        <Link to="/account/orders" className="flex-1 rounded-sm bg-brand-primary px-5 py-3 text-center text-xs font-bold uppercase tracking-wider text-white hover:bg-brand-secondary hover:text-brand-primary">
-          View or cancel in your orders
-        </Link>
-        <Link to={remainingItems > 0 ? "/cart" : "/shop"} className="flex-1 rounded-sm border border-light-gray px-5 py-3 text-center text-xs font-bold uppercase tracking-wider text-brand-primary hover:border-brand-primary">
-          {remainingItems > 0 ? "Back to Cart" : "Continue Shopping"}
-        </Link>
-      </div>
-    </section>
-  );
-}
-
 /** Why the cart cannot be quoted as a whole; a partial order is never quoted silently. */
 export const CART_BLOCKERS = {
   unavailable: "Remove unavailable items to see your total.",
@@ -394,7 +327,7 @@ export function PlacedNotice({ order }: { order: Order }) {
       <p>
         Its items were removed from your cart.
         {order.reservationStatus === "HELD" && order.reservationExpiresAt && ` Items are held until ${formatDateTime(order.reservationExpiresAt)}.`}{" "}
-        <Link to="/account/orders" className="font-bold text-brand-primary underline underline-offset-4">View or cancel it in your orders</Link>
+        <Link to="/account/orders" className={inlineLinkClass}>View or cancel it in your orders</Link>
       </p>
     </Notice>
   );

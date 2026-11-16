@@ -1,9 +1,12 @@
 import {
   forwardRef,
   useCallback,
+  useLayoutEffect,
+  useRef,
   useSyncExternalStore,
   type ComponentPropsWithoutRef,
   type MouseEvent,
+  type RefObject,
 } from "react";
 
 /** Retired pages, by first path segment, whose old links still land somewhere useful. */
@@ -85,6 +88,20 @@ export function useRouteState(): RouteState {
 
 export function useRoute() {
   return useRouteState().route;
+}
+
+/**
+ * On an in-app arrival (a followed link, or Back/Forward), focus moves to the page's H1 unless it stayed in the site
+ * header; a fresh load leaves focus where the browser put it. Call it where the heading first renders.
+ */
+export function useEntryFocus(heading: RefObject<HTMLElement | null>) {
+  const { kind } = useRouteState();
+  const arrival = useRef(kind);
+  useLayoutEffect(() => {
+    if (arrival.current !== "push" && arrival.current !== "traverse") return;
+    if (document.activeElement?.closest("[data-site-header]")) return;
+    heading.current?.focus({ preventScroll: true });
+  }, [heading]);
 }
 
 /**
