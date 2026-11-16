@@ -1,4 +1,5 @@
-import { Breadcrumb, Container, ErrorPanel, LoadingPanel, ProductCard } from "../components/ui";
+import { ProductCard } from "../components/ProductCard";
+import { Breadcrumb, Container, ErrorPanel, LoadingPanel } from "../components/ui";
 import { Link } from "../router";
 import { useCatalog } from "../store/CatalogContext";
 import { useStore } from "../store/StoreContext";

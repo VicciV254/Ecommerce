@@ -4,11 +4,14 @@ import { useAuth } from '../contexts/AuthContext';
 import { authAPI } from '../api/auth';
 import { PasswordInput } from '../components/PasswordInput';
 import { AuthLayout, authStyles } from '../components/AuthLayout';
+import { safeReturnTo } from '../store/returnTo';
 
 export default function Login() {
   const route = useRoute();
   const { params } = parseRoute(route);
   const verified = params.get('verified') === '1';
+  // Only an internal shopper route is honoured; anything else returns to the home page.
+  const returnTo = safeReturnTo(params.get('returnTo'));
   const [email, setEmail] = useState(params.get('email') ?? '');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -25,7 +28,8 @@ export default function Login() {
 
     const result = await login(email, password);
     if (result.ok) {
-      navigate('/');
+      // The sign-in page leaves history: Back from the returned-to page skips it.
+      navigate(returnTo, { replace: true });
     } else if (result.requiresOtp) {
       navigate(`/verify-email?email=${encodeURIComponent(result.email || email)}`);
     } else {

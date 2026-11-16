@@ -7,6 +7,8 @@ import { StorefrontProvider } from "./store/StorefrontContext";
 import { AuthProvider } from "./contexts/AuthContext";
 import { useRoute, parseRoute } from "./router";
 import { Header } from "./components/Header";
+import { GuestCartMerge } from "./components/GuestCartMerge";
+import { MiniCartProvider } from "./components/MiniCart";
 import { Footer } from "./components/Footer";
 import Home from "./pages/Home";
 import Shop from "./pages/Shop";
@@ -76,63 +78,23 @@ function Router() {
       page = <VerifyEmail />;
       break;
     case "account":
-      if (parts[1] === "profile") {
-        return (
-          <>
-            <Header />
-            <main key={route} className="flex-1 animate-fade-in">
-              <Account>
-                <AccountProfile />
-              </Account>
-            </main>
-            <Footer />
-          </>
-        );
-      } else if (parts[1] === "orders") {
-        return (
-          <>
-            <Header />
-            <main key={route} className="flex-1 animate-fade-in">
-              <Account>
-                <AccountOrders />
-              </Account>
-            </main>
-            <Footer />
-          </>
-        );
-      } else if (parts[1] === "addresses") {
-        return (
-          <>
-            <Header />
-            <main key={route} className="flex-1 animate-fade-in">
-              <Account>
-                <AccountAddresses />
-              </Account>
-            </main>
-            <Footer />
-          </>
-        );
-      }
-      return (
-        <>
-          <Header />
-          <main key={route} className="flex-1 animate-fade-in">
-            <Account>
-              <AccountProfile />
-            </Account>
-          </main>
-          <Footer />
-        </>
+      page = (
+        <Account>
+          {parts[1] === "orders" ? <AccountOrders /> : parts[1] === "addresses" ? <AccountAddresses /> : <AccountProfile />}
+        </Account>
       );
+      break;
     case "admin":
       return <Admin />;
     default:
       page = <Home />;
   }
 
+  // One shell for every shopper page, so the header and the guest-cart report persist across page changes.
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
+      <GuestCartMerge />
       {/* The listing keeps its page across its own URL changes, so focus and scroll survive filtering. */}
       <main key={root === "shop" ? "/shop" : route} className="flex-1 animate-fade-in">
         {page}
@@ -158,7 +120,9 @@ export default function App() {
       <CatalogProvider>
         <AuthProvider>
           <StoreProvider>
-            <Router />
+            <MiniCartProvider>
+              <Router />
+            </MiniCartProvider>
           </StoreProvider>
         </AuthProvider>
       </CatalogProvider>

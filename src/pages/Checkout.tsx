@@ -15,6 +15,7 @@ import { Link } from "../router";
 import { useCatalog } from "../store/CatalogContext";
 import { describeVariant } from "../store/catalogModel";
 import { quoteRequestFor, reviewCart, samePricing } from "../store/checkoutModel";
+import { CHECKOUT_SIGN_IN } from "../store/returnTo";
 import { useStore } from "../store/StoreContext";
 import { useCheckoutChoices } from "../store/useCheckoutChoices";
 import { useCheckoutQuote } from "../store/useCheckoutQuote";
@@ -56,7 +57,7 @@ export default function Checkout() {
     return (
       <CenteredPanel title="Sign in to check out">
         <p className="mt-3 text-sm text-charcoal">Orders are placed from your account so you can follow and cancel them.</p>
-        <Link to="/login" className={`mt-6 inline-block ${primaryLinkClass}`}>Sign In</Link>
+        <Link to={CHECKOUT_SIGN_IN} className={`mt-6 inline-block ${primaryLinkClass}`}>Sign In</Link>
       </CenteredPanel>
     );
   }

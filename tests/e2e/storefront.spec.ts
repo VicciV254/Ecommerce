@@ -14,7 +14,8 @@ test("storefront renders published sections and browses the canonical catalog", 
   await expect(page.getByRole("heading", { name: 'Results for "linen"', exact: true })).toBeVisible();
   await page.getByRole("link", { name: "Linen Short-Sleeve Shirt", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Linen Short-Sleeve Shirt", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Add to Cart", exact: true }).first()).toBeDisabled();
+  // Until size and colour are chosen, the page's action leads to the choices instead of adding anything.
+  await expect(page.getByRole("main").getByRole("button", { name: /^(Add to cart|Choose options)$/ }).first()).toHaveText("Choose options");
 });
 
 test("a campaign without mobile artwork keeps shared copy and uses the mobile crop on phones", async ({ page, context, isMobile }) => {
@@ -43,18 +44,23 @@ test("multi-SKU cards require option choices and the exact SKU is added", async 
   await signInCustomer(page);
   await page.goto("/#/shop?cat=shirts");
   await expect(page.getByRole("heading", { level: 1, name: "Shirts", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Choose options for Linen Short-Sleeve Shirt" })).toBeVisible();
-  await page.getByRole("button", { name: "Add to Cart" }).first().click();
+  // A multi-SKU card opens Quick View to choose; a single-SKU card adds at once and shows the mini-cart.
+  const chooser = page.getByRole("button", { name: "Choose options for Linen Short-Sleeve Shirt" });
+  await expect(chooser).toBeVisible();
+  await page.getByRole("button", { name: "Add to cart" }).first().click();
   await expect.poll(async () => (await shopperState(page)).cart).toEqual([{ productId: "prod-polo-shirt", variantId: "var-polo", quantity: 1 }]);
+  await expect(page.getByRole("dialog", { name: "Your cart" })).toBeVisible();
+  await page.keyboard.press("Escape");
 
-  await page.getByRole("link", { name: "Choose options for Linen Short-Sleeve Shirt" }).click();
-  const add = page.getByRole("button", { name: "Add to Cart", exact: true }).first();
+  await chooser.click();
+  const quickView = page.getByRole("dialog", { name: "Quick view: Linen Short-Sleeve Shirt" });
+  const add = quickView.getByRole("button", { name: /^(Add to cart|Choose options)$/ });
+  await expect(add).toHaveText("Choose options");
+  await expect(quickView.getByText("Select size and color to continue.")).toBeVisible();
+  await quickView.getByRole("button", { name: "M", exact: true }).click();
+  await quickView.getByRole("button", { name: "Blue (sold out)" }).click();
   await expect(add).toBeDisabled();
-  await expect(page.getByText("Select size and color to continue.")).toBeVisible();
-  await page.getByRole("button", { name: "M", exact: true }).click();
-  await page.getByRole("button", { name: "Blue", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Out of Stock", exact: true }).first()).toBeDisabled();
-  await page.getByRole("button", { name: "White", exact: true }).click();
+  await quickView.getByRole("button", { name: "White", exact: true }).click();
   await add.click();
   await expect.poll(async () => (await shopperState(page)).cart).toEqual([
     { productId: "prod-polo-shirt", variantId: "var-polo", quantity: 1 },
@@ -104,7 +110,7 @@ test("a returning browser's obsolete session, theme, cart and receipts are ignor
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Shop by department" })).toBeVisible();
   await expect(page.getByRole("banner").getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
-  await expect(page.getByRole("banner").getByRole("link", { name: "Cart", exact: true })).toHaveText("");
+  await expect(page.getByRole("banner").getByRole("button", { name: "Cart", exact: true })).toHaveText("");
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--color-brand-primary").trim()))
     .toBe(publishedStorefront.settings.theme.colors.primary);
 

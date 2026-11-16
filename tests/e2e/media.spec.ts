@@ -158,9 +158,12 @@ test("the detail cover loads once at a detail width with high priority, and no z
   // 100vw on a 390px phone and 50vw at 1280px choose these detail candidates; strip slots are ~80px and ~137px wide.
   const detailWidth = isMobile ? 480 : 640;
   const stripWidth = isMobile ? 96 : 160;
-  await expect.poll(() => widthsOf(requested, "linen-back")).toEqual([stripWidth]);
+  // The second image is the next slide of the swipeable stage: requested ahead of a swipe at the same detail width,
+  // lazily and never at the zoom width.
+  await expect.poll(() => widthsOf(requested, "linen-back")).toEqual([stripWidth, detailWidth]);
+  expect(priorities.get(rendition("apex-cart/products/linen-back", detailWidth))).not.toBe("High");
   const stripChoices: Awaited<ReturnType<typeof chosenForSlot>>[] = [];
-  for (const thumbnail of await page.getByRole("button", { name: /^Show image/ }).locator("img").all()) {
+  for (const thumbnail of await page.getByRole("button", { name: /^Image \d+ of \d+$/ }).locator("img").all()) {
     const choice = await chosenForSlot(thumbnail);
     expectSmallestSufficient(THUMBNAIL_WIDTHS, choice);
     stripChoices.push(choice);

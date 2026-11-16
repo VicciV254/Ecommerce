@@ -22,6 +22,11 @@ if (typeof globalThis.ResizeObserver !== "function") {
   };
 }
 
+// Nor does it scroll elements; scrolling (the gallery stage) is checked in browser tests.
+if (typeof Element.prototype.scrollTo !== "function") {
+  Element.prototype.scrollTo = function scrollTo() {};
+}
+
 afterEach(() => {
   cleanup();
   localStorage.clear();

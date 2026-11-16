@@ -2,7 +2,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject }
 import type { CatalogCategory, CatalogDesigner } from "../api/catalog";
 import { ActiveFilterChips, FilterPanel, applyListingChange } from "../components/ListingFilters";
 import { ModalDialog } from "../components/Modal";
-import { Breadcrumb, Container, DemoCatalogNotice, ErrorPanel, ProductCard } from "../components/ui";
+import { ProductCard } from "../components/ProductCard";
+import { Breadcrumb, Container, DemoCatalogNotice, ErrorPanel } from "../components/ui";
 import { Link, parseRoute, useRouteState, type RouteState } from "../router";
 import { useCatalog } from "../store/CatalogContext";
 import { CLEAR_FILTERS, LISTING_PAGE_SIZE, activeFilters, buildListing, type ActiveFilter, type Listing } from "../store/listingModel";

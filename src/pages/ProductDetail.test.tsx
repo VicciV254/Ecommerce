@@ -25,7 +25,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "test-customer" } }) }));
 vi.mock("../store/StoreContext", () => ({
-  useStore: () => ({ state: { wishlist: [] }, addToCart: mocks.addToCart, toggleWish: vi.fn() }),
+  useStore: () => ({ state: { wishlist: [], cart: [] }, addToCart: mocks.addToCart, toggleWish: vi.fn() }),
 }));
 vi.mock("../store/CatalogContext", () => ({ useCatalog: () => mocks.catalog }));
 vi.mock("../api/catalog", () => ({ catalogAPI: { getProduct: mocks.getProduct } }));
@@ -54,8 +54,8 @@ function notFound() {
 /** Detail request that stays pending, so the page renders the snapshot record. */
 const pending = () => new Promise<never>(() => undefined);
 const resolved = (product: CatalogProductDetail) => Promise.resolve({ data: product });
-/** The purchase button precedes any related-product cards in document order. */
-const addButton = () => screen.getAllByRole("button", { name: /^(✓ )?Add(ed)? to Cart$|^Out of Stock$/ })[0];
+/** The page's own purchase action precedes any related-product cards and the phone purchase bar in document order. */
+const addButton = () => screen.getAllByRole("button", { name: /^(Add to cart|Choose options)$/ })[0];
 
 beforeEach(() => {
   mocks.addToCart.mockClear();
@@ -79,14 +79,14 @@ describe("ProductDetail", () => {
     ["STANDARD", "Returns within 7 days of delivery."],
     ["FAULT_ONLY", "Returnable only if faulty, damaged or wrong — within 7 days."],
     ["UNOPENED_OR_FAULT", "Returnable within 7 days if unopened, or if faulty, damaged or wrong."],
-  ] as const)("states the %s returns rule beside price and availability", (returnRule, window) => {
+  ] as const)("states the %s returns rule with the purchase facts", (returnRule, window) => {
     mocks.catalog = catalogWith([{ ...poloShirt, returnRule }]);
     mocks.getProduct.mockImplementation(pending);
     render(<ProductDetail id={poloShirt.id} />);
     const fact = screen.getByText(/^Returns:/).closest("p");
     expect(fact?.textContent).toBe(`Returns: ${window} Refunds by M-Pesa; delivery fee refunded only for faulty, damaged or wrong items.`);
-    // The fact sits with the availability box, ahead of the purchase controls.
-    expect(fact && fact.compareDocumentPosition(addButton()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Phone order: options, quantity and Add come first, then the delivery and returns facts.
+    expect(fact && fact.compareDocumentPosition(addButton()) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
   });
 
   it("reports an unknown product as not found instead of showing another product", async () => {
@@ -111,20 +111,29 @@ describe("ProductDetail", () => {
     mocks.getProduct.mockReturnValue(resolved(linenShirt));
     render(<ProductDetail id={linenShirt.id} />);
     await screen.findByText("No reviews yet.");
-    expect(addButton().hasAttribute("disabled")).toBe(true);
+    // Until every choice has a value the action reads "Choose options" and leads to the first missing choice.
+    expect(screen.getByRole("group", { name: "Size Not selected" })).toBeTruthy();
+    expect(addButton().textContent).toBe("Choose options");
     expect(screen.getByText("Select size and color to continue.")).toBeTruthy();
+    fireEvent.click(addButton());
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "S" }));
+    expect(mocks.addToCart).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "M" }));
+    expect(screen.getByRole("group", { name: "Size M" })).toBeTruthy();
+    expect(addButton().textContent).toBe("Choose options");
     fireEvent.click(screen.getByRole("button", { name: "White" }));
     expect(screen.getAllByText("KES 900").length).toBeGreaterThan(0);
+    expect(addButton().textContent).toBe("Add to cart");
     fireEvent.click(addButton());
     expect(mocks.addToCart).toHaveBeenLastCalledWith({ productId: linenShirt.id, variantId: "var-linen-m-white", quantity: 1 });
 
-    fireEvent.click(screen.getByRole("button", { name: "Blue" }));
-    expect(addButton().textContent).toBe("Out of Stock");
+    // Unavailable values say so in text; choosing one states the reason and disables Add.
+    fireEvent.click(screen.getByRole("button", { name: "Blue (sold out)" }));
+    expect(screen.getByText("This combination is sold out. Choose different options.")).toBeTruthy();
     expect(addButton().hasAttribute("disabled")).toBe(true);
 
-    fireEvent.click(screen.getByRole("button", { name: "S" }));
+    fireEvent.click(screen.getByRole("button", { name: "S (unavailable)" }));
     expect(screen.getByText("This combination is not available. Choose different options.")).toBeTruthy();
     expect(addButton().hasAttribute("disabled")).toBe(true);
     expect(mocks.addToCart).toHaveBeenCalledTimes(1);
@@ -150,7 +159,8 @@ describe("ProductDetail", () => {
     fireEvent.click(screen.getByRole("button", { name: "M" }));
     fireEvent.click(screen.getByRole("button", { name: "White" }));
     fireEvent.click(screen.getByRole("button", { name: "Increase quantity" }));
-    expect(screen.getByRole("button", { name: "Increase quantity" }).hasAttribute("disabled")).toBe(true);
+    // At the limit the button stays focusable (aria-disabled), so a keyboard user's focus is not dropped.
+    expect(screen.getByRole("button", { name: "Increase quantity" }).getAttribute("aria-disabled")).toBe("true");
 
     const fewer = { ...linenShirt, variants: linenShirt.variants.map((variant) => variant.id === "var-linen-m-white" ? { ...variant, stock: 1 } : variant) };
     mocks.catalog = catalogWith([fewer]);
@@ -161,8 +171,9 @@ describe("ProductDetail", () => {
     const recoloured = { ...linenShirt, variants: [fixtureVariant({ id: "var-linen-m-green", attributes: { size: "M", color: "Green" }, stock: 3 })] };
     mocks.catalog = catalogWith([recoloured]);
     rerender(<ProductDetail id={linenShirt.id} />);
-    expect(screen.getByRole("button", { name: "Green" }).getAttribute("aria-pressed")).toBe("true");
-    expect(screen.queryByRole("button", { name: "White" })).toBeNull();
+    // A single remaining value is a fixed fact, not a choice.
+    expect(screen.getByText("Green").closest("div")?.textContent).toBe("Color:Green");
+    expect(screen.queryByRole("button", { name: /Green|White/ })).toBeNull();
     fireEvent.click(addButton());
     expect(mocks.addToCart).toHaveBeenLastCalledWith({ productId: linenShirt.id, variantId: "var-linen-m-green", quantity: 2 });
   });
@@ -172,7 +183,7 @@ describe("ProductDetail", () => {
     const { rerender } = render(<ProductDetail id={linenShirt.id} />);
     const main = screen.getByRole("img", { name: "Linen shirt, front" });
     fireEvent.load(main);
-    fireEvent.click(screen.getByRole("button", { name: "Show image 1 of 2" }));
+    fireEvent.click(screen.getByRole("button", { name: "Image 1 of 2" }));
     expect(screen.queryByText("Loading image...")).toBeNull();
 
     fireEvent.error(main);
@@ -198,15 +209,16 @@ describe("ProductDetail", () => {
     render(<ProductDetail id={linenShirt.id} />);
     const cover = screen.getByRole("img", { name: "Linen shirt, front" });
     expect([cover.getAttribute("loading"), cover.getAttribute("fetchpriority"), cover.getAttribute("decoding")]).toEqual(["eager", "high", "async"]);
-    expect(cover.getAttribute("sizes")).toBe("(min-width: 1024px) 50vw, 100vw");
+    // From 768px the gallery is the left of two columns.
+    expect(cover.getAttribute("sizes")).toBe("(min-width: 768px) 50vw, 100vw");
     expect(cover.getAttribute("srcset")?.split(", ").map((entry) => entry.split(" ")[1])).toEqual(["480w", "640w", "960w", "1280w", "1600w"]);
     expect([cover.getAttribute("width"), cover.getAttribute("height")]).toEqual(["2400", "3000"]);
-    const thumbnails = screen.getAllByRole("button", { name: /^Show image/ }).map((button) => button.querySelector("img")!);
-    const strip = "(min-width: 1440px) 157px, (min-width: 1024px) calc(12.5vw - 23px), (min-width: 640px) calc(25vw - 22px), calc(25vw - 18px)";
+    const thumbnails = screen.getAllByRole("button", { name: /^Image \d+ of \d+$/ }).map((button) => button.querySelector("img")!);
+    const strip = "(min-width: 1440px) 157px, (min-width: 1024px) calc(12.5vw - 23px), (min-width: 768px) calc(12.5vw - 20px), (min-width: 640px) calc(25vw - 22px), calc(25vw - 18px)";
     expect(thumbnails.map((image) => [image.getAttribute("sizes"), image.getAttribute("loading")])).toEqual([[strip, "lazy"], [strip, "lazy"]]);
     expect(thumbnails[0].getAttribute("srcset")?.split(", ").map((entry) => entry.split(" ")[1])).toEqual(["96w", "160w", "240w"]);
 
-    fireEvent.click(screen.getByRole("button", { name: "Show image 2 of 2" }));
+    fireEvent.click(screen.getByRole("button", { name: "Image 2 of 2" }));
     const back = screen.getByRole("img", { name: "Linen shirt, back" });
     expect([back.getAttribute("loading"), back.hasAttribute("fetchpriority")]).toEqual(["lazy", false]);
     expect(document.body.innerHTML).not.toMatch(/w_2400/);
@@ -218,7 +230,8 @@ describe("ProductDetail", () => {
     expect(screen.getByText("Demo")).toBeTruthy();
     expect(screen.getByText(/Demo listing: details, price, stock and images are samples/)).toBeTruthy();
     expect(screen.getByText("Sample image")).toBeTruthy();
-    expect(screen.getByText("KES 7,500")).toBeTruthy();
+    // The price in the purchase facts (the phone purchase bar repeats it).
+    expect(within(screen.getByRole("heading", { level: 1 }).parentElement!).getByText("KES 7,500")).toBeTruthy();
 
     rerender(<ProductDetail id={imagelessShirt.id} />);
     expect(screen.getByRole("img", { name: "Product images are not yet available" })).toBeTruthy();

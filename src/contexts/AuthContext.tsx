@@ -12,10 +12,12 @@ import {
   authAPI,
   isUser,
   type Address,
+  type AuthSession,
   type LoginErrorBody,
   type RegisterData,
   type User,
 } from '../api/auth';
+import { markGuestMerge } from '../store/guestMerge';
 import {
   CUSTOMER_SESSION_KEYS,
   STORAGE_KEYS,
@@ -45,6 +47,16 @@ function persistSession(user: User, token: string, refreshToken: string) {
   localStorage.setItem(STORAGE_KEYS.customerRefreshToken, refreshToken);
 }
 
+/**
+ * Stores a session this tab has just established. A sign-in from a guest session also marks this tab's guest cart to
+ * join the account; switching from one account to another never does.
+ */
+function establishSession({ user, token, refreshToken }: AuthSession) {
+  const fromGuest = readStoredUser() === null;
+  persistSession(user, token, refreshToken);
+  if (fromGuest) markGuestMerge(user.id);
+}
+
 function persistUser(user: User) {
   writeStoredJson(STORAGE_KEYS.customerUser, user);
 }
@@ -58,6 +70,10 @@ function readStoredUser(): User | null {
   const stored = readStoredJson(STORAGE_KEYS.customerUser);
   return isUser(stored) ? stored : null;
 }
+
+const SESSION_KEYS: readonly string[] = CUSTOMER_SESSION_KEYS;
+
+const sameUser = (a: User | null, b: User | null) => a === b || (a !== null && b !== null && JSON.stringify(a) === JSON.stringify(b));
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(readStoredUser);
@@ -91,10 +107,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refreshUser().finally(() => setLoading(false));
   }, [refreshUser]);
 
+  useEffect(() => {
+    // Another tab signed in, out, or as someone else: follow it, so this tab never acts for a session that has ended.
+    const follow = (event: StorageEvent) => {
+      if (event.storageArea !== localStorage || (event.key !== null && !SESSION_KEYS.includes(event.key))) return;
+      const stored = readStoredUser();
+      setUser((current) => (sameUser(current, stored) ? current : stored));
+    };
+    window.addEventListener('storage', follow);
+    return () => window.removeEventListener('storage', follow);
+  }, []);
+
   const login = useCallback(async (email: string, password: string) => {
     try {
       const { data } = await authAPI.login({ email, password });
-      persistSession(data.user, data.token, data.refreshToken);
+      establishSession(data);
       setUser(data.user);
       return { ok: true };
     } catch (error) {
@@ -112,7 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const { data } = await authAPI.register(formData);
       if (data.user.emailVerified) {
-        persistSession(data.user, data.token, data.refreshToken);
+        establishSession(data);
         setUser(data.user);
       }
       return true;

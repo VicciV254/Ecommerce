@@ -11,7 +11,8 @@ import {
   type ResolvedCampaign,
 } from "../store/storefrontModel";
 import { DepartmentRail, DepartmentRailSkeleton } from "./DepartmentRail";
-import { Container, ErrorPanel, ProductCard, SampleImageLabel, SectionTitle } from "./ui";
+import { ProductCard } from "./ProductCard";
+import { Container, ErrorPanel, SampleImageLabel, SectionTitle } from "./ui";
 
 type Section = StorefrontSettings["sections"][number];
 

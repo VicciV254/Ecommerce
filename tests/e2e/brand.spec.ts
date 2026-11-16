@@ -28,8 +28,12 @@ test("the header lockup is named Apex Cart, sized for the device, and its row fi
   if (!isMobile) return;
 
   await page.setViewportSize(NARROW_PHONE);
-  const icons = ["Wishlist", "Cart", "Sign in"].map((label) => banner.getByRole("link", { name: label, exact: true }));
-  icons.push(banner.getByRole("button", { name: "Menu", exact: true }));
+  const icons = [
+    banner.getByRole("link", { name: "Wishlist", exact: true }),
+    banner.getByRole("button", { name: "Cart", exact: true }),
+    banner.getByRole("link", { name: "Sign in", exact: true }),
+    banner.getByRole("button", { name: "Menu", exact: true }),
+  ];
   const lockup = (await home.boundingBox())!;
   const boxes = await Promise.all(icons.map(async (icon) => (await icon.boundingBox())!));
   const middle = (box: { y: number; height: number }) => box.y + box.height / 2;
@@ -104,7 +108,7 @@ test("keyboard focus shows a gold ring on navy and an info-blue ring on light su
 
 test("reduced motion makes header feedback immediate", async ({ page }) => {
   await page.goto("/#/about");
-  const cart = page.getByRole("banner").getByRole("link", { name: "Cart", exact: true });
+  const cart = page.getByRole("banner").getByRole("button", { name: "Cart", exact: true });
   await expect(cart).toHaveCSS("transition-duration", "0.12s");
   await page.emulateMedia({ reducedMotion: "reduce" });
   expect(Number.parseFloat(await cart.evaluate((element) => getComputedStyle(element).transitionDuration))).toBeLessThan(0.001);

@@ -62,6 +62,7 @@
   --focus-ring-offset: 2px;
   --motion-feedback: 120ms;
   --motion-overlay: 180ms;
+  --motion-gallery: 160ms;
 }
 
 /* Type scale: phone, then tablet (768px) and desktop (1280px). Marcellus has one weight, so display roles never bold. */
@@ -143,6 +144,11 @@
   --focus-ring: var(--color-ocean-blue);
 }
 
+/* Scroll containers holding controls: keyboard focus scrolls a control in with its whole ring showing. */
+@utility focus-scroll-room {
+  scroll-padding-block: calc(var(--focus-ring-width) + var(--focus-ring-offset) + 0.25rem);
+}
+
 @layer base {
   /* Form controls never drop below the 16px body size (also stops iOS zooming on focus); size utilities read these. */
   input, select, textarea {
@@ -161,6 +167,8 @@ html {
   font-synthesis-weight: none;
   /* Focus and scroll-into-view stop below the sticky header (height set by useStickyHeaderOffset), ring included. */
   scroll-padding-top: calc(var(--sticky-header-height, 0px) + var(--focus-ring-width) + var(--focus-ring-offset) + 0.25rem);
+  /* ...and above the bottom edge of the window, ring included (the phone purchase bar adds its height below). */
+  scroll-padding-bottom: calc(var(--focus-ring-width) + var(--focus-ring-offset) + 0.25rem);
 }
 
 /* The sticky header never leaves the viewport, so focus and caret moves inside it must not scroll the page. */
@@ -178,6 +186,33 @@ body {
 
 body:has(dialog.modal-frame[open]) {
   overflow: hidden;
+}
+
+/*
+ * The phone purchase bar (product pages): not shown on short viewports (the sticky budget), and hidden, keeping its
+ * space, while a dialog is open. The page reserves its measured height at the end, and while it shows, focus and
+ * scroll-into-view stop above it (WCAG 2.4.11). Focus inside the bar itself never scrolls the page.
+ */
+@media (max-height: 560px) {
+  [data-purchase-bar] {
+    display: none;
+  }
+}
+
+body:has(dialog.modal-frame[open]) [data-purchase-bar] {
+  visibility: hidden;
+}
+
+body:has([data-purchase-bar]) {
+  padding-bottom: var(--purchase-bar-height, 0px);
+}
+
+html:has([data-purchase-bar][data-shown]) {
+  scroll-padding-bottom: calc(var(--purchase-bar-height, 0px) + var(--focus-ring-width) + var(--focus-ring-offset) + 0.25rem);
+}
+
+html:has([data-purchase-bar] :focus) {
+  scroll-padding-bottom: 0;
 }
 
 /*

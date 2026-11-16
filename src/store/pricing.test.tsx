@@ -58,14 +58,18 @@ describe("single display discount from the canonical catalog", () => {
     });
   }
 
-  it("shows each SKU's server unit price and quotes no total without an address", async () => {
+  it("shows each SKU's server unit price, an estimated subtotal and no payable total without an address", async () => {
     renderStore(<Cart />);
     const line = (await screen.findByRole("link", { name: "Linen Short-Sleeve Shirt" })).closest("li")!;
     expect(within(line).getByText("Size: M · Color: White")).toBeTruthy();
     expect(within(line).getByText("KES 1,000")).toBeTruthy();
-    expect(within(line).getByText("KES 900 each")).toBeTruthy();
-    // Line and cart totals come only from a server quote, never from browser multiplication.
-    expect(screen.queryByText("KES 1,800")).toBeNull();
+    expect(within(line).getByText("KES 900 each excl. VAT")).toBeTruthy();
+    // The line and cart subtotals are estimates labelled as excluding VAT; a payable total needs a server quote.
+    expect(within(line).getByText("KES 1,800")).toBeTruthy();
+    const summary = screen.getByRole("region", { name: "Order Summary" });
+    expect(within(summary).getByText("Subtotal (excl. VAT)").nextElementSibling?.textContent).toBe("KES 1,800");
+    expect(within(summary).getByText(/^Estimated from current prices\./)).toBeTruthy();
+    expect(within(summary).queryByText("Total")).toBeNull();
     expect(screen.getByText("Add a delivery address to see delivery, VAT and your total.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Continue to Checkout" }).hasAttribute("disabled")).toBe(true);
     expect(orders.createQuote).not.toHaveBeenCalled();

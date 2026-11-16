@@ -1,7 +1,7 @@
 import type { BrowserContext, Locator, Page } from "@playwright/test";
 import { fixtureImage } from "../../src/test-support/catalogFixtures";
 import { DISCOVERY_DEPARTMENTS, SHIRT_COUNT, discoveryProducts, discoverySnapshot } from "../../src/test-support/discoveryFixtures";
-import { expect, pageOverflow, publishedStorefront, test } from "./fixtures";
+import { backdropContrast, expect, pageOverflow, publishedStorefront, test } from "./fixtures";
 
 const slug = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
@@ -71,51 +71,6 @@ async function serveWhiteArtwork(context: BrowserContext, hero: { layout: "overl
       },
     },
   }));
-}
-
-/**
- * The lowest WCAG contrast between `text` and the pixels behind its words. The words are hidden while each line's box
- * is captured; the text colour, with its alpha, is then blended over every captured pixel.
- */
-async function backdropContrast(page: Page, text: Locator) {
-  await text.scrollIntoViewIfNeeded();
-  const { color, lines } = await text.evaluate((node) => {
-    const range = document.createRange();
-    range.selectNodeContents(node);
-    const rects = [...range.getClientRects()].filter((rect) => rect.width > 1 && rect.height > 1);
-    return { color: getComputedStyle(node).color, lines: rects.map(({ x, y, width, height }) => ({ x, y, width, height })) };
-  });
-  await text.evaluate((node) => (node as HTMLElement).style.setProperty("color", "transparent", "important"));
-  const shots: string[] = [];
-  for (const clip of lines) shots.push((await page.screenshot({ clip, animations: "disabled" })).toString("base64"));
-  await text.evaluate((node) => (node as HTMLElement).style.removeProperty("color"));
-  expect(shots.length, "the text has visible lines").toBeGreaterThan(0);
-  return page.evaluate(async ({ color, shots }) => {
-    const swatch = new OffscreenCanvas(1, 1).getContext("2d", { willReadFrequently: true })!;
-    swatch.fillStyle = color;
-    swatch.fillRect(0, 0, 1, 1);
-    const [red, green, blue, opacity] = swatch.getImageData(0, 0, 1, 1).data;
-    const alpha = opacity / 255;
-    const channel = (value: number) => {
-      const unit = value / 255;
-      return unit <= 0.03928 ? unit / 12.92 : ((unit + 0.055) / 1.055) ** 2.4;
-    };
-    const luminance = (r: number, g: number, b: number) => 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
-    let worst = Infinity;
-    for (const shot of shots) {
-      const bitmap = await createImageBitmap(new Blob([Uint8Array.from(atob(shot), (char) => char.charCodeAt(0))], { type: "image/png" }));
-      const board = new OffscreenCanvas(bitmap.width, bitmap.height).getContext("2d", { willReadFrequently: true })!;
-      board.drawImage(bitmap, 0, 0);
-      const { data } = board.getImageData(0, 0, bitmap.width, bitmap.height);
-      for (let index = 0; index < data.length; index += 4) {
-        const [r, g, b] = [data[index], data[index + 1], data[index + 2]];
-        const front = luminance(alpha * red + (1 - alpha) * r, alpha * green + (1 - alpha) * g, alpha * blue + (1 - alpha) * b);
-        const back = luminance(r, g, b);
-        worst = Math.min(worst, (Math.max(front, back) + 0.05) / (Math.min(front, back) + 0.05));
-      }
-    }
-    return worst;
-  }, { color, shots });
 }
 
 test.beforeEach(async ({ page, context }) => {

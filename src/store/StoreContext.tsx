@@ -7,11 +7,15 @@ import {
   useMemo,
   useReducer,
   useRef,
+  useState,
   type ReactNode,
 } from "react";
+import type { CatalogProduct } from "../api/catalog";
 import type { DeliveryMethod } from "../api/orders";
 import { useAuth } from "../contexts/AuthContext";
-import { isRecord, readStoredJson, shopperStateKey, writeStoredJson } from "../utils/storage";
+import { STORAGE_NAMESPACE, isRecord, readStoredJson, shopperStateKey, writeStoredJson } from "../utils/storage";
+import { mergeGuestCart, type MergeOutcome } from "./cartModel";
+import { clearGuestMerge, pendingGuestMerge } from "./guestMerge";
 import {
   isDeliveryMethod,
   isOrderIntent,
@@ -60,6 +64,10 @@ type Action =
   | { type: "CLEAR_CART" }
   | { type: "TOGGLE_WISH"; productId: string }
   | { type: "SET_PERSONAL"; owner: string | null; personal: PersonalState }
+  /** The owner's state as stored: another tab changed it, or a merge has just written it. */
+  | ({ type: "RELOAD"; personal: PersonalState } & Owned)
+  /** Undo of a removal: the line returns at its old position, or joins a line for the same SKU added since. */
+  | ({ type: "RESTORE"; line: CartLine; index: number } & Owned)
   | ({ type: "SET_COUPON"; couponCode: string | null } & Owned)
   | ({ type: "SET_CHECKOUT"; preferences: Partial<CheckoutPreferences> } & Owned)
   | ({ type: "BEGIN_ORDER"; intent: OrderIntent } & Owned)
@@ -68,6 +76,8 @@ type Action =
 
 const MAX_ACKNOWLEDGED_ORDERS = 20;
 const DEFAULT_CHECKOUT: CheckoutPreferences = { addressId: null, deliveryMethod: "STANDARD" };
+/** Web Lock that lets one tab at a time merge a guest cart. */
+const GUEST_MERGE_LOCK = `${STORAGE_NAMESPACE}:guest-merge`;
 
 function isCartLine(value: unknown): value is CartLine {
   return isRecord(value) && typeof value.productId === "string" && value.productId !== "" &&
@@ -110,6 +120,18 @@ function wholeQuantity(quantity: number) {
 function ownedReducer(state: State, action: Exclude<Action, { type: "ADD" | "REMOVE" | "QUANTITY" | "CLEAR_CART" | "TOGGLE_WISH" | "SET_PERSONAL" }>): State {
   if (action.owner !== state.personalOwner) return state;
   switch (action.type) {
+    case "RELOAD":
+      return { personalOwner: state.personalOwner, ...action.personal };
+    case "RESTORE": {
+      const quantity = wholeQuantity(action.line.quantity);
+      const existing = state.cart.findIndex(
+        (line) => line.productId === action.line.productId && line.variantId === action.line.variantId,
+      );
+      const cart = [...state.cart];
+      if (existing >= 0) cart[existing] = { ...cart[existing], quantity: cart[existing].quantity + quantity };
+      else cart.splice(Math.min(Math.max(0, action.index), cart.length), 0, { ...action.line, quantity });
+      return { ...state, cart };
+    }
     case "SET_COUPON":
       return { ...state, couponCode: action.couponCode };
     case "SET_CHECKOUT":
@@ -175,6 +197,8 @@ type StoreValue = {
   state: State;
   addToCart: (line: CartLine) => void;
   removeFromCart: (index: number) => void;
+  /** Undoes a removal made while `owner` was current; ignored once another owner's cart is shown. */
+  restoreLine: (line: CartLine, index: number, owner: string | null) => void;
   setQuantity: (index: number, quantity: number) => void;
   clearCart: () => void;
   toggleWish: (productId: string) => void;
@@ -189,6 +213,20 @@ type StoreValue = {
   endOrder: (idempotencyKey: string) => void;
   /** Removes a verified order's items from the cart once, keeping later additions, and ends its intent. */
   acknowledgeOrder: (orderId: string, items: CartLine[], idempotencyKey: string) => void;
+  /**
+   * False while the provider still holds the previous owner's data after a sign-in change, or while a guest cart
+   * waits to be merged: cart views show nothing (or a loading state) rather than the wrong lines.
+   */
+  ownerReady: boolean;
+  /** True from a sign-in this tab made from a guest session until the guest cart has been merged. */
+  mergePending: boolean;
+  /**
+   * Merges the stored guest cart into the stored cart of the account this tab signed in, against the loaded catalog,
+   * clears the guest cart and resolves to what changed. Resolves to `null` (and changes nothing) unless this tab has a
+   * merge pending for the current owner.
+   */
+  completeGuestMerge: (productsById: ReadonlyMap<string, CatalogProduct>) => Promise<MergeOutcome | null>;
+  /** Units across the cart; 0 until `ownerReady`. */
   cartCount: number;
 };
 
@@ -202,23 +240,80 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     ...loadPersonal(initialOwner),
   }));
   const latest = useRef(state);
+  /** The owner as of the last owner-change effect: the one whose state this tab now loads and saves. */
+  const seenOwner = useRef(owner);
+  const [pendingMerge, setPendingMerge] = useState(() => pendingGuestMerge(owner));
+  /** Mirrors `pendingMerge` synchronously, so a merge can never run twice for one sign-in. */
+  const pendingRef = useRef(pendingMerge);
 
   useLayoutEffect(() => {
     latest.current = state;
   }, [state]);
 
   useEffect(() => {
+    const previous = seenOwner.current;
+    seenOwner.current = owner;
+    if (previous === owner) return;
+    // Only a sign-in this tab made from a guest session brings the guest cart along. A sign-in learned from another
+    // tab, an account switch and a sign-out never move lines.
+    const merging = previous === null ? pendingGuestMerge(owner) : null;
+    if (merging === null) clearGuestMerge();
+    pendingRef.current = merging;
+    setPendingMerge(merging);
     dispatch({ type: "SET_PERSONAL", owner, personal: loadPersonal(owner) });
+  }, [owner]);
+
+  useEffect(() => {
+    // Another tab changed this owner's state: take its version, so this tab never saves older state over it.
+    const key = shopperStateKey(owner);
+    const follow = (event: StorageEvent) => {
+      if (event.storageArea !== localStorage || (event.key !== null && event.key !== key)) return;
+      dispatch({ type: "RELOAD", owner, personal: loadPersonal(owner) });
+    };
+    window.addEventListener("storage", follow);
+    return () => window.removeEventListener("storage", follow);
   }, [owner]);
 
   useEffect(() => {
     // An account switch renders once with the previous owner's data; never save it under the new key.
     if (state.personalOwner !== owner) return;
-    writeStoredJson(shopperStateKey(owner), storedPersonal(state));
+    const key = shopperStateKey(owner);
+    const saved = JSON.stringify(storedPersonal(state));
+    // Writing what storage already holds would echo another tab's change back to it.
+    if (localStorage.getItem(key) !== saved) localStorage.setItem(key, saved);
   }, [state, owner]);
+
+  const completeGuestMerge = useCallback(async (productsById: ReadonlyMap<string, CatalogProduct>) => {
+    if (owner === null || pendingRef.current !== owner || latest.current.personalOwner !== owner) return null;
+    pendingRef.current = null;
+    // One read-modify-write of both stored carts, one tab at a time: lines other tabs added to the account are kept,
+    // and a guest cart already merged elsewhere is empty by now. Nothing moves once this tab has left the account.
+    const merge = () => {
+      if (seenOwner.current !== owner) return null;
+      const account = loadPersonal(owner);
+      const guest = loadPersonal(null);
+      const outcome = mergeGuestCart(account.cart, guest.cart, productsById);
+      const merged: PersonalState = { ...account, cart: outcome.cart };
+      writeStoredJson(shopperStateKey(owner), storedPersonal(merged));
+      writeStoredJson(shopperStateKey(null), storedPersonal({ ...guest, cart: [] }));
+      return { outcome, merged };
+    };
+    // Web Locks are missing in older browsers; one tab merging alone needs no lock.
+    const locks: LockManager | undefined = navigator.locks;
+    const result = locks ? await locks.request(GUEST_MERGE_LOCK, merge) : merge();
+    clearGuestMerge(owner);
+    setPendingMerge((pending) => (pending === owner ? null : pending));
+    if (!result) return null;
+    dispatch({ type: "RELOAD", owner, personal: result.merged });
+    return result.outcome;
+  }, [owner]);
 
   const addToCart = useCallback((line: CartLine) => dispatch({ type: "ADD", line }), []);
   const removeFromCart = useCallback((index: number) => dispatch({ type: "REMOVE", index }), []);
+  const restoreLine = useCallback(
+    (line: CartLine, index: number, lineOwner: string | null) => dispatch({ type: "RESTORE", owner: lineOwner, line, index }),
+    [],
+  );
   const setQuantity = useCallback((index: number, quantity: number) => dispatch({ type: "QUANTITY", index, quantity }), []);
   const clearCart = useCallback(() => dispatch({ type: "CLEAR_CART" }), []);
   const toggleWish = useCallback((productId: string) => dispatch({ type: "TOGGLE_WISH", productId }), []);
@@ -247,10 +342,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [owner],
   );
 
+  const mergePending = pendingMerge !== null && pendingMerge === owner;
+  const ownerReady = state.personalOwner === owner && !mergePending;
   const value = useMemo<StoreValue>(() => ({
     state,
     addToCart,
     removeFromCart,
+    restoreLine,
     setQuantity,
     clearCart,
     toggleWish,
@@ -259,10 +357,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     beginOrder,
     endOrder,
     acknowledgeOrder,
-    cartCount: state.cart.reduce((sum, line) => sum + line.quantity, 0),
+    ownerReady,
+    mergePending,
+    completeGuestMerge,
+    cartCount: ownerReady ? state.cart.reduce((sum, line) => sum + line.quantity, 0) : 0,
   }), [
-    state, addToCart, removeFromCart, setQuantity, clearCart, toggleWish,
+    state, addToCart, removeFromCart, restoreLine, setQuantity, clearCart, toggleWish,
     setCouponCode, setCheckoutPreferences, beginOrder, endOrder, acknowledgeOrder,
+    ownerReady, mergePending, completeGuestMerge,
   ]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

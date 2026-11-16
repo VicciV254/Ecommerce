@@ -36,6 +36,47 @@ export const customer: User = {
 
 export const staff = { id: "browser-admin", email: "admin@example.test", username: "Browser staff", role: "ADMIN" };
 
+/** A second shopper account on the same browser, for account-switch checks. */
+export const otherCustomer: User = {
+  id: "browser-customer-2",
+  firstName: "Other",
+  lastName: "Shopper",
+  email: "other@example.test",
+  emailVerified: true,
+  addresses: [],
+};
+export const OTHER_CUSTOMER_TOKEN = "browser-only-other-customer-token";
+
+/**
+ * Lets the sign-in form succeed for these accounts (any password): `POST /auth/login` returns a session and
+ * `GET /auth/me` answers for its token. Signing out (`POST /auth/logout`) is acknowledged.
+ */
+export async function serveSignIn(
+  context: BrowserContext,
+  accounts: { user: User; token: string }[] = [{ user: customer, token: CUSTOMER_TOKEN }, { user: otherCustomer, token: OTHER_CUSTOMER_TOKEN }],
+) {
+  await context.route("**/api/auth/login", (route) => {
+    const { email } = route.request().postDataJSON() as { email: string };
+    const account = accounts.find((item) => item.user.email === email);
+    return account
+      ? route.fulfill({ json: { user: account.user, token: account.token, refreshToken: `refresh-${account.token}` } })
+      : route.fulfill({ status: 401, json: { error: "Invalid email or password" } });
+  });
+  await context.route("**/api/auth/me", (route) => {
+    const account = accounts.find((item) => route.request().headers().authorization === `Bearer ${item.token}`);
+    return account ? route.fulfill({ json: account.user }) : route.fallback();
+  });
+  await context.route("**/api/auth/logout", (route) => route.fulfill({ json: { message: "Signed out" } }));
+}
+
+/** Signs in through the sign-in form, as a shopper would. */
+export async function signInWithForm(page: Page, user: User = customer) {
+  const form = page.getByRole("main");
+  await form.getByLabel("Email address").fill(user.email);
+  await form.getByLabel("Password", { exact: true }).fill("browser-only-password");
+  await form.getByRole("button", { name: "Sign in", exact: true }).click();
+}
+
 /** An unpaid legacy order as the customer order view reports it: it can still be cancelled. */
 export const order: CustomerOrder = fixtureCustomerOrder({
   id: "browser-order", orderNumber: "TEST-ORDER-1",
@@ -250,6 +291,61 @@ export const clippedWithin = (scope: Locator) => scope.evaluate((root) =>
     .slice(0, 10)
     .map((element) => ({ tag: element.tagName, text: element.textContent?.slice(0, 40), client: element.clientWidth, scroll: element.scrollWidth })));
 
+/**
+ * The focused control once it has stopped moving: its name, whether it shows the focus ring, and how far the ring (the
+ * outline and its gap) reaches past the window or the nearest box that clips it; 0 or less means the whole ring shows.
+ */
+const focusRing = (page: Page) => page.evaluate(async () => {
+  const control = document.activeElement as HTMLElement;
+  await new Promise<void>((resolve) => {
+    let last = "";
+    let still = 0;
+    const settle = () => {
+      const { top, left } = control.getBoundingClientRect();
+      still = `${top},${left}` === last ? still + 1 : 0;
+      last = `${top},${left}`;
+      if (still >= 2) resolve();
+      else requestAnimationFrame(settle);
+    };
+    requestAnimationFrame(settle);
+  });
+  const style = getComputedStyle(control);
+  const reach = Number.parseFloat(style.outlineOffset) + Number.parseFloat(style.outlineWidth);
+  const box = control.getBoundingClientRect();
+  let overhang = Math.max(reach - box.left, reach - box.top, box.right + reach - window.innerWidth, box.bottom + reach - window.innerHeight);
+  for (let node = control.parentElement; node; node = node.parentElement) {
+    const { overflowX, overflowY } = getComputedStyle(node);
+    if (overflowX === "visible" && overflowY === "visible") continue;
+    const clip = node.getBoundingClientRect();
+    overhang = Math.max(overhang, clip.left - (box.left - reach), clip.top - (box.top - reach),
+      box.right + reach - clip.right, box.bottom + reach - clip.bottom);
+  }
+  return {
+    name: control.getAttribute("aria-label") || (control as HTMLInputElement).labels?.[0]?.textContent?.trim() ||
+      control.textContent?.trim() || control.tagName,
+    shown: control.matches(":focus-visible") && reach > 0,
+    overhang,
+  };
+});
+
+/** Checks that the focused control shows its whole focus ring; returns the control's name. */
+export async function expectWholeFocusRing(page: Page) {
+  const ring = await focusRing(page);
+  expect(ring.shown, `${ring.name} shows a focus ring`).toBe(true);
+  expect(ring.overhang, `${ring.name} focus ring is cut off`).toBeLessThanOrEqual(0);
+  return ring.name;
+}
+
+/** Moves focus forward `presses` times with Tab, checking each control's focus ring; returns their names. */
+export async function tabThroughRings(page: Page, presses: number) {
+  const visited: string[] = [];
+  for (let press = 0; press < presses; press += 1) {
+    await page.keyboard.press("Tab");
+    visited.push(await expectWholeFocusRing(page));
+  }
+  return visited;
+}
+
 export type StoredShopper = {
   cart: CartLine[];
   wishlist: string[];
@@ -258,6 +354,51 @@ export type StoredShopper = {
   acknowledgedOrderIds?: string[];
 };
 
-export function shopperState(page: Page): Promise<StoredShopper> {
-  return page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? "null"), shopperStateKey(customer.id));
+export function shopperState(page: Page, owner: string | null = customer.id): Promise<StoredShopper> {
+  return page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? "null"), shopperStateKey(owner));
+}
+
+/**
+ * The lowest WCAG contrast between `text` and the pixels behind its words. The words are hidden while each line's box
+ * is captured; the text colour, with its alpha, is then blended over every captured pixel.
+ */
+export async function backdropContrast(page: Page, text: Locator) {
+  await text.scrollIntoViewIfNeeded();
+  const { color, lines } = await text.evaluate((node) => {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    const rects = [...range.getClientRects()].filter((rect) => rect.width > 1 && rect.height > 1);
+    return { color: getComputedStyle(node).color, lines: rects.map(({ x, y, width, height }) => ({ x, y, width, height })) };
+  });
+  await text.evaluate((node) => (node as HTMLElement).style.setProperty("color", "transparent", "important"));
+  const shots: string[] = [];
+  for (const clip of lines) shots.push((await page.screenshot({ clip, animations: "disabled" })).toString("base64"));
+  await text.evaluate((node) => (node as HTMLElement).style.removeProperty("color"));
+  expect(shots.length, "the text has visible lines").toBeGreaterThan(0);
+  return page.evaluate(async ({ color, shots }) => {
+    const swatch = new OffscreenCanvas(1, 1).getContext("2d", { willReadFrequently: true })!;
+    swatch.fillStyle = color;
+    swatch.fillRect(0, 0, 1, 1);
+    const [red, green, blue, opacity] = swatch.getImageData(0, 0, 1, 1).data;
+    const alpha = opacity / 255;
+    const channel = (value: number) => {
+      const unit = value / 255;
+      return unit <= 0.03928 ? unit / 12.92 : ((unit + 0.055) / 1.055) ** 2.4;
+    };
+    const luminance = (r: number, g: number, b: number) => 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+    let worst = Infinity;
+    for (const shot of shots) {
+      const bitmap = await createImageBitmap(new Blob([Uint8Array.from(atob(shot), (char) => char.charCodeAt(0))], { type: "image/png" }));
+      const board = new OffscreenCanvas(bitmap.width, bitmap.height).getContext("2d", { willReadFrequently: true })!;
+      board.drawImage(bitmap, 0, 0);
+      const { data } = board.getImageData(0, 0, bitmap.width, bitmap.height);
+      for (let index = 0; index < data.length; index += 4) {
+        const [r, g, b] = [data[index], data[index + 1], data[index + 2]];
+        const front = luminance(alpha * red + (1 - alpha) * r, alpha * green + (1 - alpha) * g, alpha * blue + (1 - alpha) * b);
+        const back = luminance(r, g, b);
+        worst = Math.min(worst, (Math.max(front, back) + 0.05) / (Math.min(front, back) + 0.05));
+      }
+    }
+    return worst;
+  }, { color, shots });
 }

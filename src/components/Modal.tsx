@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 
 const PLACEMENTS = {
@@ -6,19 +6,23 @@ const PLACEMENTS = {
   end: "items-stretch justify-end p-0",
   /** Full-height sheet on phones; a centred dialog from 768px. */
   sheet: "items-stretch justify-center p-0 md:items-center md:p-4",
+  /** The whole viewport, for the image viewer. */
+  full: "items-stretch justify-stretch p-0",
 } as const;
 
 /** Elements that can be Tab stops, including native disclosure summaries. */
 const TAB_STOP_SELECTOR = "a[href], button, input, select, textarea, summary, [tabindex]";
 
 export function ModalDialog({
-  open, onClose, label, placement = "center", dismissAt, children,
+  open, onClose, label, placement = "center", dismissAt, initialFocus, children,
 }: {
   open: boolean;
   onClose: () => void;
   label: string;
   placement?: keyof typeof PLACEMENTS;
   dismissAt?: string;
+  /** Receives focus once the dialog opens, instead of its first control (for example a heading with `tabIndex={-1}`). */
+  initialFocus?: RefObject<HTMLElement | null>;
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -29,13 +33,14 @@ export function ModalDialog({
     if (!open || !dialog) return;
     const previousFocus = document.activeElement;
     dialog.showModal();
+    initialFocus?.current?.focus();
     return () => {
       if (dialog.open) dialog.close();
       if (previousFocus instanceof HTMLElement && previousFocus.isConnected) {
         previousFocus.focus({ preventScroll: true });
       }
     };
-  }, [open]);
+  }, [open, initialFocus]);
 
   useEffect(() => {
     if (!open || !dismissAt) return;

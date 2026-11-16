@@ -376,21 +376,51 @@ describe("cart quote", () => {
     return quote;
   }
 
-  it("[4] shows the server's line image for a Blue line, not the product cover, once the line is priced", async () => {
+  it("[4] shows a Blue line's own image by the server's rule, not the product cover, before and after pricing", async () => {
     const quote = serveBlueCart();
     render(tree(<Cart />));
-    expect(lineImage().querySelector("img")?.getAttribute("src")).toBe("https://media.example.test/linen-front.jpg");
-    await act(async () => quote.resolve({ data: fixtureQuote({ lines: [{ ...blueLine, productImage: blueImage.url }] }) }));
-    await waitFor(() => expect(lineImage().querySelector("img")?.getAttribute("src")).toBe(blueImage.url), WAIT);
+    // The browser applies the server's variantImage rule itself, so the cart page, the mini-cart and the quote agree.
+    expect(lineImage().querySelector("img")?.getAttribute("src")).toBe(blueImage.url);
     expect(lineImage().querySelector("img")?.getAttribute("alt")).toBe("Linen shirt in blue");
+    await act(async () => quote.resolve({ data: fixtureQuote({ lines: [{ ...blueLine, productImage: blueImage.url }] }) }));
+    expect(lineImage().querySelector("img")?.getAttribute("src")).toBe(blueImage.url);
   });
 
-  it("[4] shows the missing-image placeholder when the server has no image for the line", async () => {
+  it("[4] shows the missing-image placeholder for a line whose product has no images", async () => {
     const quote = serveBlueCart();
+    const bare = { ...blueShirt, images: [] };
+    mocks.catalog = { ...mocks.catalog!, products: [bare, poloShirt], productsById: new Map([[bare.id, bare], [poloShirt.id, poloShirt]]) };
     render(tree(<Cart />));
     await act(async () => quote.resolve({ data: fixtureQuote({ lines: [{ ...blueLine, productImage: null }] }) }));
     expect(await within(lineImage()).findByRole("img", { name: "Image not yet available" }, WAIT)).toBeTruthy();
     expect(lineImage().querySelector("img")).toBeNull();
+  });
+
+  it("shows only the server's figures beside a current quote, and the labelled estimate until there is one", async () => {
+    seed("customer-a", [linen]);
+    const first = deferred<{ data: unknown }>();
+    mocks.orders.createQuote.mockReturnValueOnce(first.promise);
+    render(tree(<Cart />));
+    const summary = screen.getByRole("region", { name: "Order Summary" });
+    const estimate = () => within(summary).queryByText("Subtotal (excl. VAT)");
+    // While the quote is calculated, the browser's estimate stands in, labelled as one.
+    expect(estimate()?.nextElementSibling?.textContent).toBe("KES 900");
+    expect(within(summary).getByText(/^Estimated from current prices\./)).toBeTruthy();
+
+    await act(async () => first.resolve({ data: fixtureQuote() }));
+    expect(await within(summary).findByText("Items subtotal", undefined, WAIT)).toBeTruthy();
+    expect(estimate()).toBeNull();
+    expect(within(summary).queryByText(/Estimated from current prices/)).toBeNull();
+    // The lines keep their own estimates, as in the mini-cart.
+    const line = screen.getByRole("link", { name: "Linen Short-Sleeve Shirt" }).closest("li")!;
+    expect(within(line).getByText("KES 900 each excl. VAT")).toBeTruthy();
+
+    // A total that cannot be calculated brings the estimate back.
+    mocks.orders.createQuote.mockRejectedValue(apiError(503, { error: "Pricing is unavailable." }));
+    fireEvent.click(within(summary).getByRole("radio", { name: "Same-day delivery" }));
+    expect(await within(summary).findByRole("alert", undefined, WAIT)).toBeTruthy();
+    expect(estimate()?.nextElementSibling?.textContent).toBe("KES 900");
+    expect(within(summary).queryByText("Items subtotal")).toBeNull();
   });
 
   it("shows server line totals, savings, VAT and delivery for the chosen delivery method", async () => {

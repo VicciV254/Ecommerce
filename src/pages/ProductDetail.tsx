@@ -1,52 +1,41 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { catalogAPI, type CatalogProduct, type CatalogProductDetail, type CatalogReview } from "../api/catalog";
 import { apiStatus, describeApiError } from "../api/errors";
+import { useMiniCart } from "../components/MiniCart";
+import { ProductGallery, type GalleryLayout } from "../components/ProductGallery";
 import {
-  Breadcrumb,
-  Container,
-  DemoBadge,
-  ErrorPanel,
-  LoadingPanel,
-  MissingImage,
-  ProductCard,
-  ResponsiveImage,
-  SampleImageLabel,
-  Stars,
-  StockBadge,
-} from "../components/ui";
-import { useAuth } from "../contexts/AuthContext";
-import { Link, navigate } from "../router";
+  AvailabilityLine,
+  OptionChoices,
+  PriceLine,
+  PurchaseStatus,
+  QuantityStepper,
+  VAT_AT_CHECKOUT,
+  focusFirstOption,
+} from "../components/ProductPurchase";
+import { PurchaseBar } from "../components/PurchaseBar";
+import { ProductCard } from "../components/ProductCard";
+import { Breadcrumb, Container, DemoBadge, ErrorPanel, LoadingPanel, Stars } from "../components/ui";
+import { Link, useRouteState } from "../router";
 import { useCatalog } from "../store/CatalogContext";
-import {
-  CatalogFormatError,
-  findVariant,
-  inCategory,
-  isCatalogProduct,
-  optionAvailable,
-  optionLabel,
-  orderedImages,
-  productPriceView,
-  productStock,
-  stockLevel,
-  variantOptions,
-  variantPriceView,
-  withProductMediaDefaults,
-  type VariantSelection,
-} from "../store/catalogModel";
-import { useStore } from "../store/StoreContext";
+import { CatalogFormatError, describeVariant, inCategory, isCatalogProduct, withProductMediaDefaults } from "../store/catalogModel";
 import { productReturnFact } from "../store/orderCopy";
-import { COLOR_MAP } from "../utils/colors";
+import { SHOPPING_FACTS } from "../store/shoppingFacts";
+import { useStore } from "../store/StoreContext";
+import { addedMessage, useProductSelection } from "../store/useProductSelection";
 import { isRecord } from "../utils/storage";
-import { formatKES } from "../utils/format";
 
 const RELATED_LIMIT = 4;
-const ADDED_FEEDBACK_MS = 1500;
+
 /**
- * Rendered width of a strip thumbnail inside its 2px border: four columns with `gap-2` across the image column,
- * which fills the page Container (16/24/32px side padding, 1440px at most) and from 1024px is half of it beside `gap-10`.
+ * The gallery fills the page Container (16/24/32px side padding, 1440px at most) and from 768px is the left of two
+ * columns (gap 32px, 40px from 1024px). Thumbnails are four to a row with `gap-2`, measured inside their 2px borders.
  */
-const THUMBNAIL_STRIP_SIZES =
-  "(min-width: 1440px) 157px, (min-width: 1024px) calc(12.5vw - 23px), (min-width: 640px) calc(25vw - 22px), calc(25vw - 18px)";
+export const PRODUCT_GALLERY: GalleryLayout = {
+  sizes: "(min-width: 768px) 50vw, 100vw",
+  thumbnailSizes:
+    "(min-width: 1440px) 157px, (min-width: 1024px) calc(12.5vw - 23px), (min-width: 768px) calc(12.5vw - 20px), (min-width: 640px) calc(25vw - 22px), calc(25vw - 18px)",
+  thumbnails: "grid grid-cols-4 gap-2",
+};
 
 type DetailState =
   | { status: "loading" }
@@ -58,8 +47,6 @@ function isReview(value: unknown): value is CatalogReview {
   return isRecord(value) && typeof value.id === "string" && typeof value.rating === "number" &&
     typeof value.comment === "string" && typeof value.author === "string" && typeof value.createdAt === "string";
 }
-
-type InfoTab = "description" | "specifications";
 
 /** Authoritative product record; unknown IDs resolve to not-found rather than a substitute. */
 function useProductDetail(id: string) {
@@ -93,22 +80,7 @@ export default function ProductDetail({ id }: { id: string }) {
 
 function ProductContent({ id }: { id: string }) {
   const catalog = useCatalog();
-  const { addToCart, toggleWish, state: store } = useStore();
-  const { user } = useAuth();
   const { state: detail, retry } = useProductDetail(id);
-  const [selection, setSelection] = useState<VariantSelection>({});
-  const [qty, setQty] = useState(1);
-  const [tab, setTab] = useState<InfoTab>("description");
-  const [added, setAdded] = useState(false);
-  const [activeImage, setActiveImage] = useState(0);
-  const [failedImage, setFailedImage] = useState<string | null>(null);
-  const [loadedImage, setLoadedImage] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!added) return;
-    const timer = window.setTimeout(() => setAdded(false), ADDED_FEEDBACK_MS);
-    return () => window.clearTimeout(timer);
-  }, [added]);
 
   if (catalog.status === "loading") {
     return <Container className="py-16"><LoadingPanel label="Loading product…" /></Container>;
@@ -137,317 +109,197 @@ function ProductContent({ id }: { id: string }) {
       ? <Container className="py-16"><ErrorPanel title="This product could not be loaded" message={detail.message} onRetry={retry} /></Container>
       : <Container className="py-16"><LoadingPanel label="Loading product…" /></Container>;
   }
+  return <ProductView product={product} detail={detail} retry={retry} />;
+}
 
-  const options = variantOptions(product);
-  // A choice stays valid only while the current catalog still offers it; single values need no choice.
-  const effective: VariantSelection = {};
-  for (const option of options) {
-    const chosen = selection[option.key];
-    if (chosen !== undefined && option.values.includes(chosen)) effective[option.key] = chosen;
-    else if (option.values.length === 1) effective[option.key] = option.values[0];
-  }
-  const complete = options.every((option) => effective[option.key] !== undefined);
-  const variant = complete ? findVariant(product, effective) : undefined;
-  const aggregate = productStock(product);
-  const available = variant ? Math.max(0, variant.stock) : aggregate.quantity;
-  const level = variant ? stockLevel(variant.stock, variant.minThreshold) : stockLevel(aggregate.quantity, aggregate.lowThreshold);
-  const quantity = Math.max(1, Math.min(qty, Math.max(1, available)));
-  const canAdd = Boolean(variant) && available > 0;
-  const price = variant ? variantPriceView(variant) : productPriceView(product);
+/** On an in-app arrival (a followed link, or Back/Forward), focus moves to the H1 unless it stayed in the site header. */
+function useEntryFocus(heading: RefObject<HTMLElement | null>) {
+  const { kind } = useRouteState();
+  const arrival = useRef(kind);
+  useLayoutEffect(() => {
+    if (arrival.current !== "push" && arrival.current !== "traverse") return;
+    if (document.activeElement?.closest("[data-site-header]")) return;
+    heading.current?.focus({ preventScroll: true });
+  }, [heading]);
+}
+
+const actionButton =
+  "inline-flex min-h-[48px] flex-1 items-center justify-center rounded-sm px-5 text-sm font-bold uppercase tracking-[0.12em] transition-colors duration-(--motion-feedback)";
+
+function ProductView({ product, detail, retry }: {
+  product: CatalogProduct | CatalogProductDetail;
+  detail: DetailState;
+  retry: () => void;
+}) {
+  const catalog = useCatalog();
+  const { toggleWish, state: store } = useStore();
+  const miniCart = useMiniCart();
+  const { selection, images, choose, setQuantity, add } = useProductSelection(product);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const purchase = useRef<HTMLDivElement>(null);
+  const action = useRef<HTMLButtonElement>(null);
+  const statusId = useId();
+  const factsId = useId();
+  /** The last add's report, kept only while the choice and quantity it was made with are unchanged. */
+  const [report, setReport] = useState<{ key: string; text: string } | null>(null);
+  useEntryFocus(heading);
+
+  const reportKey = `${selection.choiceKey}|${selection.quantity}`;
   const wished = store.wishlist.includes(product.id);
   const reviews = "reviewList" in product ? product.reviewList ?? [] : [];
   const specifications = Object.entries(product.specifications);
-  const tabs: InfoTab[] = specifications.length ? ["description", "specifications"] : ["description"];
   const related = catalog.products.filter((item) => item.id !== product.id && inCategory(item, product.categoryId)).slice(0, RELATED_LIMIT);
   const categoryPath = catalog.categories.path(product.categoryId);
   const returnFact = catalog.returnPolicy ? productReturnFact(product.returnRule, catalog.returnPolicy) : null;
+  const incomplete = selection.status.kind === "incomplete";
+  const hasChoices = selection.options.some((option) => option.kind === "choice");
 
-  const images = orderedImages(product);
-  const imageIndex = Math.min(activeImage, Math.max(0, images.length - 1));
-  const currentImage = images[imageIndex];
-  const imageError = Boolean(currentImage) && failedImage === currentImage.url;
-  const imageLoading = Boolean(currentImage) && loadedImage !== currentImage.url && !imageError;
-
-  const choose = (key: string, value: string) => {
-    setSelection({ ...effective, [key]: value });
-    setAdded(false);
-  };
+  const chooseOptions = () => focusFirstOption(purchase.current);
   const doAdd = () => {
-    if (!user) {
-      navigate("/login");
-      return;
-    }
-    if (!variant || !canAdd) return;
-    addToCart({ productId: product.id, variantId: variant.id, quantity });
-    setAdded(true);
+    const outcome = add();
+    if (!outcome) return;
+    const text = addedMessage(product.name, selection.variant ? describeVariant(selection.variant) : "", outcome);
+    setReport({ key: reportKey, text });
+    miniCart?.open({ message: text });
   };
-
-  let selectionMessage = "";
-  if (!options.length && !variant) selectionMessage = "This product is not currently available.";
-  else if (!complete) selectionMessage = `Select ${options.filter((option) => effective[option.key] === undefined).map((option) => optionLabel(option.key).toLowerCase()).join(" and ")} to continue.`;
-  else if (!variant) selectionMessage = "This combination is not available. Choose different options.";
+  const status = report?.key === reportKey ? report.text : selection.message;
 
   return (
-    <Container className="py-8">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Breadcrumb
-          items={[
-            { label: "Shop", to: "/shop" },
-            ...categoryPath.map((category) => ({ label: category.name, to: `/shop?cat=${encodeURIComponent(category.slug)}` })),
-            { label: product.name },
-          ]}
-        />
-        <button type="button" onClick={() => navigate("/shop")} className="text-[11px] font-bold uppercase tracking-wider text-brand-primary hover:text-brand-secondary">
-          ← Continue Shopping
-        </button>
-      </div>
+    <Container className="py-6 md:py-8">
+      <Breadcrumb
+        items={[
+          { label: "Shop", to: "/shop" },
+          ...categoryPath.map((category) => ({ label: category.name, to: `/shop?cat=${encodeURIComponent(category.slug)}` })),
+          { label: product.name },
+        ]}
+      />
 
       {detail.status === "error" && (
-        <div role="status" className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-warning/40 bg-warning/10 p-3 text-xs text-charcoal">
+        <div role="status" className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-warning/40 bg-warning-tint p-3 text-sm text-navy-800">
           <span>Latest details and reviews could not be loaded: {detail.message}</span>
-          <button type="button" onClick={retry} className="font-bold text-brand-primary underline">Try again</button>
+          <button type="button" onClick={retry} className="inline-flex min-h-[44px] items-center font-semibold text-link underline underline-offset-4">Try again</button>
         </div>
       )}
 
-      <div className="mt-6 grid gap-10 lg:grid-cols-2">
-        <div>
-          <div className="relative aspect-square overflow-hidden rounded-lg bg-warm-beige">
-            {!currentImage ? (
-              <MissingImage label="Product images are not yet available" />
-            ) : (
-              <>
-                {imageLoading && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <div className="h-8 w-8 animate-spin rounded-full border-2 border-brand-secondary border-t-transparent" />
-                    <p className="mt-3 text-xs text-gray-500">Loading image...</p>
-                  </div>
-                )}
-                {imageError ? (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500">
-                    <p className="text-sm font-medium">Image unavailable</p>
-                    <p className="mt-1 text-xs">Try another image.</p>
-                  </div>
-                ) : (
-                  <ResponsiveImage
-                    key={currentImage.url}
-                    url={currentImage.url}
-                    preset="detail"
-                    width={currentImage.width}
-                    height={currentImage.height}
-                    priority={imageIndex === 0}
-                    alt={currentImage.alt || `${product.name} — image ${imageIndex + 1} of ${images.length}`}
-                    className="absolute inset-0 h-full w-full object-cover transition-all duration-500 hover:scale-105"
-                    onLoad={() => setLoadedImage(currentImage.url)}
-                    onError={() => setFailedImage(currentImage.url)}
-                  />
-                )}
-                {currentImage.isPlaceholder && <SampleImageLabel />}
-              </>
-            )}
-          </div>
-
-          {images.length > 1 && (
-            <div className="mt-3 grid grid-cols-4 gap-2">
-              {images.map((image, index) => (
-                <button
-                  key={image.id}
-                  type="button"
-                  aria-label={`Show image ${index + 1} of ${images.length}`}
-                  aria-pressed={index === imageIndex}
-                  onClick={() => { setActiveImage(index); setFailedImage(null); }}
-                  className={`relative aspect-square overflow-hidden rounded-md border-2 bg-warm-beige transition-all ${
-                    index === imageIndex ? "border-brand-primary" : "border-transparent hover:border-brand-secondary"
-                  }`}
-                >
-                  <ResponsiveImage url={image.url} preset="thumbnail" sizes={THUMBNAIL_STRIP_SIZES} width={image.width} height={image.height} alt="" className="h-full w-full object-cover" />
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-brand-accent">{product.categoryName}</p>
-            {product.isDemo && <DemoBadge />}
-          </div>
-          <h1 className="mt-1.5 font-display text-2xl leading-tight text-brand-primary sm:text-3xl">{product.name}</h1>
+      {/* Phones: facts, then the gallery, then the purchase controls. From 768px the gallery sits left of both. */}
+      <div className="mt-4 grid items-start gap-6 md:grid-cols-2 md:grid-rows-[auto_1fr] md:gap-x-8 lg:gap-x-10">
+        <div className="min-w-0 md:col-start-2 md:row-start-1">
+          <h1 ref={heading} tabIndex={-1} className="type-h1 break-words text-navy-900">{product.name}</h1>
           {product.isDemo && (
-            <p className="mt-2 text-xs text-ocean-blue-dark">Demo listing: details, price, stock and images are samples for review, not real inventory.</p>
-          )}
-
-          {price && (
-            <div className="mt-3 flex flex-wrap items-baseline gap-3">
-              <span className="type-price text-navy-900">
-                {price.isFromPrice && <span className="text-sm font-normal">From </span>}
-                {formatKES(price.price)}
-              </span>
-              {price.comparePrice !== null && <span className="text-base text-gray-500 line-through">{formatKES(price.comparePrice)}</span>}
-              {price.discountPercent > 0 && (
-                <span className="rounded-sm bg-coral px-2 py-0.5 text-xs font-bold text-white">-{price.discountPercent}%</span>
-              )}
-            </div>
-          )}
-
-          {product.reviewsCount > 0 && (
-            <p className="mt-3 flex items-center gap-2">
-              <Stars rating={product.rating} size={15} />
-              <span className="text-xs text-gray-500">{product.rating.toFixed(1)} ({product.reviewsCount} {product.reviewsCount === 1 ? "review" : "reviews"})</span>
+            <p className="mt-2 flex flex-wrap items-center gap-2 text-sm text-ocean-blue-dark">
+              <DemoBadge />
+              <span>Demo listing: details, price, stock and images are samples for review, not real inventory.</span>
             </p>
           )}
-
-          <div className="mt-5 rounded-md bg-off-white p-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <StockBadge level={level} />
-              {variant && available > 0 && <span className="text-xs text-gray-500">{available} available</span>}
-              {!variant && options.length > 0 && <span className="text-xs text-gray-500">Availability depends on the options you choose.</span>}
-            </div>
-            {returnFact && (
-              <p className="mt-3 border-t border-light-gray pt-3 text-xs text-charcoal">
-                <span className="font-bold text-brand-primary">Returns: </span>{returnFact.window} {returnFact.refunds}
-              </p>
-            )}
-          </div>
-
-          {options.map((option) => (
-            <fieldset key={option.key} className="mt-6">
-              <legend className="mb-2 text-[11px] font-bold uppercase tracking-[0.12em] text-brand-primary">
-                {optionLabel(option.key)}
-                {effective[option.key] && <span className="ml-1 font-normal normal-case tracking-normal text-gray-500">{effective[option.key]}</span>}
-              </legend>
-              <div className="flex flex-wrap gap-2">
-                {option.values.map((value) => {
-                  const swatch = option.key === "color" ? COLOR_MAP[value] : undefined;
-                  const selected = effective[option.key] === value;
-                  const possible = optionAvailable(product, effective, option.key, value);
-                  return (
-                    <button
-                      key={value}
-                      type="button"
-                      aria-label={value}
-                      aria-pressed={selected}
-                      title={possible ? value : `${value} (not available with the current selection)`}
-                      onClick={() => choose(option.key, value)}
-                      style={swatch ? { background: swatch } : undefined}
-                      className={swatch
-                        ? `h-8 w-8 rounded-full border-2 transition-all ${selected ? "border-brand-primary ring-2 ring-brand-secondary/50 ring-offset-1" : "border-gray-300"} ${possible ? "" : "opacity-40"}`
-                        : `min-w-11 rounded-sm border px-3 py-2 text-xs font-medium transition-colors ${selected ? "border-brand-primary bg-brand-primary text-white" : "border-light-gray hover:border-brand-accent"} ${possible ? "" : "opacity-50 line-through"}`}
-                    >
-                      {swatch ? null : value}
-                    </button>
-                  );
-                })}
-              </div>
-            </fieldset>
-          ))}
-
-          <div className="mt-6 flex items-center gap-4">
-            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-brand-primary">Quantity</p>
-            <div className="flex items-center rounded-sm border border-light-gray">
-              <button type="button" aria-label="Decrease quantity" disabled={!canAdd || quantity <= 1} onClick={() => setQty(Math.max(1, quantity - 1))} className="px-3 py-2 text-sm text-gray-500 hover:text-brand-primary disabled:opacity-40">−</button>
-              <span aria-live="polite" className="w-10 text-center text-sm">{quantity}</span>
-              <button type="button" aria-label="Increase quantity" disabled={!canAdd || quantity >= available} onClick={() => setQty(Math.min(available, quantity + 1))} className="px-3 py-2 text-sm text-gray-500 hover:text-brand-primary disabled:opacity-40">+</button>
-            </div>
-          </div>
-
-          {selectionMessage && <p role="status" className="mt-4 text-xs font-semibold text-charcoal">{selectionMessage}</p>}
-
-          <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-            <button
-              type="button"
-              disabled={!canAdd}
-              onClick={doAdd}
-              className={`flex-1 rounded-sm py-3.5 font-body text-xs font-bold uppercase tracking-[0.12em] transition-all ${
-                !canAdd
-                  ? "cursor-not-allowed bg-gray-100 text-gray-500"
-                  : added
-                  ? "bg-success text-white"
-                  : "bg-brand-primary text-white hover:bg-brand-secondary hover:text-brand-primary"
-              }`}
-            >
-              {variant && available <= 0 ? "Out of Stock" : added ? "✓ Added to Cart" : "Add to Cart"}
-            </button>
-            <button
-              type="button"
-              aria-pressed={wished}
-              onClick={() => toggleWish(product.id)}
-              className={`flex-1 rounded-sm border py-3.5 font-body text-xs font-bold uppercase tracking-[0.12em] transition-all ${
-                wished
-                  ? "border-error/30 bg-error/5 text-error"
-                  : "border-light-gray text-charcoal hover:border-brand-primary hover:text-brand-primary"
-              }`}
-            >
-              {wished ? "♥ In Wishlist" : "♡ Add to Wishlist"}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-16">
-        <div className="flex gap-0 border-b border-light-gray">
-          {tabs.map((name) => (
-            <button
-              key={name}
-              type="button"
-              aria-pressed={tab === name}
-              onClick={() => setTab(name)}
-              className={`px-5 py-3 text-[11px] font-bold uppercase tracking-[0.12em] transition-colors ${
-                tab === name ? "border-b-2 border-brand-primary text-brand-primary" : "text-gray-500 hover:text-charcoal"
-              }`}
-            >
-              {name === "description" ? "Description" : "Specifications"}
-            </button>
-          ))}
-        </div>
-        <div className="py-6 text-sm leading-relaxed text-charcoal">
-          {tab === "specifications" && specifications.length ? (
-            <table className="w-full max-w-2xl text-left text-sm">
-              <tbody>
-                {specifications.map(([name, value]) => (
-                  <tr key={name} className="border-b border-light-gray">
-                    <th scope="row" className="w-1/3 py-2 pr-4 font-semibold text-brand-primary">{name}</th>
-                    <td className="py-2">{value}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <p className="whitespace-pre-line">{product.description}</p>
+          <div className="mt-3"><PriceLine price={selection.price} large /></div>
+          {product.reviewsCount > 0 && (
+            <p className="mt-2 flex items-center gap-2">
+              <Stars rating={product.rating} size={15} />
+              <span className="text-sm text-muted">{product.rating.toFixed(1)} ({product.reviewsCount} {product.reviewsCount === 1 ? "review" : "reviews"})</span>
+            </p>
           )}
+          <div className="mt-3"><AvailabilityLine selection={selection} /></div>
+        </div>
+
+        <div className="min-w-0 md:col-start-1 md:row-span-2 md:row-start-1">
+          <ProductGallery name={product.name} images={images} resetKey={selection.choiceKey} layout={PRODUCT_GALLERY} priority />
+        </div>
+
+        <div ref={purchase} className="min-w-0 space-y-5 md:col-start-2 md:row-start-2">
+          <OptionChoices selection={selection} onChoose={choose} />
+          <QuantityStepper value={selection.quantity} max={selection.maxQuantity} disabled={!selection.canAdd} onChange={setQuantity} />
+          <div className="space-y-3">
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <button
+                ref={action}
+                type="button"
+                disabled={!incomplete && !selection.canAdd}
+                aria-describedby={statusId}
+                onClick={incomplete ? chooseOptions : doAdd}
+                className={`${actionButton} ${
+                  incomplete || selection.canAdd
+                    ? "bg-navy-900 text-white hover:bg-gold-500 hover:text-navy-900"
+                    : "cursor-not-allowed bg-surface-soft text-muted"
+                }`}
+              >
+                {incomplete ? "Choose options" : "Add to cart"}
+              </button>
+              <button
+                type="button"
+                aria-pressed={wished}
+                onClick={() => toggleWish(product.id)}
+                className={`${actionButton} border ${wished ? "border-error/40 bg-error-tint text-error" : "border-control text-navy-900 hover:border-navy-900"}`}
+              >
+                {wished ? "♥ In wishlist" : "♡ Save to wishlist"}
+              </button>
+            </div>
+            <PurchaseStatus id={statusId} message={status} tone={report?.key === reportKey ? "info" : "warning"} />
+            <p className="text-sm text-muted">{VAT_AT_CHECKOUT}</p>
+          </div>
+          <section aria-labelledby={factsId} className="rounded-md border border-divider bg-surface-page p-4 text-sm text-navy-800">
+            <h2 id={factsId} className="font-semibold text-navy-900">Delivery and returns</h2>
+            <p className="mt-2"><span className="font-semibold text-navy-900">Delivery: </span>{SHOPPING_FACTS.delivery}</p>
+            {returnFact && (
+              <p className="mt-2"><span className="font-semibold text-navy-900">Returns: </span>{returnFact.window} {returnFact.refunds}</p>
+            )}
+          </section>
         </div>
       </div>
 
-      <section aria-labelledby="reviews-title" className="mt-10">
-        <h2 id="reviews-title" className="font-display text-xl uppercase tracking-wider text-brand-primary">Customer Reviews</h2>
+      <section aria-labelledby="details-title" className="mt-12">
+        <h2 id="details-title" className="type-h2 text-navy-900">Details</h2>
+        <p className="mt-3 max-w-3xl whitespace-pre-line text-navy-800">{product.description}</p>
+        {specifications.length > 0 && (
+          <>
+            <h3 className="type-h3 mt-8 text-navy-900">Specifications</h3>
+            {product.isDemo && <p className="mt-1 text-sm text-ocean-blue-dark">Sample values for review, not verified product facts.</p>}
+            <dl className="mt-3 max-w-3xl divide-y divide-divider border-y border-divider">
+              {specifications.map(([name, value]) => (
+                <div key={name} className="grid gap-1 py-2.5 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] sm:gap-4">
+                  <dt className="font-semibold text-navy-900 [overflow-wrap:anywhere]">{name}</dt>
+                  <dd className="text-navy-800 [overflow-wrap:anywhere]">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          </>
+        )}
+      </section>
+
+      <section aria-labelledby="reviews-title" className="mt-12">
+        <h2 id="reviews-title" className="type-h2 text-navy-900">Customer reviews</h2>
         {reviews.length ? (
           <ul className="mt-4 grid gap-4 md:grid-cols-2">
             {reviews.map((review) => (
-              <li key={review.id} className="rounded-lg bg-white p-5 shadow-sm">
+              <li key={review.id} className="rounded-lg bg-surface p-5 shadow-card">
                 <p className="flex items-center gap-2">
                   <Stars rating={review.rating} size={13} />
                   <span className="sr-only">{review.rating} out of 5</span>
                 </p>
-                <p className="mt-2 text-sm text-charcoal">{review.comment}</p>
-                <p className="mt-2 text-xs font-semibold text-brand-primary">
+                <p className="mt-2 text-navy-800">{review.comment}</p>
+                <p className="mt-2 text-sm font-semibold text-navy-900">
                   {review.author} · {new Date(review.createdAt).toLocaleDateString("en-KE")}
                 </p>
               </li>
             ))}
           </ul>
         ) : (
-          <p className="mt-3 text-sm text-gray-500">
+          <p className="mt-3 text-muted">
             {detail.status === "ready" ? "No reviews yet." : "Reviews are shown once the latest product details load."}
           </p>
         )}
       </section>
 
       {related.length > 0 && (
-        <section aria-labelledby="related-title" className="mt-16">
-          <h2 id="related-title" className="mb-6 font-display text-xl uppercase tracking-wider text-brand-primary">More in {product.categoryName}</h2>
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <section aria-labelledby="related-title" className="mt-12">
+          <h2 id="related-title" className="type-h2 mb-5 text-navy-900">More in {product.categoryName}</h2>
+          <div className="product-grid">
             {related.map((item) => <ProductCard key={item.id} product={item} />)}
           </div>
         </section>
+      )}
+
+      {(hasChoices || selection.canAdd) && (
+        <PurchaseBar inlineAction={action} price={selection.price} canAdd={selection.canAdd} onAdd={doAdd} onChooseOptions={chooseOptions} />
       )}
     </Container>
   );

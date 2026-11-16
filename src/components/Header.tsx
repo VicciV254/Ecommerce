@@ -5,8 +5,10 @@ import { useCatalog } from "../store/CatalogContext";
 import { useStorefront } from "../store/StorefrontContext";
 import { useAuth } from "../contexts/AuthContext";
 import { listingRoute } from "../store/listingQuery";
+import { loginRoute } from "../store/returnTo";
 import { Container } from "./ui";
 import { ModalDialog } from "./Modal";
+import { useMiniCart } from "./MiniCart";
 import { ProductSearch } from "./ProductSearch";
 import { BrandLogo } from "./Brand";
 import { DepartmentShortcuts, DepartmentsMenu, DrawerMenu } from "./HeaderMenus";
@@ -32,7 +34,8 @@ const NAV_LINKS = [
 ];
 
 export function Header() {
-  const { cartCount, state } = useStore();
+  const { cartCount, state, ownerReady } = useStore();
+  const miniCart = useMiniCart();
   const { categories } = useCatalog();
   const { brandName } = useStorefront();
   const departments = categories.roots;
@@ -85,7 +88,7 @@ export function Header() {
           </Link>
         );
       })}
-      <Link to={user ? "/account" : "/login"} onClick={closeDrawer} className={`${drawerLink} text-navy-900 hover:bg-surface-warm`}>
+      <Link to={user ? "/account" : loginRoute(route)} onClick={closeDrawer} className={`${drawerLink} text-navy-900 hover:bg-surface-warm`}>
         {user ? "My Account" : "Sign In / Register"}
       </Link>
     </>
@@ -123,15 +126,28 @@ export function Header() {
               <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
               </svg>
-              {state.wishlist.length > 0 && <span className={countBadge}>{state.wishlist.length}</span>}
+              {ownerReady && state.wishlist.length > 0 && <span className={countBadge}>{state.wishlist.length}</span>}
             </Link>
-            <Link to="/cart" aria-label="Cart" className={iconButton}>
+            {/* Opens the mini-cart; the full cart page stays at #/cart, linked from the drawer. */}
+            <button
+              type="button"
+              aria-label="Cart"
+              aria-haspopup="dialog"
+              aria-expanded={miniCart?.isOpen ?? false}
+              aria-describedby={cartCount > 0 ? "header-cart-count" : undefined}
+              onClick={() => miniCart?.open()}
+              className={iconButton}
+            >
               <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 1 0-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 0 1-1.12-1.243l1.264-12A1.125 1.125 0 0 1 5.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0zm7.5 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0z" />
               </svg>
-              {cartCount > 0 && <span className={countBadge}>{cartCount}</span>}
-            </Link>
-            <Link to={user ? "/account" : "/login"} aria-label={user ? "Account" : "Sign in"} className={iconButton}>
+              {cartCount > 0 && (
+                <span id="header-cart-count" className={countBadge}>
+                  {cartCount}<span className="sr-only"> {cartCount === 1 ? "item" : "items"} in your cart</span>
+                </span>
+              )}
+            </button>
+            <Link to={user ? "/account" : loginRoute(route)} aria-label={user ? "Account" : "Sign in"} className={iconButton}>
               {user?.profileImage ? (
                 <img src={user.profileImage} alt="" className="size-[32px] rounded-full object-cover" />
               ) : (

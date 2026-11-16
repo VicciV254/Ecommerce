@@ -45,7 +45,13 @@ test("search suggestions take arrow selection, and Escape closes the list before
 test("icon links have names and desktop modifier-click opens a separate tab", async ({ page, context, isMobile }) => {
   await page.goto("/#/shop");
   const header = page.getByRole("banner");
-  await expect(header.getByRole("link", { name: "Cart", exact: true })).toHaveAttribute("href", "#/cart");
+  // The cart control opens the mini-cart, which links to the full cart page.
+  const cart = header.getByRole("button", { name: "Cart", exact: true });
+  await expect(cart).toHaveAttribute("aria-haspopup", "dialog");
+  await cart.click();
+  await expect(page.getByRole("dialog", { name: "Your cart" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(cart).toBeFocused();
   await expect(header.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
   const wishlist = header.getByRole("link", { name: "Wishlist", exact: true });
   if (!isMobile) {
@@ -74,7 +80,7 @@ test("mobile drawers contain focus, restore it, and adapt from narrow phones to 
   await expect(close).toBeFocused();
   expect(await dialog.evaluate((element) => element.matches(":modal"))).toBe(true);
   await expect(page.locator("body")).toHaveCSS("overflow", "hidden");
-  await page.locator('header a[href="#/cart"]').evaluate((element: HTMLAnchorElement) => element.focus());
+  await page.locator('header button[aria-label="Cart"]').evaluate((element: HTMLButtonElement) => element.focus());
   await expect(close).toBeFocused();
   await page.keyboard.press("Shift+Tab");
   // The drawer ends with the department list, whose entries open their groups.
