@@ -3,6 +3,8 @@ import { createPortal } from "react-dom";
 
 const PLACEMENTS = {
   center: "items-center justify-center p-4",
+  /** A drawer from the start edge (the admin navigation). */
+  start: "items-stretch justify-start p-0",
   end: "items-stretch justify-end p-0",
   /** Full-height sheet on phones; a centred dialog from 768px. */
   sheet: "items-stretch justify-center p-0 md:items-center md:p-4",
@@ -165,7 +167,7 @@ export function Toast({ open, message }: { open: boolean; message: string }) {
   }, [open]);
   if (!open || !container) return null;
   return createPortal(
-    <div role="status" aria-live="polite" aria-atomic="true" className="fixed bottom-6 left-1/2 z-[110] -translate-x-1/2 animate-fade-in">
+    <div role="status" aria-live="polite" aria-atomic="true" className="fixed bottom-6 left-1/2 z-[110] w-max max-w-[calc(100vw-2rem)] -translate-x-1/2 animate-fade-in [overflow-wrap:anywhere]">
       <div className="flex items-center gap-2 rounded-sm bg-brand-primary px-5 py-3 text-xs font-bold uppercase tracking-wider text-white shadow-xl">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="h-4 w-4 text-success">
           <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />

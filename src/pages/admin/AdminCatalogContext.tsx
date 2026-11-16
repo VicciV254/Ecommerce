@@ -84,3 +84,8 @@ export function useAdminCatalog() {
   if (!context) throw new Error("useAdminCatalog must be used within AdminCatalogProvider");
   return context;
 }
+
+/** The staff catalog where it is loaded; the shell has none for an account with no admin access. */
+export function useOptionalAdminCatalog() {
+  return useContext(AdminCatalogContext);
+}

@@ -1,7 +1,7 @@
 import { isCancel } from "axios";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { adminAPI, type RefundAction, type StaffAction, type StaffOrder, type StaffRefund } from "../../api/admin";
-import { describeApiError } from "../../api/errors";
+import { apiErrorCode, apiStatus, describeApiError } from "../../api/errors";
 import { Disclosure, OrderStatusBadge, OrderTimeline, OrderTotals } from "../../components/OrderRecords";
 import { DELIVERY_LABELS } from "../../store/checkoutModel";
 import { STAFF_ACTION_LABELS, paymentLabel, returnRuleText, returnWindowText } from "../../store/orderCopy";
@@ -16,6 +16,10 @@ import { Feedback } from "./shared";
 export type WorkspaceFocus = { kind: "return" | "refund"; id: string } | { kind: "payments" } | null;
 
 type LoadState = { status: "loading" } | { status: "ready"; order: StaffOrder } | { status: "error"; message: string };
+
+/** Answers that mean the order cannot be shown at all (malformed, not visible or gone), as P7.4 treats them. */
+const REFUSED_STATUSES = [400, 403, 404];
+const isMissingOrder = (error: unknown) => REFUSED_STATUSES.includes(apiStatus(error) ?? 0) || apiErrorCode(error) === "ORDER_NOT_FOUND";
 type OpenDialog = { kind: "order"; action: StaffAction } | { kind: "refund"; refund: StaffRefund; action: RefundAction };
 
 const toolClass = "min-h-11 rounded-sm border border-brand-primary px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-brand-primary hover:bg-brand-primary hover:text-white";
@@ -50,11 +54,15 @@ const recordAnchor = (scope: string, kind: "return" | "refund", id: string) => `
  * One order: summary, payment state and the permitted next step first, then items, payments, timeline,
  * returns and refunds. Every control comes from the server's permitted actions; viewers see no controls.
  */
-export function OrderWorkspace({ orderId, focus, canWrite, onBack, onChanged, showToast }: {
+export function OrderWorkspace({ orderId, focus, canWrite, focusOnOpen = true, onBack, onMissing, onChanged, showToast }: {
   orderId: string;
   focus: WorkspaceFocus;
   canWrite: boolean;
+  /** Opened from the app (a list, Back/Forward), so its heading takes focus; a fresh page load leaves focus alone. */
+  focusOnOpen?: boolean;
   onBack: () => void;
+  /** The order cannot be shown (refused or not found) before it ever loaded. */
+  onMissing?: () => void;
   /** Called after any change so worklists and the attention feed reload. */
   onChanged: () => void;
   showToast: (message: string) => void;
@@ -65,6 +73,13 @@ export function OrderWorkspace({ orderId, focus, canWrite, onBack, onChanged, sh
   const [focusRequest, setFocusRequest] = useState(0);
   const heading = useRef<HTMLHeadingElement>(null);
   const loads = useRef(0);
+  const loaded = useRef(false);
+  /** Read when the workspace opens, and when a load fails, without restarting the load. */
+  const focusOnOpenRef = useRef(focusOnOpen);
+  const onMissingRef = useRef(onMissing);
+  useEffect(() => {
+    onMissingRef.current = onMissing;
+  });
   const targetFocused = useRef(false);
   const headingId = useId();
 
@@ -75,10 +90,15 @@ export function OrderWorkspace({ orderId, focus, canWrite, onBack, onChanged, sh
       const { data } = await adminAPI.orders.get(orderId);
       const order = parseStaffOrder(data, orderId);
       if (ticket !== loads.current) return;
+      loaded.current = true;
       setState({ status: "ready", order });
       setProblem(notice);
     } catch (error) {
       if (ticket !== loads.current || isCancel(error)) return;
+      if (onMissingRef.current && !loaded.current && isMissingOrder(error)) {
+        onMissingRef.current();
+        return;
+      }
       const message = describeLoadError(error);
       setState((current) => (current.status === "ready" ? current : { status: "error", message }));
       setProblem(notice ? `${notice} Reloading failed: ${message}` : message);
@@ -90,7 +110,7 @@ export function OrderWorkspace({ orderId, focus, canWrite, onBack, onChanged, sh
   }, [reload]);
 
   useLayoutEffect(() => {
-    heading.current?.focus();
+    if (focusOnOpenRef.current) heading.current?.focus();
   }, []);
 
   useLayoutEffect(() => {

@@ -1,23 +1,16 @@
-import { useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AttentionItem, StaffOrderFilters } from "../../api/admin";
 import type { OrderStatus, PaymentStatus } from "../../api/orders";
+import { Link, navigate, useRouteState } from "../../router";
 import { DELIVERY_LABELS, DELIVERY_METHODS, isDeliveryMethod, isOrderStatus, isPaymentStatus } from "../../store/checkoutModel";
 import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "../../store/orderCopy";
+import { ORDER_VIEWS, ordersRoute, parseOrdersParams, type OrdersModuleId } from "./adminRoutes";
 import { AttentionPanel } from "./AttentionPanel";
 import { OrderQueue, RefundsQueue, ReturnsQueue, type OpenTarget } from "./OrderWorklists";
 import { OrderWorkspace } from "./OrderWorkspace";
 import { Field } from "./shared";
 
-/** Roles the server lets change orders, returns, refunds and emails; viewers read only. */
-const WRITE_ROLES = ["ADMIN", "SUPER_ADMIN"];
-const VIEWS = [
-  ["action", "Needs action"],
-  ["all", "All orders"],
-  ["closed", "Closed"],
-  ["returns", "Returns"],
-  ["refunds", "Refunds"],
-] as const;
-type View = (typeof VIEWS)[number][0];
+const ORDER_NOT_FOUND = "That order wasn't found.";
 type Queue = { title: string; filters: StaffOrderFilters; empty: string };
 
 const ACTION_QUEUES: Queue[] = [
@@ -51,13 +44,20 @@ function attentionTarget(item: AttentionItem): OpenTarget | null {
 }
 
 /**
- * Staff order operations: what needs attention, server-filtered worklists and one order's workspace.
- * Only server-permitted actions are offered, and only to roles that may write.
+ * Staff order operations for the Orders, Returns and Refunds modules: what needs attention, server-filtered worklists
+ * and one order's workspace. The Orders view and the open order live in the address (`view`, `order`), so refresh,
+ * deep links and Back/Forward keep them. Only server-permitted actions are offered, and only to roles that may write.
  */
-export function OrdersManager({ role, showToast }: { role: string; showToast: (message: string) => void }) {
-  const canWrite = WRITE_ROLES.includes(role);
-  const [view, setView] = useState<View>("action");
-  const [target, setTarget] = useState<OpenTarget | null>(null);
+export function OrdersManager({ module = "orders", canWrite, showToast }: {
+  module?: OrdersModuleId;
+  canWrite: boolean;
+  showToast: (message: string) => void;
+}) {
+  const { route, kind } = useRouteState();
+  const { view, unknownView, order } = parseOrdersParams(module, route);
+  const orderId = order.id;
+  const [opened, setOpened] = useState<OpenTarget | null>(null);
+  const [notice, setNotice] = useState("");
   const [reloadToken, setReloadToken] = useState(0);
   const [deliveryMethod, setDeliveryMethod] = useState("");
   const [orderedDay, setOrderedDay] = useState("");
@@ -66,103 +66,127 @@ export function OrdersManager({ role, showToast }: { role: string; showToast: (m
   const trigger = useRef<HTMLElement | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const returning = useRef(false);
+  const shownOrder = useRef<string | null>(null);
   const headingId = useId();
+
+  // An unknown view reads as Needs action, and a malformed order id is never sent: the address is corrected in place.
+  useEffect(() => {
+    if (!unknownView && !order.malformed) return;
+    if (order.malformed) setNotice(ORDER_NOT_FOUND);
+    navigate(ordersRoute(module, { view, order: orderId }), { replace: true });
+  }, [module, unknownView, order.malformed, view, orderId]);
 
   const shared = useMemo<StaffOrderFilters>(() => ({
     ...(deliveryMethod && { deliveryMethod }),
     ...(orderedDay && { orderedDay }),
   }), [deliveryMethod, orderedDay]);
   const queues = useMemo(() => {
+    if (module !== "orders") return [];
     const scoped = (list: Queue[]) => list.map((queue) => ({ ...queue, filters: { ...queue.filters, ...shared } }));
-    if (view === "action") return scoped(ACTION_QUEUES);
+    if (view === "needs-action") return scoped(ACTION_QUEUES);
     if (view === "closed") return scoped(CLOSED_QUEUES);
-    if (view === "all") {
-      return [{
-        title: "All orders",
-        filters: { ...shared, ...(status && { status }), ...(paymentStatus && { paymentStatus }) },
-        empty: "No orders match these filters.",
-      }];
-    }
-    return [];
-  }, [view, shared, status, paymentStatus]);
+    return [{
+      title: "All orders",
+      filters: { ...shared, ...(status && { status }), ...(paymentStatus && { paymentStatus }) },
+      empty: "No orders match these filters.",
+    }];
+  }, [module, view, shared, status, paymentStatus]);
 
   const changed = () => setReloadToken((value) => value + 1);
+  // Opening an order adds a history entry, so Back closes it again.
   const open = (next: OpenTarget, from: HTMLElement) => {
     trigger.current = from;
-    setTarget(next);
+    setOpened(next);
+    setNotice("");
+    navigate(ordersRoute(module, { view, order: next.orderId }));
   };
   const back = () => {
     returning.current = true;
-    setTarget(null);
+    navigate(ordersRoute(module, { view }), { replace: true });
+  };
+  const missing = () => {
+    setNotice(ORDER_NOT_FOUND);
+    navigate(ordersRoute(module, { view }), { replace: true });
   };
 
-  // Back from the workspace: return focus to the control that opened it, or to this section's heading.
+  // Leaving the workspace (its Back button, browser Back, or an order that wasn't found): focus returns to the control
+  // that opened it, or to this section's heading, but only if it was opened here or the staff member closed it.
   useLayoutEffect(() => {
-    if (target || !returning.current) return;
+    const previous = shownOrder.current;
+    shownOrder.current = orderId;
+    if (orderId || !previous) return;
+    const restore = returning.current || kind === "traverse" || opened?.orderId === previous;
     returning.current = false;
+    if (!restore) return;
     if (trigger.current?.isConnected) trigger.current.focus();
     else heading.current?.focus();
-  }, [target]);
+  }, [orderId, kind, opened]);
 
+  const viewOnly = "View only: your role can see orders, returns and refunds but cannot change them.";
   return (
     <div className="space-y-4">
-      <div hidden={Boolean(target)} className="space-y-4">
+      {notice && <p role="status" className="rounded-md border border-warning/40 bg-warning-tint p-3 text-sm font-semibold text-navy-900">{notice}</p>}
+      <div hidden={Boolean(orderId)} className="space-y-4">
         <AttentionPanel canWrite={canWrite} reloadToken={reloadToken} onOpen={(item, from) => {
           const next = attentionTarget(item);
           if (next) open(next, from);
         }} />
 
         <section aria-labelledby={headingId} className="rounded-lg bg-white p-4 shadow-sm sm:p-5">
-          <h3 id={headingId} ref={heading} tabIndex={-1} className="font-body text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Orders</h3>
+          <h3 id={headingId} ref={heading} tabIndex={-1} className="font-body text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">
+            {module === "orders" ? "Orders" : module === "returns" ? "Returns" : "Refunds"}
+          </h3>
           <p className="mt-1 text-xs text-gray-600">
             {canWrite
               ? "Confirm each fulfilment step, review returns and record manual M-Pesa refunds. Only the steps the order allows are offered."
-              : "View only: your role can see orders, returns and refunds but cannot change them."}
+              : viewOnly}
           </p>
-          <nav aria-label="Order worklists" className="no-scrollbar mt-4 flex gap-1 overflow-x-auto border-b border-light-gray">
-            {VIEWS.map(([value, label]) => (
-              <button key={value} type="button" aria-current={view === value ? "page" : undefined} onClick={() => setView(value)}
-                className={`min-h-11 whitespace-nowrap px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] ${
-                  view === value ? "border-b-2 border-brand-primary text-brand-primary" : "text-gray-600 hover:text-charcoal"
-                }`}>
-                {label}
-              </button>
-            ))}
-          </nav>
-          {(view === "action" || view === "all" || view === "closed") && (
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Field label="Delivery">
-                {(id) => (
-                  <select id={id} value={deliveryMethod} onChange={(event) => setDeliveryMethod(isDeliveryMethod(event.target.value) ? event.target.value : "")} className={selectClass}>
-                    <option value="">All delivery methods</option>
-                    {DELIVERY_METHODS.map((method) => <option key={method} value={method}>{DELIVERY_LABELS[method]}</option>)}
-                  </select>
+          {module === "orders" && (
+            <>
+              <nav aria-label="Order worklists" className="mt-4 flex flex-wrap gap-1 border-b border-light-gray">
+                {ORDER_VIEWS.map((item) => (
+                  <Link key={item.id} to={ordersRoute("orders", { view: item.id })} replace aria-current={view === item.id ? "page" : undefined}
+                    className={`inline-flex min-h-11 items-center whitespace-nowrap px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] ${
+                      view === item.id ? "border-b-2 border-brand-primary text-brand-primary" : "text-gray-600 hover:text-charcoal"
+                    }`}>
+                    {item.label}
+                  </Link>
+                ))}
+              </nav>
+              <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-3">
+                <Field label="Delivery">
+                  {(id) => (
+                    <select id={id} value={deliveryMethod} onChange={(event) => setDeliveryMethod(isDeliveryMethod(event.target.value) ? event.target.value : "")} className={selectClass}>
+                      <option value="">All delivery methods</option>
+                      {DELIVERY_METHODS.map((method) => <option key={method} value={method}>{DELIVERY_LABELS[method]}</option>)}
+                    </select>
+                  )}
+                </Field>
+                <Field label="Ordered on">
+                  {(id) => <input id={id} type="date" value={orderedDay} onChange={(event) => setOrderedDay(event.target.value)} className={selectClass} />}
+                </Field>
+                {view === "all" && (
+                  <>
+                    <Field label="Order status">
+                      {(id) => (
+                        <select id={id} value={status} onChange={(event) => setStatus(isOrderStatus(event.target.value) ? event.target.value : "")} className={selectClass}>
+                          <option value="">All statuses</option>
+                          {ORDER_STATUS_OPTIONS.map((value) => <option key={value} value={value}>{ORDER_STATUS_LABELS[value]}</option>)}
+                        </select>
+                      )}
+                    </Field>
+                    <Field label="Payment">
+                      {(id) => (
+                        <select id={id} value={paymentStatus} onChange={(event) => setPaymentStatus(isPaymentStatus(event.target.value) ? event.target.value : "")} className={selectClass}>
+                          <option value="">All payments</option>
+                          {PAYMENT_STATUS_OPTIONS.map((value) => <option key={value} value={value}>{PAYMENT_STATUS_LABELS[value]}</option>)}
+                        </select>
+                      )}
+                    </Field>
+                  </>
                 )}
-              </Field>
-              <Field label="Ordered on">
-                {(id) => <input id={id} type="date" value={orderedDay} onChange={(event) => setOrderedDay(event.target.value)} className={selectClass} />}
-              </Field>
-              {view === "all" && (
-                <>
-                  <Field label="Order status">
-                    {(id) => (
-                      <select id={id} value={status} onChange={(event) => setStatus(isOrderStatus(event.target.value) ? event.target.value : "")} className={selectClass}>
-                        <option value="">All statuses</option>
-                        {ORDER_STATUS_OPTIONS.map((value) => <option key={value} value={value}>{ORDER_STATUS_LABELS[value]}</option>)}
-                      </select>
-                    )}
-                  </Field>
-                  <Field label="Payment">
-                    {(id) => (
-                      <select id={id} value={paymentStatus} onChange={(event) => setPaymentStatus(isPaymentStatus(event.target.value) ? event.target.value : "")} className={selectClass}>
-                        <option value="">All payments</option>
-                        {PAYMENT_STATUS_OPTIONS.map((value) => <option key={value} value={value}>{PAYMENT_STATUS_LABELS[value]}</option>)}
-                      </select>
-                    )}
-                  </Field>
-                </>
-              )}
-            </div>
+              </div>
+            </>
           )}
         </section>
 
@@ -170,13 +194,13 @@ export function OrdersManager({ role, showToast }: { role: string; showToast: (m
           <OrderQueue key={`${view}:${queue.title}:${JSON.stringify(queue.filters)}`} title={queue.title} filters={queue.filters}
             emptyText={queue.empty} reloadToken={reloadToken} canWrite={canWrite} onOpen={open} onChanged={changed} showToast={showToast} />
         ))}
-        {view === "returns" && <ReturnsQueue reloadToken={reloadToken} onOpen={open} />}
-        {view === "refunds" && <RefundsQueue reloadToken={reloadToken} canWrite={canWrite} onOpen={open} onChanged={changed} showToast={showToast} />}
+        {module === "returns" && <ReturnsQueue reloadToken={reloadToken} onOpen={open} />}
+        {module === "refunds" && <RefundsQueue reloadToken={reloadToken} canWrite={canWrite} onOpen={open} onChanged={changed} showToast={showToast} />}
       </div>
 
-      {target && (
-        <OrderWorkspace key={target.orderId} orderId={target.orderId} focus={target.focus} canWrite={canWrite}
-          onBack={back} onChanged={changed} showToast={showToast} />
+      {orderId && (
+        <OrderWorkspace key={orderId} orderId={orderId} focus={opened?.orderId === orderId ? opened.focus : null} canWrite={canWrite}
+          focusOnOpen={kind !== "load"} onBack={back} onMissing={missing} onChanged={changed} showToast={showToast} />
       )}
     </div>
   );

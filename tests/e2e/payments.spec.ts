@@ -220,10 +220,9 @@ async function staffPayments(page: Page, context: BrowserContext, role: string) 
     if (pathname.startsWith("/api/mpesa/") && !pathname.startsWith("/api/mpesa/admin/")) customerCalls.push(`${request.method()} ${pathname}`);
   });
 
-  await page.goto("/#/admin");
-  await page.getByRole("navigation", { name: "Admin sections" }).getByRole("button", { name: "Orders" }).click();
+  await page.goto("/#/admin/orders/orders");
   // An unpaid order needs no staff action yet, so it is opened from the full list.
-  await page.getByRole("navigation", { name: "Order worklists" }).getByRole("button", { name: "All orders" }).click();
+  await page.getByRole("navigation", { name: "Order worklists" }).getByRole("link", { name: "All orders" }).click();
   await page.getByRole("button", { name: `Open order ${placed.orderNumber}` }).click();
   const toggle = page.getByRole("button", { name: `M-Pesa payments for ${placed.orderNumber}` });
   await expect(toggle).toHaveAttribute("aria-expanded", "false");

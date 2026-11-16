@@ -42,6 +42,60 @@ let state: RouteState | null = null;
 let pendingPush: string | null = null;
 const subscribers = new Set<() => void>();
 
+/**
+ * Each history entry this page reaches is marked with its position (in `history.state`, which survives reloads), so a
+ * Back/Forward can be measured (how many entries, which way) and, when it must be confirmed first, reversed exactly.
+ */
+const INDEX_KEY = "apexRouteIndex";
+/** Position of the entry showing `state.route`. */
+let currentIndex = 0;
+
+function entryIndex(): number | null {
+  const stored: unknown = window.history.state;
+  if (typeof stored !== "object" || stored === null || !(INDEX_KEY in stored)) return null;
+  const value: unknown = (stored as Record<string, unknown>)[INDEX_KEY];
+  return typeof value === "number" && Number.isInteger(value) ? value : null;
+}
+
+function markEntry(index: number) {
+  const stored: unknown = window.history.state;
+  window.history.replaceState({ ...(typeof stored === "object" && stored !== null ? stored : {}), [INDEX_KEY]: index }, "");
+}
+
+/** Adopts the current entry's mark, or marks it, when the store starts watching the address. */
+function syncEntryIndex() {
+  const index = entryIndex();
+  if (index === null) markEntry(currentIndex);
+  else currentIndex = index;
+}
+
+/** A route change that must be confirmed before it happens (see `setNavigationBlocker`). */
+export type HeldNavigation = {
+  /** The route that was asked for. */
+  to: string;
+  kind: Exclude<NavigationKind, "load">;
+  /** Carries the navigation out without asking again (for Back/Forward: in the same direction and distance). */
+  proceed: () => void;
+};
+let blocker: ((held: HeldNavigation) => boolean) | null = null;
+/** A held Back/Forward's destination while the browser is sent back to the current entry. */
+let reversing: string | null = null;
+/** Set by a held Back/Forward's `proceed`, so its arrival is published without asking again. */
+let releasedTraverse = false;
+
+/**
+ * Lets one owner hold route changes until the user confirms them: `check` sees every change of route (links,
+ * `navigate()`, Back/Forward and typed addresses) and returns true to hold it; the owner then calls `proceed`, or drops
+ * it. A held Back/Forward is reversed at once, so the address keeps showing the current route and nothing is published.
+ * Returns a function that removes the blocker.
+ */
+export function setNavigationBlocker(check: (held: HeldNavigation) => boolean) {
+  blocker = check;
+  return () => {
+    if (blocker === check) blocker = null;
+  };
+}
+
 function publish(next: RouteState) {
   state = next;
   if (next.kind !== "replace") window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
@@ -55,12 +109,54 @@ function onLocationChange() {
   const route = currentRoute();
   const pushed = pendingPush !== null && pendingPush === arrived;
   pendingPush = null;
-  if (state?.route === route) return;
+  if (pushed) {
+    // A push adds the entry after the current one (any forward entries are gone).
+    currentIndex += 1;
+    markEntry(currentIndex);
+  }
+  const index = entryIndex();
+  if (state?.route === route) {
+    // Nothing new: the second event of a navigation, or the browser back on the current entry after a reversal.
+    if (index !== null) currentIndex = index;
+    reversing = null;
+    return;
+  }
+  if (!pushed) {
+    if (reversing !== null) {
+      // The other event of the held Back/Forward, while its reversal is under way.
+      if (route === reversing) return;
+      // The reversal landed on an entry this page never marked: put the current route back on top instead.
+      reversing = null;
+      currentIndex = (index ?? currentIndex) + 1;
+      window.history.pushState({ [INDEX_KEY]: currentIndex }, "", `#${state?.route ?? "/"}`);
+      return;
+    }
+    // An unmarked entry is a new one after the current entry: an address typed by hand, or a plain link.
+    const target = index ?? currentIndex + 1;
+    if (index === null) markEntry(target);
+    const delta = target - currentIndex;
+    if (releasedTraverse) {
+      releasedTraverse = false;
+    } else if (delta !== 0 && blocker?.({
+      to: route,
+      kind: "traverse",
+      proceed: () => {
+        releasedTraverse = true;
+        window.history.go(delta);
+      },
+    })) {
+      reversing = route;
+      window.history.go(-delta);
+      return;
+    }
+    currentIndex = target;
+  }
   publish({ route, kind: pushed ? "push" : "traverse", previous: state?.route ?? null });
 }
 
 function subscribe(notify: () => void) {
   if (!subscribers.size) {
+    syncEntryIndex();
     window.addEventListener("hashchange", onLocationChange);
     window.addEventListener("popstate", onLocationChange);
   }
@@ -106,29 +202,37 @@ export function useEntryFocus(heading: RefObject<HTMLElement | null>) {
 
 /**
  * Moves to `to`. A push adds a history entry and starts at the top of the page; `replace` swaps the current entry
- * in place, keeping the scroll position, so Back skips the intermediate states.
+ * in place, keeping the scroll position, so Back skips the intermediate states. A blocker may hold either first.
  */
 export function navigate(to: string, { replace = false }: { replace?: boolean } = {}) {
+  move(to, replace, true);
+}
+
+function move(to: string, replace: boolean, ask: boolean) {
   if (!replace) {
     // The browser stores the fragment percent-encoded; a URL applies the same encoding, so the arrival is recognisable.
     const target = new URL(window.location.href);
     target.hash = to;
     // The same address adds no history entry and fires no event.
     if (target.hash === window.location.hash) return;
+    if (ask && blocker?.({ to, kind: "push", proceed: () => move(to, false, false) })) return;
     // Recorded before the assignment: browsers fire `popstate` synchronously inside it (`hashchange` follows later).
     pendingPush = target.hash.slice(1);
     window.location.hash = to;
     return;
   }
+  if (ask && to !== readRoute() && blocker?.({ to, kind: "replace", proceed: () => move(to, true, false) })) return;
+  // The entry keeps its state, including its position mark.
   window.history.replaceState(window.history.state, "", `#${to}`);
   const route = currentRoute();
   if (state?.route !== route) publish({ route, kind: "replace", previous: state?.route ?? null });
 }
 
-type LinkProps = Omit<ComponentPropsWithoutRef<"a">, "href"> & { to: string };
+/** `replace` swaps the current history entry instead of adding one (for in-page views Back should skip). */
+type LinkProps = Omit<ComponentPropsWithoutRef<"a">, "href"> & { to: string; replace?: boolean };
 
 export const Link = forwardRef<HTMLAnchorElement, LinkProps>(function Link({
-  to, onClick, target, download, children, ...props
+  to, replace = false, onClick, target, download, children, ...props
 }, ref) {
   const handle = useCallback(
     (e: MouseEvent<HTMLAnchorElement>) => {
@@ -138,9 +242,9 @@ export const Link = forwardRef<HTMLAnchorElement, LinkProps>(function Link({
         (target && target !== "_self") || (download !== undefined && download !== false)
       ) return;
       e.preventDefault();
-      navigate(to);
+      navigate(to, { replace });
     },
-    [to, onClick, target, download]
+    [to, replace, onClick, target, download]
   );
   return (
     <a {...props} ref={ref} href={`#${to}`} target={target} download={download} onClick={handle}>

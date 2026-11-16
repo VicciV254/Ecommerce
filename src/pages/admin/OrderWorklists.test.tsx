@@ -36,6 +36,7 @@ const listedRefund = (index: number): ListedRefund => ({
 });
 
 beforeEach(() => {
+  vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
   for (const group of Object.values(admin)) for (const fn of Object.values(group)) fn.mockReset();
 });
 
@@ -85,8 +86,8 @@ describe("opening a record from a worklist", () => {
     admin.refunds.getAll.mockImplementation(servePages(() => [{ ...refund, orderNumber: order.orderNumber, isDemo: false }], "refunds"));
     admin.orders.get.mockResolvedValue({ data: { ...order, refunds: [refund] } });
 
-    render(<OrdersManager role="ADMIN" showToast={vi.fn()} />);
-    fireEvent.click(screen.getByRole("button", { name: "Refunds" }));
+    window.history.replaceState(null, "", "#/admin/orders/refunds");
+    render(<OrdersManager module="refunds" canWrite showToast={vi.fn()} />);
     fireEvent.click(await screen.findByRole("button", { name: /^Open\s*order/ }, WAIT));
 
     const workspace = await screen.findByRole("region", { name: `Order ${order.orderNumber}` }, WAIT);

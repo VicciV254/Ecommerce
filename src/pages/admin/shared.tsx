@@ -11,10 +11,6 @@ export const primaryButtonClass =
 export const dangerButtonClass =
   "rounded-sm border border-error/40 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-error hover:bg-error hover:text-white disabled:cursor-not-allowed disabled:opacity-50";
 
-/** Roles the server lets change the catalog; viewers read only. */
-const CATALOG_WRITE_ROLES = ["ADMIN", "SUPER_ADMIN"];
-export const canEditCatalog = (role: string) => CATALOG_WRITE_ROLES.includes(role);
-
 export function Field({ label, hint, children }: { label: string; hint?: string; children: (id: string) => ReactNode }) {
   const id = useId();
   return (
@@ -38,6 +34,27 @@ export function Panel({ title, description, actions, children }: { title: string
       </div>
       {children}
     </section>
+  );
+}
+
+/**
+ * A two-dimensional table's own sideways scroller, so the page never scrolls sideways: labelled, keyboard-focusable and
+ * positioned (visually hidden header text stays inside it), with 6px of room for the focus ring of controls at its
+ * edges. It brings a newly focused control fully into view: Chromium leaves a partly visible one clipped.
+ */
+export function TableRegion({ label, className = "", children }: { label: string; className?: string; children: ReactNode }) {
+  return (
+    <div
+      role="region"
+      aria-label={label}
+      tabIndex={0}
+      onFocus={(event) => {
+        if (event.target !== event.currentTarget) event.target.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+      }}
+      className={`relative -mx-[6px] overflow-x-auto p-[6px] [scroll-padding-inline:6px] ${className}`}
+    >
+      {children}
+    </div>
   );
 }
 

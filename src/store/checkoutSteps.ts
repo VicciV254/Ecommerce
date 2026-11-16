@@ -62,7 +62,7 @@ export function checkoutSteps(facts: StepFacts, requested: CheckoutStep | null):
 
 const CHECKOUT_PATH = "/checkout";
 /** Order identifiers as the API issues them; anything else in the address is ignored. */
-const ORDER_ID = /^[A-Za-z0-9:_-]{1,128}$/;
+export const ORDER_ID = /^[A-Za-z0-9:_-]{1,128}$/;
 
 const isStep = (value: string | null): value is CheckoutStep => CHECKOUT_STEPS.some((step) => step === value);
 

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   catalogAdminAPI,
   type CatalogCategory,
@@ -10,17 +10,21 @@ import {
 import { describeApiError } from "../../api/errors";
 import { ModalDialog } from "../../components/Modal";
 import { useAdminCatalog } from "./AdminCatalogContext";
+import { NEW_PRODUCT, adminModuleRoute, parseProductParam, routePath } from "./adminRoutes";
 import { CategoryForm, DesignerForm } from "./CatalogForms";
+import { ProductDetails } from "./ProductDetails";
 import { ProductImagesSection, buildImages, imageProblems, initialGallery, placeUpload, uploadedImageRow, type ImageRow } from "./ProductImages";
 import {
   Feedback,
   Field,
+  TableRegion,
   categoryOptions,
   dangerButtonClass,
   inputClass,
   primaryButtonClass,
   smallButtonClass,
 } from "./shared";
+import { useUnsavedChanges } from "./unsavedChanges";
 import { MAX_PRODUCT_IMAGES, useImageUploads } from "./useImageUploads";
 
 const OPTION_KEY = /^[a-z][a-z0-9_-]{0,31}$/;
@@ -70,16 +74,22 @@ function splitTags(value: string) {
   return [...new Set(value.split(",").map((tag) => tag.trim()).filter(Boolean))];
 }
 
-export function ProductEditor({
-  product, canWrite, onClose, onSaved, onDelete,
-}: {
+type EditorProps = {
   product: CatalogProduct | null;
-  /** Viewers see images read-only. */
+  /** Roles that cannot write get the read-only product details instead of the form. */
   canWrite: boolean;
   onClose: () => void;
   onSaved: (message: string) => void;
   onDelete?: () => void;
-}) {
+};
+
+/** The product dialog: the editing form for roles that may write, read-only details for the rest. */
+export function ProductEditor(props: EditorProps) {
+  if (!props.canWrite && props.product) return <ProductDetails product={props.product} onClose={props.onClose} />;
+  return <ProductForm {...props} />;
+}
+
+function ProductForm({ product, canWrite, onClose, onSaved, onDelete }: EditorProps) {
   const { data, categories, reload } = useAdminCatalog();
   const designers = data?.snapshot.designers ?? [];
   const options = useMemo(() => categoryOptions(categories), [categories]);
@@ -109,6 +119,19 @@ export function ProductEditor({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [creating, setCreating] = useState<"category" | "designer" | null>(null);
+  // Unsaved when any value differs from what was loaded, an image changed, an upload is under way or an option name is typed.
+  const formState = JSON.stringify({
+    name, description, price, compareAt, categoryId, designerId, tags, collection, isActive, isFeatured, optionKeys, newOption,
+    specs: specs.map((spec) => [spec.name, spec.value]),
+    variants: variants.map(({ rowKey: _key, ...row }) => row),
+  });
+  const [loadedState] = useState(formState);
+  const productKey = product?.id ?? NEW_PRODUCT;
+  // Only this product's address keeps the editor open.
+  const keeps = useCallback(
+    (route: string) => routePath(route) === adminModuleRoute("products") && parseProductParam(route).id === productKey,
+    [productKey],
+  );
 
   const category: CatalogCategory | undefined = categories.byId.get(categoryId);
   // Suggestions come from the chosen category and every ancestor department.
@@ -132,6 +155,7 @@ export function ProductEditor({
     editImages(() => next);
     return null;
   }, images.map((row) => row.rowKey));
+  const { confirmLeave, release } = useUnsavedChanges(formState !== loadedState || imagesDirty || uploads.busy, "Product editor", keeps);
 
   const addOptionKey = () => {
     const key = newOption.trim();
@@ -237,6 +261,7 @@ export function ProductEditor({
           images: buildImages(images, mainImage),
         });
       }
+      release();
       onSaved(product ? `Saved "${fields.name}"` : `Created "${fields.name}"`);
     } catch (reason) {
       setError(describeApiError(reason, "The product could not be saved."));
@@ -257,7 +282,7 @@ export function ProductEditor({
             <button type="button" onClick={() => void save()} disabled={saving} className={primaryButtonClass}>
               {saving ? "Saving…" : "Save Product"}
             </button>
-            {onDelete && <button type="button" onClick={onDelete} className={dangerButtonClass}>Delete</button>}
+            {onDelete && <button type="button" onClick={() => confirmLeave(onDelete)} className={dangerButtonClass}>Delete</button>}
             <button type="button" aria-label="Close product editor" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-warm-beige">
               <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
             </button>
@@ -352,11 +377,11 @@ export function ProductEditor({
                   <button type="button" aria-label={`Remove option ${key}`} onClick={() => removeOptionKey(key)} className="text-gray-500 hover:text-error">×</button>
                 </span>
               ))}
-              <input aria-label="New option name" value={newOption} onChange={(event) => setNewOption(event.target.value.toLowerCase())} placeholder="Option, e.g. size" className="w-40 rounded-sm border border-light-gray bg-off-white px-2 py-1.5 text-xs" />
+              <input aria-label="New option name" value={newOption} onChange={(event) => setNewOption(event.target.value.toLowerCase())} placeholder="Option, e.g. size" className="w-[min(100%,10rem)] min-w-0 rounded-sm border border-light-gray bg-off-white px-2 py-1.5 text-xs" />
               <button type="button" onClick={addOptionKey} disabled={!OPTION_KEY.test(newOption.trim()) || optionKeys.includes(newOption.trim()) || optionKeys.length >= MAX_OPTION_KEYS} className={smallButtonClass}>Add option</button>
             </div>
             {variants.length > 0 && (
-              <div className="overflow-x-auto">
+              <TableRegion label="Variants" className="-my-[6px]">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b border-light-gray text-left text-[10px] font-bold uppercase tracking-wider text-gray-600">
@@ -412,7 +437,7 @@ export function ProductEditor({
                     })}
                   </tbody>
                 </table>
-              </div>
+              </TableRegion>
             )}
             <button
               type="button"
@@ -449,6 +474,7 @@ export function ProductEditor({
         <CategoryForm
           category={null}
           defaultParentId={category?.id ?? null}
+          keeps={keeps}
           onClose={() => setCreating(null)}
           onSaved={(saved) => {
             setCreating(null);
@@ -460,6 +486,7 @@ export function ProductEditor({
       {creating === "designer" && (
         <DesignerForm
           designer={null}
+          keeps={keeps}
           onClose={() => setCreating(null)}
           onSaved={(saved) => {
             setCreating(null);

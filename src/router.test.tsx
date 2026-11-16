@@ -1,7 +1,7 @@
 import { createRef } from "react";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { Link, navigate, useRoute, useRouteState } from "./router";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Link, navigate, setNavigationBlocker, useRoute, useRouteState, type HeldNavigation } from "./router";
 
 beforeEach(() => { window.location.hash = ""; });
 
@@ -154,5 +154,117 @@ describe("navigation kinds and history entries", () => {
     // An address change made outside navigate() (typed, or by another script) counts as a traversal.
     act(() => { window.location.hash = "#/contact"; });
     await screen.findByText("traverse /contact from /about");
+  });
+});
+
+describe("navigation blocker", () => {
+  let release: (() => void) | null = null;
+  beforeEach(() => {
+    vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
+    release = null;
+  });
+  afterEach(() => release?.());
+
+  /** Holds every route change and keeps the latest one, as a guard with unsaved edits would. */
+  function holdAll() {
+    const held: HeldNavigation[] = [];
+    release = setNavigationBlocker((attempt) => {
+      held.push(attempt);
+      return true;
+    });
+    return held;
+  }
+
+  async function visit(...routes: string[]) {
+    for (const route of routes) {
+      act(() => navigate(route));
+      await screen.findByText(new RegExp(`^push ${route.replace(/[?]/g, "\\?")} from`));
+    }
+  }
+
+  it("holds a push or a replace until it is carried out, then adds the entry once", async () => {
+    render(<NavigationProbe />);
+    const held = holdAll();
+    const entries = window.history.length;
+    act(() => navigate("/shop"));
+    expect(held.map(({ to, kind }) => [to, kind])).toEqual([["/shop", "push"]]);
+    expect(window.location.hash).toBe("");
+    expect(screen.getByText("load / from nowhere")).toBeTruthy();
+
+    act(() => navigate("/about", { replace: true }));
+    expect(held.at(-1)).toMatchObject({ to: "/about", kind: "replace" });
+    expect(window.location.hash).toBe("");
+
+    act(() => held[0].proceed());
+    await screen.findByText("push /shop from /");
+    expect(window.history.length).toBe(entries + 1);
+    expect(held).toHaveLength(2);
+  });
+
+  it("reverses a held Back without publishing it, then carries it out in the same direction", async () => {
+    render(<NavigationProbe />);
+    await visit("/a", "/b", "/c");
+    const held = holdAll();
+    act(() => window.history.back());
+    // The address returns to the current route and the page never sees the earlier one.
+    await waitFor(() => expect(window.location.hash).toBe("#/c"));
+    await waitFor(() => expect(held).toHaveLength(1));
+    expect(held[0]).toMatchObject({ to: "/b", kind: "traverse" });
+    expect(screen.getByText("push /c from /b")).toBeTruthy();
+    // Settled: the duplicate event and the reversal ask nothing more.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(held).toHaveLength(1);
+
+    act(() => held[0].proceed());
+    await screen.findByText("traverse /b from /c");
+    expect(window.location.hash).toBe("#/b");
+    expect(held).toHaveLength(1);
+    // The history stack is intact: Forward still reaches the route that was left.
+    release?.();
+    act(() => window.history.forward());
+    await screen.findByText("traverse /c from /b");
+  });
+
+  it("reverses a held Forward and a jump of several entries by the same distance", async () => {
+    render(<NavigationProbe />);
+    await visit("/a", "/b", "/c");
+    act(() => window.history.go(-2));
+    await screen.findByText("traverse /a from /c");
+    const held = holdAll();
+
+    act(() => window.history.forward());
+    await waitFor(() => expect(held).toHaveLength(1));
+    expect(held[0]).toMatchObject({ to: "/b", kind: "traverse" });
+    await waitFor(() => expect(window.location.hash).toBe("#/a"));
+
+    act(() => window.history.go(2));
+    await waitFor(() => expect(held).toHaveLength(2));
+    expect(held[1]).toMatchObject({ to: "/c", kind: "traverse" });
+    await waitFor(() => expect(window.location.hash).toBe("#/a"));
+    act(() => held[1].proceed());
+    await screen.findByText("traverse /c from /a");
+  });
+
+  it("holds an address typed by hand, and carries it out on request", async () => {
+    render(<NavigationProbe />);
+    await visit("/a");
+    const held = holdAll();
+    act(() => { window.location.hash = "#/typed"; });
+    await waitFor(() => expect(held).toHaveLength(1));
+    expect(held[0]).toMatchObject({ to: "/typed", kind: "traverse" });
+    await waitFor(() => expect(window.location.hash).toBe("#/a"));
+    act(() => held[0].proceed());
+    await screen.findByText("traverse /typed from /a");
+  });
+
+  it("lets every change through once the blocker is removed", async () => {
+    render(<NavigationProbe />);
+    const held = holdAll();
+    release?.();
+    act(() => navigate("/shop"));
+    await screen.findByText("push /shop from /");
+    act(() => window.history.back());
+    await screen.findByText("traverse / from /shop");
+    expect(held).toEqual([]);
   });
 });

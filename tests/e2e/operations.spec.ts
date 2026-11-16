@@ -246,8 +246,7 @@ async function serveOperations(context: BrowserContext) {
 
 async function openOrdersTab(page: Page) {
   await signInStaff(page, "ADMIN");
-  await page.goto("/#/admin");
-  await page.getByRole("navigation", { name: "Admin sections" }).getByRole("button", { name: "Orders" }).click();
+  await page.goto("/#/admin/orders/orders");
 }
 
 test("staff dispatch with a permitted step and record a sent M-Pesa refund", async ({ page, context }) => {

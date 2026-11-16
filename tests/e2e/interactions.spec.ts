@@ -174,8 +174,7 @@ test("product editor controls remain reachable and save errors are announced ins
     saves.push({ method: route.request().method(), body: route.request().postDataJSON() });
     return route.fulfill({ status: 400, json: { error: "Invalid request", details: [{ path: "price", message: "Number must be greater than 0" }] } });
   });
-  await page.goto("/#/admin");
-  await page.getByRole("button", { name: "Catalog", exact: true }).click();
+  await page.goto("/#/admin/catalog/products");
   await expect(page.getByRole("button", { name: `Edit ${adminSnapshot.products.at(-1)!.name}` })).toBeVisible();
   const product = page.getByRole("button", { name: "Edit Linen Short-Sleeve Shirt" });
   await product.focus();
@@ -206,6 +205,10 @@ test("product editor controls remain reachable and save errors are announced ins
   expect(saves[0].body).not.toHaveProperty("variants");
   expect(saves[0].body).not.toHaveProperty("images");
   await page.keyboard.press("Escape");
+  // The failed save left the edit unsaved, so closing the editor asks first.
+  const guard = page.getByRole("dialog", { name: "Discard unsaved changes?" });
+  await expect(guard).toContainText("Product editor has unsaved changes.");
+  await guard.getByRole("button", { name: "Discard changes" }).click();
   await expect(editor).toHaveCount(0);
   await expect(product).toBeFocused();
 });
@@ -237,12 +240,14 @@ test("storefront drafts save and publish with versions without leaking to shoppe
   await context.route("**/api/settings/storefront", (route) =>
     route.fulfill({ json: { ...publishedStorefront, settings: { ...publishedStorefront.settings, brand: { ...publishedStorefront.settings.brand, name: publishedName } } } }));
 
-  await page.goto("/#/admin");
-  await page.getByRole("button", { name: "Storefront", exact: true }).click();
+  await page.goto("/#/admin/storefront/editor");
   const storeName = page.getByRole("textbox", { name: "Store name" });
   await storeName.fill("Apex Cart Draft");
-  await page.getByRole("button", { name: "Preview Draft" }).click();
+  // The draft preview is its own page, reached from the editor; returning keeps the edit.
+  await page.getByRole("main").getByRole("link", { name: "Draft preview" }).click();
   await expect(page.getByRole("region", { name: "Draft preview" })).toContainText("Apex Cart Draft");
+  await page.getByRole("link", { name: "Back to editor" }).click();
+  await expect(storeName).toHaveValue("Apex Cart Draft");
   await expect(page.getByRole("button", { name: "Publish" })).toBeDisabled();
   await page.getByRole("button", { name: "Save Draft" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Draft saved" })).toBeVisible();

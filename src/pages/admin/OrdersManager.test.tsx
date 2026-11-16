@@ -23,6 +23,9 @@ const failedEmail = fixtureAttention({
 });
 
 beforeEach(() => {
+  // The open order lives in the address; every test starts on the Orders module with nothing open.
+  window.history.replaceState(null, "", "#/admin/orders/orders");
+  vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
   for (const group of Object.values(admin)) for (const fn of Object.values(group)) fn.mockReset();
   admin.orders.getAll.mockResolvedValue({ data: { orders: [processing], pagination: { page: 1, limit: 20, total: 1, pages: 1 } } });
   admin.orders.get.mockResolvedValue({ data: processing });
@@ -31,7 +34,7 @@ beforeEach(() => {
 
 describe("staff order roles", () => {
   it("gives a viewer every record but no control that changes an order, refund or email", async () => {
-    render(<OrdersManager role="VIEWER" showToast={vi.fn()} />);
+    render(<OrdersManager canWrite={false} showToast={vi.fn()} />);
     expect(await screen.findByText(/View only: your role can see orders, returns and refunds/, undefined, WAIT)).toBeTruthy();
     // jsdom drops the space before visually hidden text in accessible names; browsers keep it.
     const open = await screen.findAllByRole("button", { name: new RegExp(`^Open\\s*order ${base.orderNumber}$`) }, WAIT);

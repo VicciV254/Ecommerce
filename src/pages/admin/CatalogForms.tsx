@@ -4,6 +4,7 @@ import { describeApiError } from "../../api/errors";
 import { ConfirmModal } from "../../components/Modal";
 import { useAdminCatalog } from "./AdminCatalogContext";
 import { Feedback, Field, categoryOptions, descendantIds, inputClass, isAcceptedImageUrl } from "./shared";
+import { useUnsavedChanges } from "./unsavedChanges";
 
 const MAX_CATEGORY_ORDER = 10_000;
 const DESIGNER_HANDLE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -14,10 +15,12 @@ function splitList(value: string) {
 
 /** Create or edit one category. The slug is never rewritten just because the name changes. */
 export function CategoryForm({
-  category, defaultParentId, onClose, onSaved,
+  category, defaultParentId, keeps, onClose, onSaved,
 }: {
   category: CatalogCategory | null;
   defaultParentId: string | null;
+  /** Routes that keep the form open, when it sits inside another editor (by default, the page it was opened on). */
+  keeps?: (route: string) => boolean;
   onClose: () => void;
   onSaved: (saved: CatalogCategory) => void;
 }) {
@@ -30,6 +33,9 @@ export function CategoryForm({
   const [isActive, setIsActive] = useState(category?.isActive ?? true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const formState = JSON.stringify([name, parentId, order, image, keys, isActive]);
+  const [loadedState] = useState(formState);
+  const { confirmLeave } = useUnsavedChanges(formState !== loadedState, "Category form", keeps);
 
   const excluded = category ? new Set([category.id, ...descendantIds(categories, category.id)]) : new Set<string>();
   const parents = categoryOptions(categories).filter((option) => !excluded.has(option.id));
@@ -68,7 +74,7 @@ export function CategoryForm({
       confirmDisabled={!valid || saving}
       size="lg"
       onConfirm={() => void save()}
-      onCancel={onClose}
+      onCancel={() => confirmLeave(onClose)}
     >
       <div className="mt-4 space-y-3">
         <Field label="Category Name">
@@ -106,9 +112,11 @@ export function CategoryForm({
 
 /** Create or edit one designer profile. */
 export function DesignerForm({
-  designer, onClose, onSaved,
+  designer, keeps, onClose, onSaved,
 }: {
   designer: CatalogDesigner | null;
+  /** Routes that keep the form open, when it sits inside another editor (by default, the page it was opened on). */
+  keeps?: (route: string) => boolean;
   onClose: () => void;
   onSaved: (saved: CatalogDesigner) => void;
 }) {
@@ -122,6 +130,9 @@ export function DesignerForm({
   const [isActive, setIsActive] = useState(designer?.isActive ?? true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const formState = JSON.stringify([handle, name, specialty, location, image, heading, text, isActive]);
+  const [loadedState] = useState(formState);
+  const { confirmLeave } = useUnsavedChanges(formState !== loadedState, "Designer form", keeps);
 
   const imageValid = !image.trim() || isAcceptedImageUrl(image.trim());
   const handleValid = DESIGNER_HANDLE.test(handle.trim());
@@ -160,7 +171,7 @@ export function DesignerForm({
       confirmDisabled={!valid || saving}
       size="lg"
       onConfirm={() => void save()}
-      onCancel={onClose}
+      onCancel={() => confirmLeave(onClose)}
     >
       <div className="mt-4 space-y-3">
         <div className="grid gap-3 sm:grid-cols-2">

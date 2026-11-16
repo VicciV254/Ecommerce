@@ -21,6 +21,9 @@ type StorefrontValue = {
 
 const StorefrontContext = createContext<StorefrontValue | null>(null);
 
+/** The mounted page's own document title (`usePageTitle`); without one the document is titled with the brand name. */
+let pageTitle: string | null = null;
+
 function describeStorefrontError(error: unknown) {
   if (error instanceof StorefrontFormatError) return `${error.message} Try again later.`;
   return describeApiError(error, "Storefront content could not be loaded.");
@@ -66,7 +69,7 @@ export function StorefrontProvider({ children }: { children: ReactNode }) {
   const brandName = storefront?.settings.brand.name || DEFAULT_BRAND_NAME;
 
   useEffect(() => {
-    document.title = brandName;
+    document.title = pageTitle ?? brandName;
   }, [brandName]);
 
   const value = useMemo<StorefrontValue>(() => ({
@@ -85,4 +88,17 @@ export function useStorefront() {
   const context = useContext(StorefrontContext);
   if (!context) throw new Error("useStorefront must be used within StorefrontProvider");
   return context;
+}
+
+/** A page's own document title, kept while the page is mounted (see `pageTitle`). */
+export function usePageTitle(title: string) {
+  const { brandName } = useStorefront();
+  useEffect(() => {
+    pageTitle = title;
+    document.title = title;
+    return () => {
+      pageTitle = null;
+      document.title = brandName;
+    };
+  }, [title, brandName]);
 }

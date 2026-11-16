@@ -473,7 +473,7 @@ describe("catalog manager image filter", () => {
   it("counts and lists products with no images or only sample images", () => {
     const sampleOnly = { ...poloShirt, id: "prod-sample-only", name: "Sample-only Polo", images: [{ ...poloShirt.images[0], isPlaceholder: true }] };
     mocks.snapshot = fixtureSnapshot({ mode: "admin", products: [linenShirt, poloShirt, imagelessShirt, demoPhone, sampleOnly] });
-    render(<CatalogManager role="ADMIN" showToast={vi.fn()} />);
+    render(<CatalogManager canWrite showToast={vi.fn()} />);
     const chip = screen.getByRole("button", { name: "Needs images (3)" });
     expect(chip.getAttribute("aria-pressed")).toBe("false");
     fireEvent.click(chip);
@@ -491,7 +491,7 @@ describe("catalog manager image filter", () => {
 
   it("[5] offers product tiles a candidate at least twice their widest slot, for 2x screens", () => {
     mocks.snapshot = fixtureSnapshot({ mode: "admin", products: [editable, poloShirt] });
-    render(<CatalogManager role="ADMIN" showToast={vi.fn()} />);
+    render(<CatalogManager canWrite showToast={vi.fn()} />);
     const tile = screen.getByRole("button", { name: "Edit Linen Short-Sleeve Shirt" }).querySelector("img")!;
     const widths = tile.getAttribute("srcset")!.split(", ").map((entry) => Number(entry.split(" ")[1].replace("w", "")));
     expect(Math.max(...widths)).toBeGreaterThanOrEqual(2 * widestSlot(tile.getAttribute("sizes")!));
@@ -499,10 +499,10 @@ describe("catalog manager image filter", () => {
 
   it("sizes product tiles to the grid with card renditions", () => {
     mocks.snapshot = fixtureSnapshot({ mode: "admin", products: [editable, poloShirt] });
-    render(<CatalogManager role="ADMIN" showToast={vi.fn()} />);
+    render(<CatalogManager canWrite showToast={vi.fn()} />);
     const tile = screen.getByRole("button", { name: "Edit Linen Short-Sleeve Shirt" }).querySelector("img")!;
     expect(tile.getAttribute("sizes")).toBe(
-      "(min-width: 1440px) 254px, (min-width: 1280px) calc(20vw - 34.8px), (min-width: 1024px) calc(25vw - 40px), (min-width: 640px) calc(33.34vw - 43px), calc(50vw - 46px)");
+      "(min-width: 1280px) calc(20vw - 82.8px), (min-width: 1024px) calc(25vw - 40px), (min-width: 640px) calc(33.34vw - 43px), calc(50vw - 46px)");
     expect(tile.getAttribute("srcset")?.split(", ").map((entry) => entry.split(" ")[1])).toEqual(["240w", "320w", "480w", "640w", "960w"]);
     expect(tile.getAttribute("loading")).toBe("lazy");
   });

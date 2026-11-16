@@ -19,6 +19,7 @@ import {
   toDateInput,
   todayInput,
 } from "./shared";
+import { useUnsavedChanges } from "./unsavedChanges";
 
 const PERCENT_PRESETS = [5, 10, 15, 20, 25, 50];
 const MAX_PERCENT = 100;
@@ -48,7 +49,7 @@ function discountInput(discount: CatalogDiscount, patch: Partial<DiscountInput>)
   };
 }
 
-export function DiscountManager({ showToast }: { showToast: (message: string) => void }) {
+export function DiscountManager({ canWrite, showToast }: { canWrite: boolean; showToast: (message: string) => void }) {
   const { data, categories, reload } = useAdminCatalog();
   const products = useMemo(() => data?.snapshot.products ?? [], [data]);
   const discounts = data?.snapshot.discounts ?? [];
@@ -68,6 +69,11 @@ export function DiscountManager({ showToast }: { showToast: (message: string) =>
   const [edits, setEdits] = useState<Record<string, { value: number; endDate: string }>>({});
   const [saving, setSaving] = useState("");
   const [error, setError] = useState("");
+  // The new-discount form is unsaved once it differs from how it was last left (opened, or reset after creating);
+  // product search is only a filter. Edits to existing discounts are unsaved until saved.
+  const formState = JSON.stringify([scope, categoryId, selected, kind, discountValue, couponDraft, startDate, endDate]);
+  const [savedFormState, setSavedFormState] = useState(formState);
+  useUnsavedChanges(formState !== savedFormState || Object.keys(edits).length > 0, "Discount form");
 
   const chosenCategory = categoryId || options[0]?.id || "";
   // Discounts created here are live records, so demo products cannot be targeted.
@@ -105,6 +111,7 @@ export function DiscountManager({ showToast }: { showToast: (message: string) =>
       setSelected([]);
       setSearch("");
       setCouponDraft("");
+      setSavedFormState(JSON.stringify([scope, categoryId, [], kind, discountValue, "", startDate, endDate]));
       showToast("Discount created");
       reload();
     } catch (reason) {
@@ -150,12 +157,13 @@ export function DiscountManager({ showToast }: { showToast: (message: string) =>
   };
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[400px_1fr]">
-      <Panel title="Create Discount" description="Automatic discounts are reflected in storefront prices calculated by the server; the strongest offer applies and discounts never stack. A coupon discount applies only in checkout quotes where the shopper enters its code.">
+    <div className={canWrite ? "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,400px)_minmax(0,1fr)]" : "space-y-4"}>
+      {!canWrite && <p className="text-sm text-navy-800">View only: your role can see discounts and when they apply but cannot change them.</p>}
+      {canWrite && <Panel title="Create Discount" description="Automatic discounts are reflected in storefront prices calculated by the server; the strongest offer applies and discounts never stack. A coupon discount applies only in checkout quotes where the shopper enters its code.">
         <div className="space-y-4">
           <fieldset>
             <legend className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-600">Discount type</legend>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,8rem),1fr))] gap-2">
               {([["PERCENTAGE", "Percentage"], ["FIXED", "Fixed amount"]] as const).map(([value, label]) => (
                 <button key={value} type="button" aria-pressed={kind === value} onClick={() => setKind(value)}
                   className={`min-h-11 rounded-sm border px-2 text-xs font-bold ${kind === value ? "border-brand-primary bg-brand-primary text-white" : "border-light-gray text-gray-600"}`}>
@@ -166,7 +174,7 @@ export function DiscountManager({ showToast }: { showToast: (message: string) =>
           </fieldset>
           <fieldset>
             <legend className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-600">Apply To</legend>
-            <div className="grid grid-cols-3 gap-1">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,6rem),1fr))] gap-1">
               {([["ALL", "All"], ["CATEGORY", "Category"], ["SELECTED", "Products"]] as const).map(([value, label]) => (
                 <button
                   key={value}
@@ -220,7 +228,7 @@ export function DiscountManager({ showToast }: { showToast: (message: string) =>
 
           <fieldset>
             <legend className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-600">{kind === "PERCENTAGE" ? "Discount %" : "Discount amount (KES)"}</legend>
-            {kind === "PERCENTAGE" && <div className="mb-2 flex gap-1">
+            {kind === "PERCENTAGE" && <div className="mb-2 flex flex-wrap gap-1">
               {PERCENT_PRESETS.map((value) => (
                 <button
                   key={value}
@@ -265,7 +273,7 @@ export function DiscountManager({ showToast }: { showToast: (message: string) =>
             {couponCode ? "A fixed coupon is deducted once from eligible merchandise, not once per item." : "An automatic fixed discount applies per eligible unit using the configured catalog rounding."}
           </p>}
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,11rem),1fr))] gap-2">
             <Field label="Start">{(id) => <input id={id} type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} className={inputClass} />}</Field>
             <Field label="End (inclusive)">{(id) => <input id={id} type="date" value={endDate} min={startDate} onChange={(event) => setEndDate(event.target.value)} className={inputClass} />}</Field>
           </div>
@@ -274,7 +282,7 @@ export function DiscountManager({ showToast }: { showToast: (message: string) =>
             {saving === "create" ? "Creating…" : "Create Discount"}
           </button>
         </div>
-      </Panel>
+      </Panel>}
 
       <Panel title={`Current Discounts (${discounts.length})`}>
         <div className="space-y-3">
@@ -306,7 +314,7 @@ export function DiscountManager({ showToast }: { showToast: (message: string) =>
                     <span className="block text-[9px] uppercase tracking-wider text-gray-500">off</span>
                   </p>
                 </div>
-                  <div className="mt-3 grid gap-2 border-t border-light-gray pt-3 sm:grid-cols-4">
+                  {canWrite && <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(min(100%,10rem),1fr))] gap-2 border-t border-light-gray pt-3">
                     <Field label={discount.type === "PERCENTAGE" ? "Percentage" : "Amount (KES)"}>
                       {(id) => (
                         <input id={id} type="number" min={0.01} step={0.01} max={discount.type === "PERCENTAGE" ? MAX_PERCENT : MAX_AMOUNT} value={edit.value}
@@ -331,7 +339,7 @@ export function DiscountManager({ showToast }: { showToast: (message: string) =>
                         Stop Discount
                       </button>
                     </div>
-                  </div>
+                  </div>}
               </article>
             );
           })}

@@ -47,7 +47,8 @@ export function StaffRefundCard({ refund, canWrite, onAction, header, anchorId }
         {formatKES(refund.amount)}
         {refund.includesDeliveryFee && <span className="ml-2 font-body text-xs text-gray-600">includes the delivery fee</span>}
       </p>
-      <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
+      {/* Labels take at most half the row, so values keep room for whole words at enlarged text sizes. */}
+      <dl className="mt-2 grid grid-cols-[fit-content(50%)_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs [overflow-wrap:anywhere]">
         {rows.map(([label, value]) => (
           <div key={label} className="contents">
             <dt className="text-gray-600">{label}</dt>

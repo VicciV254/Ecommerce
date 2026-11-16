@@ -1,0 +1,207 @@
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { catalogAdminAPI, type MediaAsset, type StorefrontDraft, type StorefrontSettings } from "../../api/catalog";
+import { apiStatus, describeApiError } from "../../api/errors";
+import { useStorefront } from "../../store/StorefrontContext";
+import { isMedia, isStorefrontSettings } from "../../store/storefrontModel";
+import { withMediaDefaults } from "../../store/catalogModel";
+import { isRecord } from "../../utils/storage";
+import { useAdminCatalog } from "./AdminCatalogContext";
+import { ADMIN_PREVIEW_ROUTE, adminModuleRoute, routePath } from "./adminRoutes";
+import { SLUG } from "./StorefrontEditors";
+import { useUnsavedChanges } from "./unsavedChanges";
+
+type DraftLoad = { status: "loading" } | { status: "error"; message: string } | { status: "ready"; draft: StorefrontDraft };
+type Notice = { text: string; tone: "error" | "success" };
+type MediaReference = { id: string; label: string; repairable: boolean };
+
+function parseDraft(data: unknown): StorefrontDraft | null {
+  if (!isRecord(data) || typeof data.version !== "number" || typeof data.publishedVersion !== "number") return null;
+  if (!(data.publishedAt === null || typeof data.publishedAt === "string") || !isStorefrontSettings(data.settings)) return null;
+  const { media, unavailableMediaIds } = data;
+  if (!Array.isArray(media) || !media.every(isMedia)) return null;
+  if (!Array.isArray(unavailableMediaIds) || !unavailableMediaIds.every((id) => typeof id === "string")) return null;
+  return {
+    version: data.version, publishedVersion: data.publishedVersion, publishedAt: data.publishedAt,
+    settings: data.settings, media: media.map(withMediaDefaults), unavailableMediaIds,
+  };
+}
+
+/** Every media reference in the settings, labelled by where it is used. */
+function mediaReferences(settings: StorefrontSettings): MediaReference[] {
+  const references: MediaReference[] = [];
+  if (settings.brand.logoMediaId) references.push({ id: settings.brand.logoMediaId, label: "Brand logo", repairable: false });
+  if (settings.brand.faviconMediaId) references.push({ id: settings.brand.faviconMediaId, label: "Browser icon", repairable: false });
+  for (const campaign of settings.campaigns) {
+    if (campaign.desktopMediaId) references.push({ id: campaign.desktopMediaId, label: `Campaign "${campaign.title}" desktop image`, repairable: true });
+    if (campaign.mobileMediaId) references.push({ id: campaign.mobileMediaId, label: `Campaign "${campaign.title}" mobile image`, repairable: true });
+  }
+  return references;
+}
+
+/** Problems the API would reject, listed before a save is attempted. */
+export function draftProblems(settings: StorefrontSettings): string[] {
+  const problems: string[] = [];
+  if (!settings.brand.name.trim()) problems.push("Enter a store name.");
+  const campaignIds = new Set(settings.campaigns.map((campaign) => campaign.id));
+  for (const section of settings.sections) {
+    if (!section.title.trim()) problems.push("Every section needs a heading.");
+    if (section.type === "products" && !section.productIds.length) problems.push(`"${section.title || "Selected products"}" needs at least one product.`);
+    if (section.type === "campaign" && (!section.campaignId || !campaignIds.has(section.campaignId))) problems.push(`"${section.title || "Campaign"}" needs a campaign.`);
+  }
+  for (const campaign of settings.campaigns) {
+    if (!SLUG.test(campaign.id)) problems.push(`Campaign ID "${campaign.id}" must use lowercase letters, numbers and hyphens.`);
+    if (!campaign.title.trim()) problems.push("Every campaign needs a headline.");
+    if (!campaign.cta.label.trim()) problems.push(`Campaign "${campaign.title}" needs a button label.`);
+    if (campaign.cta.target !== "shop" && !campaign.cta.targetId) problems.push(`Campaign "${campaign.title}" needs a button destination.`);
+  }
+  return [...new Set(problems)];
+}
+
+/** The editor and its preview: moving between them keeps the draft open. */
+const keepsStorefront = (route: string) => {
+  const path = routePath(route);
+  return path === adminModuleRoute("storefront") || path === ADMIN_PREVIEW_ROUTE;
+};
+
+type StorefrontDraftValue = {
+  load: DraftLoad;
+  settings: StorefrontSettings | null;
+  dirty: boolean;
+  busy: "" | "save" | "publish";
+  notice: Notice;
+  /** The last save or publish was refused because someone else changed the draft. */
+  stale: boolean;
+  /** Saved references resolve through the draft's media, plus product images and images registered in this session. */
+  media: MediaAsset[];
+  mediaById: ReadonlyMap<string, MediaAsset>;
+  /** References that resolve to nothing; they stay listed so they can be repaired. */
+  unresolved: MediaReference[];
+  update: (next: StorefrontSettings) => void;
+  register: (asset: MediaAsset) => void;
+  reloadDraft: () => void;
+  save: () => Promise<void>;
+  publish: () => Promise<void>;
+};
+
+const StorefrontDraftContext = createContext<StorefrontDraftValue | null>(null);
+
+/**
+ * The storefront draft for the Storefront group: loaded once, edited in the editor, shown in the preview. Nothing from
+ * it reaches browser storage or the published storefront context; it is gone once the staff member leaves the group.
+ */
+export function StorefrontDraftProvider({ canWrite, showToast, children }: {
+  canWrite: boolean;
+  showToast: (message: string) => void;
+  children: ReactNode;
+}) {
+  const published = useStorefront();
+  const { data } = useAdminCatalog();
+  const [load, setLoad] = useState<DraftLoad>({ status: "loading" });
+  const [settings, setSettings] = useState<StorefrontSettings | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const [busy, setBusy] = useState<"" | "save" | "publish">("");
+  const [notice, setNotice] = useState<Notice>({ text: "", tone: "success" });
+  const [stale, setStale] = useState(false);
+  const [registered, setRegistered] = useState<MediaAsset[]>([]);
+  const [attempt, setAttempt] = useState(0);
+  useUnsavedChanges(canWrite && dirty, "Storefront draft", keepsStorefront);
+
+  const reloadDraft = useCallback(() => {
+    setLoad({ status: "loading" });
+    setAttempt((value) => value + 1);
+  }, []);
+
+  useEffect(() => {
+    let current = true;
+    catalogAdminAPI.getStorefrontDraft()
+      .then(({ data: body }) => {
+        const draft = parseDraft(body);
+        if (!current) return;
+        if (!draft) {
+          setLoad({ status: "error", message: "The storefront draft was not in the expected format." });
+          return;
+        }
+        setLoad({ status: "ready", draft });
+        setSettings(draft.settings);
+        setDirty(false);
+        setStale(false);
+      })
+      .catch((reason: unknown) => {
+        if (current) setLoad({ status: "error", message: describeApiError(reason, "The storefront draft could not be loaded.") });
+      });
+    return () => { current = false; };
+  }, [attempt]);
+
+  const products = useMemo(() => data?.snapshot.products ?? [], [data]);
+  const loadedDraft = load.status === "ready" ? load.draft : null;
+  // Saved references resolve through the draft's authenticated media list; product images and
+  // images registered in this session are offered as new choices. Unavailable IDs never resolve.
+  const media = useMemo(() => {
+    const assets = new Map<string, MediaAsset>();
+    for (const asset of loadedDraft?.media ?? []) assets.set(asset.id, asset);
+    for (const product of products) for (const image of product.images) assets.set(image.id, image);
+    for (const asset of registered) assets.set(asset.id, asset);
+    for (const id of loadedDraft?.unavailableMediaIds ?? []) assets.delete(id);
+    return [...assets.values()];
+  }, [loadedDraft, products, registered]);
+  const mediaById = useMemo(() => new Map(media.map((asset) => [asset.id, asset])), [media]);
+  const unresolved = useMemo(
+    () => (settings ? mediaReferences(settings).filter((reference) => !mediaById.has(reference.id)) : []),
+    [settings, mediaById],
+  );
+
+  const update = useCallback((next: StorefrontSettings) => {
+    setSettings(next);
+    setDirty(true);
+    setNotice({ text: "", tone: "success" });
+  }, []);
+  const register = useCallback((asset: MediaAsset) => setRegistered((assets) => [...assets, asset]), []);
+
+  const save = async () => {
+    if (!loadedDraft || !settings) return;
+    setBusy("save");
+    setNotice({ text: "", tone: "success" });
+    try {
+      const { data: body } = await catalogAdminAPI.saveStorefrontDraft(loadedDraft.version, settings);
+      const saved = parseDraft(body);
+      if (!saved) throw new Error("Unexpected draft response");
+      setLoad({ status: "ready", draft: saved });
+      setSettings(saved.settings);
+      setDirty(false);
+      setNotice({ text: "Draft saved. Shoppers still see the published version.", tone: "success" });
+    } catch (reason) {
+      setStale(apiStatus(reason) === 409);
+      setNotice({ text: describeApiError(reason, "The draft could not be saved."), tone: "error" });
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const publish = async () => {
+    if (!loadedDraft) return;
+    setBusy("publish");
+    setNotice({ text: "", tone: "success" });
+    try {
+      await catalogAdminAPI.publishStorefront(loadedDraft.version);
+      showToast("Storefront published");
+      published.reload();
+      reloadDraft();
+    } catch (reason) {
+      setStale(apiStatus(reason) === 409);
+      setNotice({ text: describeApiError(reason, "The storefront could not be published."), tone: "error" });
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const value: StorefrontDraftValue = {
+    load, settings, dirty, busy, notice, stale, media, mediaById, unresolved, update, register, reloadDraft, save, publish,
+  };
+  return <StorefrontDraftContext.Provider value={value}>{children}</StorefrontDraftContext.Provider>;
+}
+
+export function useStorefrontDraft() {
+  const context = useContext(StorefrontDraftContext);
+  if (!context) throw new Error("useStorefrontDraft must be used within StorefrontDraftProvider");
+  return context;
+}

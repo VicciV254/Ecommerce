@@ -4,9 +4,11 @@ import { describeApiError } from "../../api/errors";
 import { ConfirmModal } from "../../components/Modal";
 import { describeVariant } from "../../store/catalogModel";
 import { useAdminCatalog } from "./AdminCatalogContext";
-import { Feedback, Panel, categoryOptions, descendantIds, inputClass, smallButtonClass } from "./shared";
+import { Feedback, Panel, TableRegion, categoryOptions, descendantIds, inputClass, smallButtonClass } from "./shared";
+import { useUnsavedChanges } from "./unsavedChanges";
 
 const ROW_LIMIT = 100;
+const DEFAULT_BULK_AMOUNT = 10;
 const STATUSES: CatalogStock["status"][] = ["IN_STOCK", "LOW_STOCK", "OUT_OF_STOCK"];
 const STATUS_STYLES: Record<CatalogStock["status"], { cls: string; label: string }> = {
   IN_STOCK: { cls: "text-success", label: "In stock" },
@@ -16,7 +18,7 @@ const STATUS_STYLES: Record<CatalogStock["status"], { cls: string; label: string
 
 type BulkOperation = { op: "add" | "sub"; amount: number; rows: CatalogStock[] };
 
-export function StockManager({ showToast }: { showToast: (message: string) => void }) {
+export function StockManager({ canWrite, showToast }: { canWrite: boolean; showToast: (message: string) => void }) {
   const { data, categories, reload } = useAdminCatalog();
   const stocks = useMemo(() => data?.stocks ?? [], [data]);
   const options = useMemo(() => categoryOptions(categories), [categories]);
@@ -24,10 +26,13 @@ export function StockManager({ showToast }: { showToast: (message: string) => vo
   const [categoryId, setCategoryId] = useState("");
   const [statusFilter, setStatusFilter] = useState<"" | CatalogStock["status"]>("");
   const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [bulkAmount, setBulkAmount] = useState(10);
+  const [bulkAmount, setBulkAmount] = useState(DEFAULT_BULK_AMOUNT);
+  /** The bulk amount last applied (or the default): a different amount is a pending change. */
+  const [appliedBulkAmount, setAppliedBulkAmount] = useState(DEFAULT_BULK_AMOUNT);
   const [confirmBulk, setConfirmBulk] = useState<BulkOperation | null>(null);
   const [saving, setSaving] = useState("");
   const [error, setError] = useState("");
+  useUnsavedChanges(Object.keys(drafts).length > 0 || bulkAmount !== appliedBulkAmount, "Stock changes");
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -69,6 +74,7 @@ export function StockManager({ showToast }: { showToast: (message: string) => vo
         saved += result.updated;
       }
       showToast(`Stock updated for ${saved} SKUs`);
+      setAppliedBulkAmount(operation.amount);
     } catch (reason) {
       setError(`${describeApiError(reason, "The bulk stock update failed.")} ${saved} of ${updates.length} SKUs were saved before the failure; the failed batch was not applied.`);
     } finally {
@@ -82,7 +88,7 @@ export function StockManager({ showToast }: { showToast: (message: string) => vo
       title="Stock by SKU"
       description="Stock is tracked for each sellable variant. On hand includes units reserved for unpaid orders; only available units can be sold. Saving writes to the catalog immediately; demo SKUs hold sample quantities only."
     >
-      <div className="mb-5 grid gap-3 lg:grid-cols-[1fr_220px_160px]">
+      <div className="mb-5 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,220px)_minmax(0,160px)]">
         <input aria-label="Search stock" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by product or SKU…" className={inputClass} />
         <select aria-label="Filter stock by category" value={categoryId} onChange={(event) => setCategoryId(event.target.value)} className={inputClass}>
           <option value="">All categories</option>
@@ -94,20 +100,24 @@ export function StockManager({ showToast }: { showToast: (message: string) => vo
         </select>
       </div>
 
-      <div className="mb-5 flex flex-wrap items-center gap-2 rounded-md bg-off-white p-3 text-xs">
-        <span className="font-semibold text-brand-primary">Bulk change for the {filtered.length} filtered SKUs:</span>
-        <input type="number" min={1} aria-label="Bulk quantity" value={bulkAmount} onChange={(event) => setBulkAmount(Number(event.target.value))} className="w-20 rounded-sm border border-light-gray px-2 py-1.5 text-xs" />
-        <button type="button" disabled={!filtered.length || !(bulkAmount > 0) || saving === "bulk"} onClick={() => setConfirmBulk({ op: "add", amount: bulkAmount, rows: filtered })} className={smallButtonClass}>Add</button>
-        <button type="button" disabled={!filtered.length || !(bulkAmount > 0) || saving === "bulk"} onClick={() => setConfirmBulk({ op: "sub", amount: bulkAmount, rows: filtered })} className={smallButtonClass}>Subtract</button>
-      </div>
+      {canWrite ? (
+        <div className="mb-5 flex flex-wrap items-center gap-2 rounded-md bg-off-white p-3 text-xs">
+          <span className="font-semibold text-brand-primary">Bulk change for the {filtered.length} filtered SKUs:</span>
+          <input type="number" min={1} aria-label="Bulk quantity" value={bulkAmount} onChange={(event) => setBulkAmount(Number(event.target.value))} className="w-20 rounded-sm border border-light-gray px-2 py-1.5 text-xs" />
+          <button type="button" disabled={!filtered.length || !(bulkAmount > 0) || saving === "bulk"} onClick={() => setConfirmBulk({ op: "add", amount: bulkAmount, rows: filtered })} className={smallButtonClass}>Add</button>
+          <button type="button" disabled={!filtered.length || !(bulkAmount > 0) || saving === "bulk"} onClick={() => setConfirmBulk({ op: "sub", amount: bulkAmount, rows: filtered })} className={smallButtonClass}>Subtract</button>
+        </div>
+      ) : (
+        <p className="mb-5 text-sm text-navy-800">View only: your role can see stock levels but cannot change them.</p>
+      )}
 
       <Feedback message={error} tone="error" />
 
-      <div className="mt-3 overflow-x-auto">
+      <TableRegion label="Stock by SKU table" className="mt-[6px]">
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-light-gray text-left text-[10px] font-bold uppercase tracking-widest text-gray-600">
-              <th className="py-2.5">Product / SKU</th><th>On hand</th><th>Reserved</th><th>Available</th><th>Max</th><th>Low at</th><th>Status</th><th><span className="sr-only">Actions</span></th>
+              <th className="py-2.5">Product / SKU</th><th>On hand</th><th>Reserved</th><th>Available</th><th>Max</th><th>Low at</th><th>Status</th>{canWrite && <th><span className="sr-only">Actions</span></th>}
             </tr>
           </thead>
           <tbody>
@@ -128,26 +138,32 @@ export function StockManager({ showToast }: { showToast: (message: string) => vo
                     <p className="text-[11px] text-gray-500">{row.sku}{options ? ` · ${options}` : ""}</p>
                   </td>
                   <td>
-                    <input
-                      type="number"
-                      min={row.reserved}
-                      aria-label={`On-hand quantity for ${row.sku}`}
-                      aria-invalid={draft !== undefined && !valid}
-                      value={value}
-                      onChange={(event) => setDrafts((all) => ({ ...all, [row.variantId]: event.target.value }))}
-                      className="w-20 rounded-sm border border-light-gray px-2 py-1"
-                    />
-                    {draft !== undefined && !valid && <p className="mt-1 text-[10px] font-semibold text-error">Whole number, at least {row.reserved}</p>}
+                    {canWrite ? (
+                      <>
+                        <input
+                          type="number"
+                          min={row.reserved}
+                          aria-label={`On-hand quantity for ${row.sku}`}
+                          aria-invalid={draft !== undefined && !valid}
+                          value={value}
+                          onChange={(event) => setDrafts((all) => ({ ...all, [row.variantId]: event.target.value }))}
+                          className="w-20 rounded-sm border border-light-gray px-2 py-1"
+                        />
+                        {draft !== undefined && !valid && <p className="mt-1 text-[10px] font-semibold text-error">Whole number, at least {row.reserved}</p>}
+                      </>
+                    ) : <span className="font-semibold text-charcoal">{row.quantity}</span>}
                   </td>
                   <td className="text-gray-600">{row.reserved}</td>
                   <td className="text-gray-600">{row.available}</td>
                   <td className="text-gray-600">{row.maxStock}</td>
                   <td className="text-gray-600">{row.minThreshold}</td>
                   <td className={`whitespace-nowrap font-semibold ${style.cls}`}>{style.label}</td>
-                  <td className="space-x-1 whitespace-nowrap text-right">
-                    <button type="button" disabled={draft === undefined || !valid || saving === row.variantId} onClick={() => void save(row, parsed)} className={smallButtonClass}>Save</button>
-                    <button type="button" disabled={saving === row.variantId || row.quantity === row.maxStock || row.maxStock < row.reserved} onClick={() => void save(row, row.maxStock)} className={smallButtonClass}>Restock to max</button>
-                  </td>
+                  {canWrite && (
+                    <td className="space-x-1 whitespace-nowrap text-right">
+                      <button type="button" disabled={draft === undefined || !valid || saving === row.variantId} onClick={() => void save(row, parsed)} className={smallButtonClass}>Save</button>
+                      <button type="button" disabled={saving === row.variantId || row.quantity === row.maxStock || row.maxStock < row.reserved} onClick={() => void save(row, row.maxStock)} className={smallButtonClass}>Restock to max</button>
+                    </td>
+                  )}
                 </tr>
               );
             })}
@@ -157,7 +173,7 @@ export function StockManager({ showToast }: { showToast: (message: string) => vo
         {filtered.length > ROW_LIMIT && (
           <p className="mt-3 text-xs text-gray-600">Showing the first {ROW_LIMIT} of {filtered.length} SKUs. Narrow the filters to see the rest.</p>
         )}
-      </div>
+      </TableRegion>
 
       <ConfirmModal
         open={Boolean(confirmBulk)}

@@ -220,7 +220,6 @@ test("catalog manager tiles request the smallest thumbnail at least as wide as e
   }));
   const evidence: { viewport: number; slot: number; src: string }[] = [];
   const checkTiles = async (expectedWidth: number) => {
-    await page.getByRole("button", { name: "Catalog", exact: true }).click();
     for (const name of ["Linen Short-Sleeve Shirt", "Cotton Polo Shirt", "Demo Smartphone"]) {
       const tile = page.getByRole("button", { name: `Edit ${name}` }).locator("img");
       await tile.scrollIntoViewIfNeeded();
@@ -232,8 +231,9 @@ test("catalog manager tiles request the smallest thumbnail at least as wide as e
     }
   };
 
-  // Tiles use card renditions: two columns on a 390px phone (~149px tiles), five at 1280px (~221px tiles).
-  await page.goto("/#/admin");
+  // Tiles use card renditions: two columns on a 390px phone (~149px tiles), five at 1280px beside the navigation column
+  // (~173px tiles).
+  await page.goto("/#/admin/catalog/products");
   await checkTiles(240);
   // Three columns on a 768px tablet (~213px); four columns at 1200px (~260px tiles).
   await page.setViewportSize(isMobile ? { width: 768, height: 900 } : { width: 1200, height: 900 });
@@ -358,8 +358,7 @@ test("staff upload with progress, cancel and a freshly signed retry, then save t
     return route.fulfill({ json: product });
   });
 
-  await page.goto("/#/admin");
-  await page.getByRole("button", { name: "Catalog", exact: true }).click();
+  await page.goto("/#/admin/catalog/products");
   await page.getByRole("button", { name: "Edit Linen Short-Sleeve Shirt" }).click();
   const editor = page.getByRole("dialog", { name: "Edit product", exact: true });
   const images = editor.getByRole("region", { name: "Images" });

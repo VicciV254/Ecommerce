@@ -1,13 +1,19 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { AxiosError, AxiosHeaders } from "axios";
+import { useRef } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CatalogDiscount, CatalogProduct, CatalogStock, StorefrontDraft } from "../../api/catalog";
 import { buildCategoryTree } from "../../store/catalogModel";
 import type { CatalogValue } from "../../store/CatalogContext";
 import { fixtureDiscounts, fixtureImage, fixtureSnapshot, fixtureStorefrontSettings } from "../../test-support/catalogFixtures";
+import { useRoute } from "../../router";
+import { ADMIN_PREVIEW_ROUTE } from "./adminRoutes";
 import { DiscountManager } from "./DiscountManager";
 import { StockManager } from "./StockManager";
+import { StorefrontDraftProvider } from "./StorefrontDraft";
 import { StorefrontManager } from "./StorefrontManager";
+import { StorefrontPreview } from "./StorefrontPreview";
+import { UnsavedChangesProvider } from "./unsavedChanges";
 
 const admin = vi.hoisted(() => ({
   reload: vi.fn(),
@@ -85,7 +91,33 @@ function campaignDraft(desktopMediaId: string, overrides: Partial<StorefrontDraf
   };
 }
 
+/** The Storefront group as the shell mounts it: one draft shared by the editor and its preview route. */
+function StorefrontRoutes() {
+  const route = useRoute();
+  const heading = useRef<HTMLHeadingElement>(null);
+  return route.startsWith(ADMIN_PREVIEW_ROUTE) ? <StorefrontPreview heading={heading} /> : <StorefrontManager canWrite />;
+}
+
+function renderStorefront() {
+  return render(
+    <UnsavedChangesProvider>
+      <StorefrontDraftProvider canWrite showToast={vi.fn()}>
+        <StorefrontRoutes />
+      </StorefrontDraftProvider>
+    </UnsavedChangesProvider>,
+  );
+}
+
+/** Whether the shell's guard currently holds unsaved edits: it then asks before the page unloads. */
+function unloadPrevented() {
+  const event = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(event);
+  return event.defaultPrevented;
+}
+
 beforeEach(() => {
+  window.history.replaceState(null, "", "#/admin/storefront/editor");
+  vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
   admin.reload.mockReset();
   for (const fn of Object.values(admin.api)) fn.mockReset();
   admin.catalog = publicCatalog(fixtureSnapshot().products);
@@ -94,7 +126,7 @@ beforeEach(() => {
 describe("admin catalog panels", () => {
   it("creates a percentage discount for a category with inclusive local dates", async () => {
     admin.api.createDiscount.mockResolvedValue({ data: {} });
-    render(<DiscountManager showToast={vi.fn()} />);
+    render(<DiscountManager canWrite showToast={vi.fn()} />);
     fireEvent.change(screen.getByLabelText("Category (includes its sub-categories)"), { target: { value: "cat-men" } });
     fireEvent.click(screen.getByRole("button", { name: "15%" }));
     fireEvent.change(screen.getByLabelText("Start"), { target: { value: "2026-11-01" } });
@@ -114,7 +146,7 @@ describe("admin catalog panels", () => {
 
   it("clears an end date explicitly and never offers demo products as live discount targets", async () => {
     admin.api.updateDiscount.mockResolvedValue({ data: {} });
-    render(<DiscountManager showToast={vi.fn()} />);
+    render(<DiscountManager canWrite showToast={vi.fn()} />);
     fireEvent.change(screen.getAllByLabelText("End date")[0], { target: { value: "" } });
     fireEvent.click(screen.getAllByRole("button", { name: "Save" })[0]);
     await waitFor(() => expect(admin.reload).toHaveBeenCalled());
@@ -128,7 +160,7 @@ describe("admin catalog panels", () => {
   it("creates a coupon-only discount with the normalized code and keeps codes when editing", async () => {
     admin.api.createDiscount.mockResolvedValue({ data: {} });
     admin.api.updateDiscount.mockResolvedValue({ data: {} });
-    render(<DiscountManager showToast={vi.fn()} />);
+    render(<DiscountManager canWrite showToast={vi.fn()} />);
     const code = screen.getByLabelText("Coupon code (optional)");
     fireEvent.change(code, { target: { value: "bad code" } });
     expect(screen.getByRole("alert").textContent).toBe("Use 3–40 letters, numbers, hyphens or underscores.");
@@ -149,7 +181,7 @@ describe("admin catalog panels", () => {
 
   it("edits on-hand stock, shows reserved and available units and never goes below reserved", async () => {
     admin.api.bulkUpdateStock.mockResolvedValue({ data: { stocks: [], updated: 1 } });
-    render(<StockManager showToast={vi.fn()} />);
+    render(<StockManager canWrite showToast={vi.fn()} />);
     fireEvent.change(screen.getByLabelText("Search stock"), { target: { value: "Polo" } });
     const row = screen.getByText("VAR-POLO").closest("tr")!;
     expect(within(row).getByText("2")).toBeTruthy();
@@ -167,7 +199,7 @@ describe("admin catalog panels", () => {
 
   it("creates fixed coupons in cents and explains their once-per-basket scope", async () => {
     admin.api.createDiscount.mockResolvedValue({ data: {} });
-    render(<DiscountManager showToast={vi.fn()} />);
+    render(<DiscountManager canWrite showToast={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "Fixed amount" }));
     fireEvent.change(screen.getByLabelText("Fixed amount (KES)"), { target: { value: "150.25" } });
     fireEvent.change(screen.getByLabelText("Coupon code (optional)"), { target: { value: "save150" } });
@@ -182,7 +214,7 @@ describe("admin catalog panels", () => {
   it("edits and stops existing fixed discounts without changing their coupon identity", async () => {
     admin.api.updateDiscount.mockResolvedValue({ data: {} });
     admin.api.deleteDiscount.mockResolvedValue({ data: {} });
-    render(<DiscountManager showToast={vi.fn()} />);
+    render(<DiscountManager canWrite showToast={vi.fn()} />);
     const card = screen.getByText("Coupon FIXED150").closest("article")!;
     fireEvent.change(within(card).getByLabelText("Amount (KES)"), { target: { value: "250.75" } });
     fireEvent.click(within(card).getByRole("button", { name: "Save" }));
@@ -197,7 +229,7 @@ describe("admin catalog panels", () => {
 
   it("applies bulk stock changes atomically and reports a failed batch", async () => {
     admin.api.bulkUpdateStock.mockRejectedValue(new AxiosError("Offline", "ERR_NETWORK"));
-    render(<StockManager showToast={vi.fn()} />);
+    render(<StockManager canWrite showToast={vi.fn()} />);
     fireEvent.change(screen.getByLabelText("Search stock"), { target: { value: "Linen" } });
     fireEvent.change(screen.getByLabelText("Bulk quantity"), { target: { value: "5" } });
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
@@ -215,16 +247,18 @@ describe("admin catalog panels", () => {
   it("keeps drafts private, blocks publishing unsaved edits and recovers from a stale save", async () => {
     admin.api.getStorefrontDraft.mockResolvedValue({ data: draft });
     admin.api.saveStorefrontDraft.mockRejectedValue(conflict());
-    const onDirtyChange = vi.fn();
-    render(<StorefrontManager showToast={vi.fn()} onDirtyChange={onDirtyChange} />);
+    renderStorefront();
     const name = await screen.findByLabelText("Store name");
     fireEvent.change(name, { target: { value: "Apex Cart Draft" } });
-    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+    expect(unloadPrevented()).toBe(true);
     expect(screen.getByRole("button", { name: "Publish" }).hasAttribute("disabled")).toBe(true);
 
-    fireEvent.click(screen.getByRole("button", { name: "Preview Draft" }));
-    expect(within(screen.getByRole("region", { name: "Draft preview" })).getByText("Apex Cart Draft")).toBeTruthy();
+    // The preview is its own route: it shows the unsaved edit, and returning keeps it.
+    fireEvent.click(screen.getByRole("link", { name: "Draft preview" }));
+    expect(within(await screen.findByRole("region", { name: "Draft preview" })).getByText("Apex Cart Draft")).toBeTruthy();
     expect(document.documentElement.style.getPropertyValue("--color-brand-primary")).toBe("");
+    fireEvent.click(screen.getByRole("link", { name: "Back to editor" }));
+    expect((await screen.findByLabelText<HTMLInputElement>("Store name")).value).toBe("Apex Cart Draft");
 
     fireEvent.click(screen.getByRole("button", { name: "Save Draft" }));
     expect(await screen.findByText("The storefront changed. Reload before saving your draft.")).toBeTruthy();
@@ -233,21 +267,22 @@ describe("admin catalog panels", () => {
     fireEvent.click(screen.getByRole("button", { name: "Reload the latest draft" }));
     await waitFor(() => expect(admin.api.getStorefrontDraft).toHaveBeenCalledTimes(2));
     expect(await screen.findByDisplayValue("Apex Cart")).toBeTruthy();
-    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false));
+    await waitFor(() => expect(unloadPrevented()).toBe(false));
   });
 
   it("previews a reloaded draft through its authenticated media, including unpublished standalone images", async () => {
     admin.api.getStorefrontDraft.mockResolvedValue({ data: campaignDraft(standalone.id, { media: [standalone] }) });
-    render(<StorefrontManager showToast={vi.fn()} onDirtyChange={vi.fn()} />);
+    renderStorefront();
     await screen.findByLabelText("Store name");
     expect(screen.queryByText("Unavailable media references")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Preview Draft" }));
-    const preview = screen.getByRole("region", { name: "Draft preview" });
+    fireEvent.click(screen.getByRole("link", { name: "Draft preview" }));
+    const preview = await screen.findByRole("region", { name: "Draft preview" });
     const image = preview.querySelector<HTMLImageElement>("picture img")!;
     expect(image.getAttribute("src")).toBe(standalone.url);
     expect(image.style.getPropertyValue("--focal-mobile")).toBe("20% 80%");
     expect(within(preview).queryByText(/is unavailable/)).toBeNull();
-    expect(screen.getByLabelText<HTMLSelectElement>("Desktop image").value).toBe(standalone.id);
+    fireEvent.click(screen.getByRole("link", { name: "Back to editor" }));
+    expect((await screen.findByLabelText<HTMLSelectElement>("Desktop image")).value).toBe(standalone.id);
     expect(screen.getByRole("spinbutton", { name: "Mobile focal point horizontal" }).hasAttribute("disabled")).toBe(false);
   });
 
@@ -255,7 +290,7 @@ describe("admin catalog panels", () => {
     admin.api.getStorefrontDraft.mockResolvedValue({ data: campaignDraft("media-missing", { media: [standalone], unavailableMediaIds: ["media-missing"] }) });
     admin.api.saveStorefrontDraft.mockImplementation((version: number, settings: StorefrontDraft["settings"]) =>
       Promise.resolve({ data: { ...draft, version: version + 1, settings, media: [standalone], unavailableMediaIds: [] } }));
-    render(<StorefrontManager showToast={vi.fn()} onDirtyChange={vi.fn()} />);
+    renderStorefront();
     await screen.findByLabelText("Store name");
     const notice = screen.getByText("Unavailable media references").parentElement!;
     expect(within(notice).getByText('Campaign "Launch week" desktop image: media-missing')).toBeTruthy();
@@ -276,9 +311,21 @@ describe("admin catalog panels", () => {
     expect(await screen.findByText("Draft saved. Shoppers still see the published version.")).toBeTruthy();
   });
 
+  it("lists unavailable references in the preview banner and marks a preview that includes unsaved edits", async () => {
+    admin.api.getStorefrontDraft.mockResolvedValue({ data: campaignDraft("media-missing", { media: [standalone], unavailableMediaIds: ["media-missing"] }) });
+    renderStorefront();
+    fireEvent.change(await screen.findByLabelText("Store name"), { target: { value: "Apex Cart Repair" } });
+    fireEvent.click(screen.getByRole("link", { name: "Draft preview" }));
+    const heading = await screen.findByRole("heading", { level: 1, name: "Draft preview: shoppers can't see this" });
+    const banner = heading.closest("div.on-navy") as HTMLElement;
+    expect(within(banner).getByText("Includes unsaved changes")).toBeTruthy();
+    expect(within(banner).getByText('Campaign "Launch week" desktop image: media-missing')).toBeTruthy();
+    expect(within(banner).getByRole("link", { name: "Back to editor" }).getAttribute("href")).toBe("#/admin/storefront/editor");
+  });
+
   it("refuses to save sections that would publish nothing", async () => {
     admin.api.getStorefrontDraft.mockResolvedValue({ data: draft });
-    render(<StorefrontManager showToast={vi.fn()} onDirtyChange={vi.fn()} />);
+    renderStorefront();
     await screen.findByLabelText("Store name");
     fireEvent.click(screen.getByRole("button", { name: "+ products" }));
     expect(screen.getByText('"Selected products" needs at least one product.')).toBeTruthy();
