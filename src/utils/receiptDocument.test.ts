@@ -81,9 +81,19 @@ describe("printed receipt document", () => {
     expect(document.querySelector(".totals .grand")?.textContent).toBe("TotalKES 1,186");
     const facts = Object.fromEntries([...document.querySelectorAll(".facts > div")].map((fact) =>
       [fact.querySelector(".label")?.textContent, fact.querySelector(".value")?.textContent]));
-    expect(facts.Status).toBe("Pending");
+    // A paid order still awaiting fulfilment says so, never just "Pending" beside "M-Pesa (paid)".
+    expect(facts["Order status"]).toBe("Waiting to be prepared");
+    expect(facts.Status).toBeUndefined();
     expect(facts.Payment).toBe("M-Pesa (paid)");
     expect(facts.Delivery).toContain("Standard delivery");
     expect(document.querySelector(".title p")?.textContent).toBe(`Order ${order.orderNumber}`);
+  });
+
+  it("names the fact \"Order status\" and prints an unpaid order as awaiting payment", () => {
+    const document = parse(receiptDocument(fixtureCustomerOrder(fixturePendingOrder(fixtureQuote())), customer, "Apex Cart"));
+    const labels = [...document.querySelectorAll(".facts .label")].map((label) => label.textContent);
+    expect(labels).toEqual(["Date", "Order status", "Payment", "Customer", "Delivery"]);
+    const status = [...document.querySelectorAll(".facts > div")].find((fact) => fact.querySelector(".label")?.textContent === "Order status");
+    expect(status?.querySelector(".value")?.textContent).toBe("Awaiting payment");
   });
 });

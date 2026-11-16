@@ -9,7 +9,7 @@ test("storefront renders published sections and browses the canonical catalog", 
   await expect(page.getByRole("note")).toContainText("Demo catalog");
   await expect(page.getByRole("banner").getByRole("link", { name: publishedStorefront.settings.brand.name, exact: true })).toBeVisible();
   await page.goto("/#/shop");
-  await expect(page.getByRole("heading", { name: "All Products", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "All products", exact: true })).toBeVisible();
   await page.goto("/#/shop?q=linen");
   await expect(page.getByRole("heading", { name: 'Results for "linen"', exact: true })).toBeVisible();
   await page.getByRole("link", { name: "Linen Short-Sleeve Shirt", exact: true }).click();
@@ -118,7 +118,7 @@ test("a returning browser's obsolete session, theme, cart and receipts are ignor
   await expect(page.getByText("Please sign in to view your account.")).toBeVisible();
   await expect(page.getByText("NM-2026-LEGACY")).toHaveCount(0);
   await page.goto("/#/admin");
-  await expect(page.getByRole("heading", { name: "Admin Login" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Staff sign-in" })).toBeVisible();
 
   const paths = requests.map((request) => new URL(request.url()).pathname);
   expect(paths).not.toContain("/api/settings/admin-data");

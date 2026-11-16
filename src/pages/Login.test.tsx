@@ -34,3 +34,14 @@ describe("sign-in return", () => {
     await waitFor(() => expect(window.location.hash).toBe("#/"));
   });
 });
+
+describe("sign-in errors", () => {
+  it("shows the error alone: a wrong password is not answered with a new verification code", async () => {
+    mocks.login.mockResolvedValue({ ok: false, error: "Invalid email or password." });
+    await signIn("#/login");
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toBe("Invalid email or password.");
+    // Unverified accounts are sent to the verification page, which owns sending a new code.
+    expect(screen.queryByRole("button", { name: /new code/i })).toBeNull();
+  });
+});

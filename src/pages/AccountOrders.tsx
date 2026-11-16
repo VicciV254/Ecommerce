@@ -96,7 +96,7 @@ function orderNotes(order: CustomerOrder): string[] {
 
 /** A refund is requested only for money received and not yet refunded. */
 function cancelLabel(order: CustomerOrder) {
-  return cancellationRequestsRefund(order.paymentStatus) ? "Cancel & Request Refund" : "Cancel Order";
+  return cancellationRequestsRefund(order.paymentStatus) ? "Cancel & request refund" : "Cancel order";
 }
 
 /** Errors are announced as alerts; confirmations go to a status region that stays mounted. */
@@ -118,7 +118,7 @@ function OrderActions({ order, onCancel, onReturn }: { order: CustomerOrder; onC
   if (!canReturn && !canCancel) return null;
   return (
     <>
-      {canReturn && <button type="button" onClick={onReturn} className={primaryButton}>Request a Return</button>}
+      {canReturn && <button type="button" onClick={onReturn} className={primaryButton}>Request a return</button>}
       {canCancel && <button type="button" onClick={onCancel} className={dangerButton}>{cancelLabel(order)}</button>}
     </>
   );
@@ -142,7 +142,7 @@ function OrderCard({ order, onDetails, onReceipt, onCancel, onReturn }: {
             <p className="font-mono text-sm font-bold text-navy-900">{order.orderNumber}</p>
             <p className="text-sm text-muted">Placed {formatDateTime(order.createdAt)} · {DELIVERY_LABELS[order.deliveryMethod]}</p>
           </div>
-          <OrderStatusBadge order={order} />
+          <OrderStatusBadge order={order} audience="shopper" />
         </div>
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <p className="type-price-card text-navy-900">{formatKES(order.total)}</p>
@@ -151,13 +151,13 @@ function OrderCard({ order, onDetails, onReceipt, onCancel, onReturn }: {
         {orderNotes(order).map((note) => <p key={note} className="text-sm text-navy-800">{note}</p>)}
         {/* The next action comes first and stands out; the rest follow, with cancelling last. */}
         <div className="flex flex-wrap gap-2">
-          {next === "pay" && <button type="button" onClick={onDetails} className={primaryButton}>Pay Now<span className="sr-only"> for order {order.orderNumber}</span></button>}
-          {next === "return" && <button type="button" onClick={onReturn} className={primaryButton}>Request a Return</button>}
-          {next === "track" && <button type="button" onClick={track} className={primaryButton}>Track Order</button>}
+          {next === "pay" && <button type="button" onClick={onDetails} className={primaryButton}>Pay now<span className="sr-only"> for order {order.orderNumber}</span></button>}
+          {next === "return" && <button type="button" onClick={onReturn} className={primaryButton}>Request a return</button>}
+          {next === "track" && <button type="button" onClick={track} className={primaryButton}>Track order</button>}
           {next === "receipt" && <button type="button" onClick={onReceipt} className={primaryButton}>Receipt</button>}
           <button type="button" onClick={onDetails} className={quietButton}>Details</button>
           {next !== "receipt" && <button type="button" onClick={onReceipt} className={quietButton}>Receipt</button>}
-          {next !== "track" && <button type="button" onClick={track} className={quietButton}>Track Order</button>}
+          {next !== "track" && <button type="button" onClick={track} className={quietButton}>Track order</button>}
           {canCancel && <button type="button" onClick={onCancel} className={dangerButton}>{cancelLabel(order)}</button>}
         </div>
       </div>
@@ -257,7 +257,7 @@ function OrderDetails({ order, user, notice, closeRef, onClose, onCancel, onRetu
   const windowNote = order.status === "CANCELLED" ? null : returnWindowText(order.returnEligibility);
   const notes = orderNotes(order).filter((note) => note !== windowNote);
   return (
-    <ModalDialog open label="Receipt Details" onClose={onClose}>
+    <ModalDialog open label="Receipt details" onClose={onClose}>
       <div className="focus-scroll-room relative max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-2xl bg-surface p-5 text-navy-800 shadow-overlay [overflow-wrap:anywhere] sm:p-6 md:max-w-4xl">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
@@ -270,7 +270,7 @@ function OrderDetails({ order, user, notice, closeRef, onClose, onCancel, onRetu
 
         <section aria-label="Order summary" className="mt-5 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <OrderStatusBadge order={order} />
+            <OrderStatusBadge order={order} audience="shopper" />
             <p className="type-price text-navy-900">{formatKES(order.total)}</p>
           </div>
           <p className="text-sm"><span className="text-muted">Payment:</span> {paymentLabel(order)}</p>
@@ -314,9 +314,9 @@ function OrderDetails({ order, user, notice, closeRef, onClose, onCancel, onRetu
             </Disclosure>
             <div className="grid gap-2 sm:grid-cols-2">
               <button type="button" onClick={() => navigate(`/track?order=${encodeURIComponent(order.orderNumber)}`)} className={outlineButton}>
-                Track Order
+                Track order
               </button>
-              <button type="button" onClick={onPrint} className={outlineButton}>Print Receipt</button>
+              <button type="button" onClick={onPrint} className={outlineButton}>Print receipt</button>
             </div>
           </section>
 
@@ -586,8 +586,8 @@ function AccountOrdersContent({ user, requestedId }: { user: User | null; reques
         open={Boolean(withdrawal)}
         title={`Withdraw return ${withdrawal?.item.number ?? ""}`}
         message="Your return request will be cancelled and the items stay with you. You can request a new return while the return window is open."
-        confirmLabel={withdrawing ? "Withdrawing…" : "Withdraw Request"}
-        cancelLabel="Keep Request"
+        confirmLabel={withdrawing ? "Withdrawing…" : "Withdraw request"}
+        cancelLabel="Keep request"
         tone="danger"
         confirmDisabled={withdrawing}
         onConfirm={() => void withdraw()}

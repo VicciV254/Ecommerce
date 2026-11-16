@@ -67,7 +67,7 @@ describe("Contact", () => {
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Amina" } });
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "amina@example.test" } });
     fireEvent.change(screen.getByLabelText("Message"), { target: { value: "Where is my order TEST-1?" } });
-    fireEvent.submit(screen.getByRole("button", { name: "Send Message" }));
+    fireEvent.submit(screen.getByRole("button", { name: "Send message" }));
     expect(await screen.findByText("✓ Your message has been sent.")).toBeTruthy();
     expect(contact.send).toHaveBeenCalledWith({ name: "Amina", email: "amina@example.test", phone: undefined, message: "Where is my order TEST-1?" });
     expect(screen.getByRole("status").textContent).not.toMatch(/shortly|soon|hours?|days?|minutes?/i);
@@ -77,7 +77,7 @@ describe("Contact", () => {
     contact.send.mockRejectedValue(new Error("offline"));
     render(<Contact />);
     fireEvent.change(screen.getByLabelText("Message"), { target: { value: "A question about delivery" } });
-    fireEvent.submit(screen.getByRole("button", { name: "Send Message" }));
+    fireEvent.submit(screen.getByRole("button", { name: "Send message" }));
     await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("Your message could not be sent. Please try again."));
     expect((screen.getByLabelText("Message") as HTMLTextAreaElement).value).toBe("A question about delivery");
   });
@@ -91,7 +91,7 @@ describe("Footer", () => {
     expect(lockup.querySelector("svg linearGradient")).toBeTruthy();
     expect(screen.getByText("Prices are shown excluding VAT; 16% VAT is added at checkout.")).toBeTruthy();
     expect(screen.getByLabelText("Email address")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Staff Portal" }).getAttribute("href")).toBe("#/admin");
+    expect(screen.getByRole("link", { name: "Staff portal" }).getAttribute("href")).toBe("#/admin");
     expectNoRetiredDetails();
   });
 });

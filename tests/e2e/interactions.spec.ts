@@ -20,7 +20,7 @@ import { fixtureDeliveredOrder } from "../../src/test-support/orderFixtures";
 
 test("search suggestions take arrow selection, and Escape closes the list before clearing the text", async ({ page }) => {
   await page.goto("/#/shop");
-  await expect(page.getByRole("heading", { name: "All Products", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "All products", exact: true })).toBeVisible();
   // Phones show the search below the brand row, so it is never only inside the drawer.
   const input = page.getByRole("combobox", { name: "Search products" });
   await input.fill("Linen Short-Sleeve Shirt");
@@ -71,7 +71,7 @@ test("icon links have names and desktop modifier-click opens a separate tab", as
 test("mobile drawers contain focus, restore it, and adapt from narrow phones to desktop", async ({ page, isMobile }) => {
   test.skip(!isMobile, "The mobile project covers drawer widths and the desktop transition.");
   await page.goto("/#/shop");
-  await expect(page.getByRole("heading", { name: "All Products", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "All products", exact: true })).toBeVisible();
   const menu = page.getByRole("button", { name: "Menu", exact: true });
   await menu.focus();
   await page.keyboard.press("Enter");
@@ -133,18 +133,18 @@ test("receipt and cancellation dialogs preserve nested focus and expose a failed
   const details = page.getByRole("button", { name: "Details", exact: true });
   await details.focus();
   await page.keyboard.press("Enter");
-  const receipt = page.getByRole("dialog", { name: "Receipt Details" });
+  const receipt = page.getByRole("dialog", { name: "Receipt details" });
   await expect(receipt.getByRole("button", { name: "Close", exact: true })).toBeFocused();
   await expect(receipt).toContainText("Payment: M-Pesa (pending)");
   // The order is unpaid, so cancelling it offers no refund.
-  const cancel = receipt.getByRole("button", { name: "Cancel Order", exact: true });
+  const cancel = receipt.getByRole("button", { name: "Cancel order", exact: true });
   await cancel.focus();
   await page.keyboard.press("Enter");
-  const cancellation = page.getByRole("dialog", { name: "Cancel Order", exact: true });
+  const cancellation = page.getByRole("dialog", { name: "Cancel order", exact: true });
   const reason = cancellation.getByRole("textbox", { name: "Reason for cancellation (optional)" });
   await expect(reason).toBeFocused();
   await reason.fill("Isolated browser test");
-  await cancellation.getByRole("button", { name: "Cancel Order", exact: true }).click();
+  await cancellation.getByRole("button", { name: "Cancel order", exact: true }).click();
   const request = await pending;
   await expect(cancellation.getByRole("button", { name: "Cancelling..." })).toBeDisabled();
   await page.keyboard.press("Escape");
@@ -182,6 +182,8 @@ test("product editor controls remain reachable and save errors are announced ins
   const editor = page.getByRole("dialog", { name: "Edit product", exact: true });
   const close = editor.getByRole("button", { name: "Close product editor" });
   await expect(close).toBeInViewport();
+  // A 44px target, as in the read-only product details (it was 32px before the P7 close).
+  expect(await close.boundingBox()).toMatchObject({ width: 44, height: 44 });
   await expect(editor.getByRole("textbox", { name: "Name", exact: true })).toHaveValue("Linen Short-Sleeve Shirt");
   const price = editor.getByRole("spinbutton", { name: "Price (KES)" });
   await price.fill("1200.25");
@@ -189,15 +191,15 @@ test("product editor controls remain reachable and save errors are announced ins
   const createCategory = editor.getByRole("button", { name: "Create category" });
   await createCategory.focus();
   await page.keyboard.press("Enter");
-  const category = page.getByRole("dialog", { name: "Create New Category" });
+  const category = page.getByRole("dialog", { name: "Create new category" });
   await expect(category).toHaveCount(1);
   await expect(category).toBeVisible();
-  await expect(category.getByRole("textbox", { name: "Category Name" })).toBeFocused();
+  await expect(category.getByRole("textbox", { name: "Category name" })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(category).toHaveCount(0);
   await expect(createCategory).toBeFocused();
 
-  await editor.getByRole("button", { name: "Save Product" }).click();
+  await editor.getByRole("button", { name: "Save product" }).click();
   await expect(editor.getByRole("alert")).toHaveText("Invalid request: price: Number must be greater than 0");
   expect(saves).toHaveLength(1);
   expect(saves[0].method).toBe("PUT");
@@ -249,7 +251,7 @@ test("storefront drafts save and publish with versions without leaking to shoppe
   await page.getByRole("link", { name: "Back to editor" }).click();
   await expect(storeName).toHaveValue("Apex Cart Draft");
   await expect(page.getByRole("button", { name: "Publish" })).toBeDisabled();
-  await page.getByRole("button", { name: "Save Draft" }).click();
+  await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Draft saved" })).toBeVisible();
   expect(writes).toEqual([{ path: "draft", body: expect.objectContaining({ version: 5 }) }]);
   expect(writes[0].body.settings?.brand.name).toBe("Apex Cart Draft");
@@ -284,10 +286,10 @@ test("checkout explains unavailable ordering, creates no order and preserves the
   await expect(page.getByRole("status").filter({ hasText: "Your cart is unchanged" })).toBeVisible();
   await expect(page.locator("main input")).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Reserve|Place Order|Confirm Payment|Pay/ })).toHaveCount(0);
-  await page.getByRole("link", { name: "Back to Cart", exact: true }).click();
+  await page.getByRole("link", { name: "Back to cart", exact: true }).click();
   await expect(page.getByRole("link", { name: "Linen Short-Sleeve Shirt", exact: true })).toBeVisible();
   await expect(page.getByText("Size: M · Color: White")).toBeVisible();
-  const proceed = page.getByRole("button", { name: "Continue to Checkout" });
+  const proceed = page.getByRole("button", { name: "Continue to checkout" });
   await expect(proceed).toBeDisabled();
   await expect(proceed).toHaveAccessibleDescription(/Ordering is not available yet/);
   expect((await shopperState(page)).cart).toEqual([linenCartLine]);
@@ -305,7 +307,7 @@ test("cart edits re-quote the whole cart and keep every line editable", async ({
     return route.fulfill({ status: 201, json: body.items[0].quantity === 2 ? browserQuote({ id: "quote-two", ...linenPair }) : browserQuote() });
   });
   await page.goto("/#/cart");
-  const summary = page.getByRole("region", { name: "Order Summary" });
+  const summary = page.getByRole("region", { name: "Order summary" });
   await expect(summary.getByText("KES 1,244")).toBeVisible();
   const increase = page.getByRole("button", { name: "Increase quantity of Linen Short-Sleeve Shirt" });
   await increase.click();
@@ -316,14 +318,14 @@ test("cart edits re-quote the whole cart and keep every line editable", async ({
   expect(quoted.at(-1)?.items).toEqual([{ ...linenCartLine, quantity: 2 }]);
   await page.getByRole("button", { name: "Decrease quantity of Linen Short-Sleeve Shirt" }).click();
   await expect(summary.getByText("KES 1,244")).toBeVisible();
-  await page.getByRole("link", { name: "Continue Shopping", exact: true }).click();
+  await page.getByRole("link", { name: "Continue shopping", exact: true }).click();
   await expect(page).toHaveURL(/#\/shop$/);
 });
 
 test("empty checkout retains the route back to shopping", async ({ page }) => {
   await page.goto("/#/checkout");
   await expect(page.getByRole("heading", { name: "Your cart is empty" })).toBeVisible();
-  await page.getByRole("link", { name: "Go Shopping", exact: true }).click();
+  await page.getByRole("link", { name: "Go shopping", exact: true }).click();
   await expect(page).toHaveURL(/#\/shop$/);
 });
 
@@ -338,8 +340,8 @@ test("return failure feedback stays in the active return dialog and keeps the sa
   });
   await page.goto("/#/account/orders");
   await page.getByRole("button", { name: "Details", exact: true }).click();
-  const receipt = page.getByRole("dialog", { name: "Receipt Details" });
-  await receipt.getByRole("button", { name: "Request a Return", exact: true }).click();
+  const receipt = page.getByRole("dialog", { name: "Receipt details" });
+  await receipt.getByRole("button", { name: "Request a return", exact: true }).click();
   const returnForm = page.getByRole("dialog", { name: "Request a return", exact: true });
   await returnForm.getByRole("button", { name: "Return one more Linen Short-Sleeve Shirt" }).click();
   await returnForm.getByRole("combobox", { name: "Reason for return" }).selectOption({ label: "Arrived damaged" });

@@ -65,7 +65,7 @@ test("old showroom links land on the shop without adding a history entry", async
   await expect(page.getByRole("heading", { level: 1, name: "About Apex Cart" })).toBeVisible();
   await page.evaluate(() => { window.location.hash = "#/showroom?go=events"; });
   await expect(page).toHaveURL(/#\/shop$/);
-  await expect(page.getByRole("heading", { name: "All Products", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "All products", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Showroom" })).toHaveCount(0);
   await page.goBack();
   await expect(page).toHaveURL(/#\/about$/);
@@ -244,7 +244,7 @@ test("keyboard focus moved to a control behind or above the sticky header ends f
 test("focus and typing inside the sticky header never scroll the page", async ({ page, isMobile }) => {
   const SCROLLED = 400;
   await page.goto("/#/shop");
-  await expect(page.getByRole("heading", { name: "All Products", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "All products", exact: true })).toBeVisible();
   const scrollY = async () => { await scrollSettled(page); return page.evaluate(() => window.scrollY); };
   const focusWithoutScrolling = (locator: Locator) => locator.evaluate((element) => (element as HTMLElement).focus({ preventScroll: true }));
   await page.evaluate((top) => window.scrollTo({ top, behavior: "instant" }), SCROLLED);

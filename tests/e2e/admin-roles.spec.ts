@@ -2,8 +2,8 @@ import type { Locator, Page } from "@playwright/test";
 import { serveAdminData, waitForPlace } from "./adminFixtures";
 import { expect, signInStaff, test } from "./fixtures";
 
-/** Buttons that would change something; none may render for a view-only role. */
-const WRITE_ACTIONS = /^(Add|Add Product|Save|Save Product|Save Draft|Restock to max|Subtract|Create Discount|Stop Discount|Delete|Edit|\+ ?Sub|\+ Department|\+ Designer|Hide|Show|Publish|Discard Changes|Reload Draft|Send Verification to Selected|Verify|Disable|Enable|Send to \d+ Subscribers|\+ Image URL|\+ Variant|\+ Specification|Add option|Dispatch|Cancel order|Start processing|Mark ready.*|Confirm (delivery|pickup)|Retry email|Check with M-Pesa|Record M-Pesa reference.*|Approve.*|Reject.*)$/;
+/** Buttons that would change something; none may render for a view-only role. Case-insensitive, so a relabel cannot hide one. */
+const WRITE_ACTIONS = /^(Add|Add product|Save|Save product|Save draft|Restock to max|Subtract|Create discount|Stop discount|Delete|Edit|\+ ?Sub|\+ Department|\+ Designer|Hide|Show|Publish|Discard changes|Reload draft|Send verification to selected|Verify|Disable|Enable|Send to \d+ subscribers|\+ Image URL|\+ Variant|\+ Specification|Add option|Dispatch|Cancel order|Start processing|Mark ready.*|Confirm (delivery|pickup)|Retry email|Check with M-Pesa|Record M-Pesa reference.*|Approve.*|Reject.*)$/i;
 
 async function expectNothingEditable(scope: Locator, allowedFields: string[], label: string) {
   const names = await scope.getByRole("button").evaluateAll((buttons) =>
@@ -106,7 +106,7 @@ test.describe("view-only role", () => {
     await main.getByLabel("Report period").selectOption("week");
     await main.getByLabel("Download format").selectOption("csv");
     const download = page.waitForEvent("download");
-    await main.getByRole("button", { name: "Download Report" }).click();
+    await main.getByRole("button", { name: "Download report" }).click();
     expect((await download).suggestedFilename()).toBe("apex-cart-financial-week.csv");
 
     await visit(page, "/admin/orders/orders", "Orders");

@@ -147,6 +147,17 @@ describe("a signed-in shopper's active orders", () => {
     expect(mocks.orders.track).toHaveBeenCalledWith("APX-Q-SHIP");
   });
 
+  it("says whether an active pending order awaits payment or preparation", async () => {
+    mocks.user = shopper;
+    const paid = { ...order("q-paid", "PENDING"), paymentStatus: "PAID" as const, reservationStatus: "COMMITTED" as const };
+    mocks.orders.getMyOrders.mockResolvedValue(page([order("q-unpaid", "PENDING"), paid]));
+    render(<TrackOrder route="/track" />);
+    const panel = screen.getByRole("region", { name: "Your active orders" });
+    const items = await within(panel).findAllByRole("listitem", undefined, WAIT);
+    expect(items.map((item) => item.querySelector(".rounded-full")?.textContent)).toEqual(["Awaiting payment", "Waiting to be prepared"]);
+    expect(within(panel).queryByText("Pending")).toBeNull();
+  });
+
   it("says when nothing is in progress, and reports a failed load with a retry instead of an empty list", async () => {
     mocks.user = shopper;
     mocks.orders.getMyOrders.mockRejectedValueOnce(apiError(503, { error: "Orders are paused for maintenance." }))

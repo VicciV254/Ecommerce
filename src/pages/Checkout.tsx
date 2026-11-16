@@ -65,7 +65,7 @@ function EmptyCheckout({ before }: { before?: ReactNode }) {
   return (
     <CenteredPanel title="Your cart is empty" before={before}>
       <p className="mt-2 text-navy-800">Add something to your cart, then check out here.</p>
-      <Link to="/shop" className={`mx-auto mt-6 max-w-xs ${primaryActionClass}`}>Go Shopping</Link>
+      <Link to="/shop" className={`mx-auto mt-6 max-w-xs ${primaryActionClass}`}>Go shopping</Link>
     </CenteredPanel>
   );
 }
@@ -423,8 +423,8 @@ function OrderingUnavailable({ before }: { before?: ReactNode }) {
         Orders cannot be placed right now, so nothing has been reserved or charged. Your cart is unchanged.
       </p>
       <div className="mx-auto mt-6 grid max-w-md gap-3 sm:grid-cols-2">
-        <Link to="/cart" className={primaryActionClass}>Back to Cart</Link>
-        <Link to="/shop" className={secondaryActionClass}>Continue Shopping</Link>
+        <Link to="/cart" className={primaryActionClass}>Back to cart</Link>
+        <Link to="/shop" className={secondaryActionClass}>Continue shopping</Link>
       </div>
     </CenteredPanel>
   );

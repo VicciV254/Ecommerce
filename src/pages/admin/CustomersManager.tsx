@@ -4,6 +4,12 @@ import { describeApiError } from "../../api/errors";
 import { ConfirmModal } from "../../components/Modal";
 import { TableRegion } from "./shared";
 
+/** The same inline padding on every cell, so neighbouring headings and values never run together. */
+const headCell = "px-3 py-2";
+const bodyCell = "px-3 py-3";
+/** Row actions keep their short text names inside 44px targets. */
+const rowAction = "inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-sm px-[8px] font-bold hover:underline";
+
 /** Shopper accounts. Roles that cannot write see the list, search and filters, with no selection or account actions. */
 export function CustomersManager({ canWrite, showToast }: { canWrite: boolean; showToast: (message: string) => void }) {
   const [users, setUsers] = useState<AdminUser[]>([]); const [selected, setSelected] = useState<string[]>([]); const [q, setQ] = useState(""); const [verified, setVerified] = useState(""); const [disabled, setDisabled] = useState(""); const [loading, setLoading] = useState(false); const [error, setError] = useState("");
@@ -30,18 +36,18 @@ export function CustomersManager({ canWrite, showToast }: { canWrite: boolean; s
             </p>
             <p className="mt-1 text-[11px] font-bold uppercase tracking-wider text-brand-accent">Showing {users.length} user(s)</p>
           </div>
-          {canWrite && <button onClick={sendBulk} className="rounded-sm bg-brand-primary px-3 py-2 text-[10px] font-bold uppercase text-white hover:bg-brand-secondary hover:text-brand-primary">Send Verification to Selected</button>}
+          {canWrite && <button onClick={sendBulk} className="rounded-sm bg-brand-primary px-3 py-2 text-[10px] font-bold uppercase text-white hover:bg-brand-secondary hover:text-brand-primary">Send verification to selected</button>}
         </div>
         {/* Sized to their text, so the row wraps at larger text sizes instead of widening the page. */}
         <div className="mt-4 flex flex-wrap gap-3">
           <input aria-label="Search users" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search users" className="min-w-0 flex-[1_1_16rem] rounded-sm border border-light-gray px-3 py-2 text-xs" />
           <select aria-label="Filter by verification" value={verified} onChange={(e) => setVerified(e.target.value)} className="min-w-0 flex-[1_1_10rem] rounded-sm border border-light-gray px-3 py-2 text-xs">
-            <option value="">All Verification</option>
+            <option value="">All verification</option>
             <option value="true">Verified</option>
             <option value="false">Unverified</option>
           </select>
           <select aria-label="Filter by account status" value={disabled} onChange={(e) => setDisabled(e.target.value)} className="min-w-0 flex-[1_1_10rem] rounded-sm border border-light-gray px-3 py-2 text-xs">
-            <option value="">All Accounts</option>
+            <option value="">All accounts</option>
             <option value="false">Active</option>
             <option value="true">Disabled</option>
           </select>
@@ -50,33 +56,33 @@ export function CustomersManager({ canWrite, showToast }: { canWrite: boolean; s
         <TableRegion label="Customer accounts table" className="mt-[14px]">
           <table className="w-full text-xs">
             <thead>
-              <tr className="border-b border-light-gray text-left text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                {canWrite && <th className="py-2">Select</th>}
-                <th className={canWrite ? undefined : "py-2"}>User</th>
-                <th>Status</th>
-                <th>Orders</th>
-                <th>Joined</th>
-                {canWrite && <th>Actions</th>}
+              <tr className="border-b border-light-gray text-left text-[10px] font-bold uppercase tracking-wider text-muted">
+                {canWrite && <th className={headCell}>Select</th>}
+                <th className={headCell}>User</th>
+                <th className={headCell}>Status</th>
+                <th className={headCell}>Orders</th>
+                <th className={headCell}>Joined</th>
+                {canWrite && <th className={headCell}>Actions</th>}
               </tr>
             </thead>
             <tbody>
-              {error && <tr><td colSpan={canWrite ? 6 : 4} className="py-4 text-center font-semibold text-error">{error}</td></tr>}
-              {loading && <tr><td colSpan={canWrite ? 6 : 4} className="py-6 text-center text-gray-400">Loading users...</td></tr>}
+              {error && <tr><td colSpan={canWrite ? 6 : 4} className={`${bodyCell} text-center font-semibold text-error`}>{error}</td></tr>}
+              {loading && <tr><td colSpan={canWrite ? 6 : 4} className={`${bodyCell} text-center text-muted`}>Loading users...</td></tr>}
               {!loading && users.map((user) => (
                 <tr key={user.id} className="border-b border-light-gray/70">
-                  {canWrite && <td className="py-3"><input type="checkbox" checked={selected.includes(user.id)} onChange={() => toggleSelected(user.id)} /></td>}
-                  <td className={canWrite ? undefined : "py-3"}>
+                  {canWrite && <td className={bodyCell}><input type="checkbox" aria-label={`Select ${user.firstName} ${user.lastName}`} checked={selected.includes(user.id)} onChange={() => toggleSelected(user.id)} /></td>}
+                  <td className={bodyCell}>
                     <p className="font-semibold text-brand-primary">{user.firstName} {user.lastName}</p>
                     <p className="text-gray-500">{user.email}</p>
                   </td>
-                  <td><span className={user.isDisabled ? "text-error" : user.emailVerified ? "text-success" : "text-warning"}>{user.isDisabled ? "Disabled" : user.emailVerified ? "Verified" : "Unverified"}</span></td>
-                  <td>{user._count?.orders ?? 0}</td>
-                  <td>{new Date(user.createdAt).toLocaleDateString("en-KE")}</td>
+                  <td className={bodyCell}><span className={user.isDisabled ? "text-error" : user.emailVerified ? "text-success" : "text-warning"}>{user.isDisabled ? "Disabled" : user.emailVerified ? "Verified" : "Unverified"}</span></td>
+                  <td className={bodyCell}>{user._count?.orders ?? 0}</td>
+                  <td className={bodyCell}>{new Date(user.createdAt).toLocaleDateString("en-KE")}</td>
                   {canWrite && (
-                    <td className="space-x-2 whitespace-nowrap">
-                      <button onClick={() => sendOne(user.id)} className="font-bold text-ocean-blue hover:underline">Verify</button>
-                      <button onClick={() => setAccountDisabled(user.id, !user.isDisabled)} className="font-bold text-warning hover:underline">{user.isDisabled ? "Enable" : "Disable"}</button>
-                      <button onClick={() => handleDeleteClick(user.id)} className="font-bold text-error hover:underline">Delete</button>
+                    <td className={`${bodyCell} space-x-2 whitespace-nowrap`}>
+                      <button onClick={() => sendOne(user.id)} className={`${rowAction} text-ocean-blue`}>Verify</button>
+                      <button onClick={() => setAccountDisabled(user.id, !user.isDisabled)} className={`${rowAction} text-warning`}>{user.isDisabled ? "Enable" : "Disable"}</button>
+                      <button onClick={() => handleDeleteClick(user.id)} className={`${rowAction} text-error`}>Delete</button>
                     </td>
                   )}
                 </tr>
@@ -87,7 +93,7 @@ export function CustomersManager({ canWrite, showToast }: { canWrite: boolean; s
       </div>
       <ConfirmModal
         open={deleteConfirmOpen}
-        title="Delete User?"
+        title="Delete user?"
         message="This action cannot be undone. The user account will be permanently deleted."
         confirmLabel="Delete"
         cancelLabel="Cancel"

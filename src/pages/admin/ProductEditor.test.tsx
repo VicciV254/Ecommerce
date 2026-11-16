@@ -74,7 +74,7 @@ async function finish(xhr: FakeXhr, intent: UploadIntent, overrides: Record<stri
 }
 
 async function savedImages(): Promise<MediaInput[]> {
-  fireEvent.click(screen.getByRole("button", { name: "Save Product" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save product" }));
   await waitFor(() => expect(mocks.updateProduct.mock.calls.length + mocks.createProduct.mock.calls.length).toBe(1));
   const call = mocks.updateProduct.mock.calls[0]?.[1] ?? mocks.createProduct.mock.calls[0][0];
   return call.images;
@@ -210,7 +210,7 @@ describe("product image uploads", () => {
     expect(FakeXhr.instances).toHaveLength(2);
     expect(screen.getByText("Waiting to upload")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Save Product" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save product" }));
     expect(screen.getByRole("alert").textContent).toContain("Wait for image uploads to finish, or cancel them, before saving.");
     expect(mocks.updateProduct).not.toHaveBeenCalled();
 
@@ -300,7 +300,7 @@ describe("product image uploads", () => {
     renderEditor();
     chooseFiles(imageFile("photo.webp"));
     await finish(await request(1), intents[0]);
-    fireEvent.click(screen.getByRole("button", { name: "Save Product" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save product" }));
     expect((await screen.findByRole("alert")).textContent).toBe("The upload could not be verified with Cloudinary. Upload the image again.");
   });
 
@@ -352,7 +352,7 @@ describe("review fixes: pending save", () => {
     mocks.updateProduct.mockReturnValue(pending.promise);
     renderEditor();
     fireEvent.change(screen.getByRole("textbox", { name: "Image 1 alt text" }), { target: { value: "Front view" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save Product" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save product" }));
     const section = screen.getByRole("region", { name: "Images" });
     const controls = () => [
       within(section).getByLabelText("Upload images"),
@@ -463,7 +463,7 @@ describe("review fixes: image addresses", () => {
   it("[7] refuses to save an image address containing whitespace", () => {
     renderEditor();
     fireEvent.change(screen.getByRole("textbox", { name: "Image 2 URL" }), { target: { value: "https://media.example.test/a.jpg 2000w, https://elsewhere.example/x.jpg" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save Product" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save product" }));
     expect(screen.getByRole("alert").textContent).toContain("Image addresses must be HTTPS URLs or /images/ paths.");
     expect(mocks.updateProduct).not.toHaveBeenCalled();
   });

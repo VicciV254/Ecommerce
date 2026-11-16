@@ -38,6 +38,15 @@ beforeEach(() => {
 });
 
 describe("staff order workspace", () => {
+  it("shows staff the canonical status of a paid order still to be prepared", async () => {
+    admin.orders.get.mockResolvedValue({ data: fixtureStaffOrder(paid) });
+    renderWorkspace();
+    await nextStep();
+    expect(screen.getByText("Pending", { selector: "span" })).toBeTruthy();
+    expect(screen.queryByText("Waiting to be prepared")).toBeNull();
+    expect(screen.queryByText("Awaiting payment")).toBeNull();
+  });
+
   it("offers exactly the fulfilment steps the server permits", async () => {
     admin.orders.get.mockResolvedValueOnce({ data: processing })
       .mockResolvedValueOnce({ data: { ...processing, allowedActions: [], paymentReviewOpen: true } });

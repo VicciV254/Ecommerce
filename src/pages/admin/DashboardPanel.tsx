@@ -51,7 +51,7 @@ export function DashboardPanel({ activeDiscounts }: { activeDiscounts: number | 
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <div className="rounded-lg bg-white p-6 shadow-sm">
-          <h3 className="text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Recent Live Orders</h3>
+          <h3 className="text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Recent live orders</h3>
           <div className="mt-4 space-y-3">
             {(values?.recentOrders ?? []).slice(0, RECENT_ORDER_LIMIT).map((order) => (
               <div key={order.id} className="flex flex-wrap items-center justify-between gap-x-3 border-b border-light-gray pb-3 text-xs last:border-b-0">
@@ -67,7 +67,7 @@ export function DashboardPanel({ activeDiscounts }: { activeDiscounts: number | 
         </div>
 
         <div className="rounded-lg bg-white p-6 shadow-sm">
-          <h3 className="text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Attention Queue</h3>
+          <h3 className="text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Attention queue</h3>
           <div className="mt-4 space-y-3 text-sm">
             <p className="flex flex-wrap justify-between gap-x-3"><span>Low stock SKUs</span><strong className="text-warning">{show(lowStock)}</strong></p>
             <p className="flex flex-wrap justify-between gap-x-3"><span>Out-of-stock SKUs</span><strong className="text-error">{show(outStock)}</strong></p>

@@ -66,14 +66,14 @@ describe("single display discount from the canonical catalog", () => {
     expect(within(line).getByText("KES 900 each excl. VAT")).toBeTruthy();
     // The line and cart subtotals are estimates labelled as excluding VAT; a payable total needs a server quote.
     expect(within(line).getByText("KES 1,800")).toBeTruthy();
-    const summary = screen.getByRole("region", { name: "Order Summary" });
+    const summary = screen.getByRole("region", { name: "Order summary" });
     expect(within(summary).getByText("Subtotal (excl. VAT)").nextElementSibling?.textContent).toBe("KES 1,800");
     expect(within(summary).getByText(/^Estimated from current prices\./)).toBeTruthy();
     expect(within(summary).queryByText("Total")).toBeNull();
     expect(screen.getByText("Add a delivery address to see delivery, VAT and your total.")).toBeTruthy();
     // Checkout's Delivery step takes the first address, so the way on is open while nothing is priced or reserved here.
     expect(screen.getByRole("link", { name: "Add your address at checkout" }).getAttribute("href")).toBe("#/checkout");
-    expect(screen.getByRole("link", { name: "Continue to Checkout" }).getAttribute("href")).toBe("#/checkout");
+    expect(screen.getByRole("link", { name: "Continue to checkout" }).getAttribute("href")).toBe("#/checkout");
     expect(orders.createQuote).not.toHaveBeenCalled();
   });
 

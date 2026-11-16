@@ -74,7 +74,7 @@ export function PromotionsManager({ showToast }: { showToast: (message: string) 
     <div className="rounded-lg bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h3 className="text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Promotions & Subscriptions</h3>
+          <h3 className="text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Promotions & subscriptions</h3>
           <p className="mt-1 text-xs text-gray-500">Manage email subscriptions and send promotional emails to subscribers.</p>
           <p className="mt-1 text-[11px] font-bold uppercase tracking-wider text-brand-accent">Showing {subscriptions.length} subscription(s)</p>
         </div>
@@ -82,9 +82,9 @@ export function PromotionsManager({ showToast }: { showToast: (message: string) 
       </div>
       <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
         <select aria-label="Filter subscriptions" value={activeFilter} onChange={(e) => setActiveFilter(e.target.value)} className="rounded-sm border border-light-gray px-3 py-2 text-xs">
-          <option value="">All Subscriptions</option>
-          <option value="true">Active Only</option>
-          <option value="false">Inactive Only</option>
+          <option value="">All subscriptions</option>
+          <option value="true">Active only</option>
+          <option value="false">Inactive only</option>
         </select>
       </div>
     </div>
@@ -93,7 +93,7 @@ export function PromotionsManager({ showToast }: { showToast: (message: string) 
     {loading && <div className="rounded-lg bg-white p-6 text-sm text-gray-500 shadow-sm">Loading subscriptions...</div>}
 
     <div className="rounded-lg bg-white p-5 shadow-sm">
-      <h3 className="text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary mb-4">Send Promotional Email</h3>
+      <h3 className="text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary mb-4">Send promotional email</h3>
       <div className="space-y-3">
         <div>
           <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">Subject</label>
@@ -107,13 +107,13 @@ export function PromotionsManager({ showToast }: { showToast: (message: string) 
               <button onClick={() => insertHTML('<em>')} className="rounded px-2 py-1 text-xs italic hover:bg-gray-200" title="Italic">I</button>
               <button onClick={() => insertHTML('<u>')} className="rounded px-2 py-1 text-xs underline hover:bg-gray-200" title="Underline">U</button>
               <div className="w-px h-5 bg-gray-300 mx-1"></div>
-              <button onClick={() => insertHTML('<ul><li>')} className="rounded px-2 py-1 text-xs hover:bg-gray-200" title="Bullet List">•</button>
-              <button onClick={() => insertHTML('<ol><li>')} className="rounded px-2 py-1 text-xs hover:bg-gray-200" title="Numbered List">1.</button>
+              <button onClick={() => insertHTML('<ul><li>')} className="rounded px-2 py-1 text-xs hover:bg-gray-200" title="Bullet list">•</button>
+              <button onClick={() => insertHTML('<ol><li>')} className="rounded px-2 py-1 text-xs hover:bg-gray-200" title="Numbered list">1.</button>
               <div className="w-px h-5 bg-gray-300 mx-1"></div>
               <button onClick={() => {
                 const url = prompt('Enter link URL:');
                 if (url) insertHTML(`<a href="${url}">`);
-              }} className="rounded px-2 py-1 text-xs hover:bg-gray-200" title="Insert Link">🔗</button>
+              }} className="rounded px-2 py-1 text-xs hover:bg-gray-200" title="Insert link">🔗</button>
             </div>
             <textarea
               ref={editorRef}
@@ -128,7 +128,7 @@ export function PromotionsManager({ showToast }: { showToast: (message: string) 
         </div>
         <div className="flex gap-2">
           <button onClick={sendPromotionalEmail} disabled={sending || subscriptions.length === 0} className="rounded-sm bg-brand-primary px-4 py-2 text-[10px] font-bold uppercase text-white hover:bg-brand-secondary hover:text-brand-primary disabled:opacity-50">
-            {sending ? "Sending..." : `Send to ${subscriptions.length} Subscribers`}
+            {sending ? "Sending..." : `Send to ${subscriptions.length} subscribers`}
           </button>
         </div>
       </div>

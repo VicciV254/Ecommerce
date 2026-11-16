@@ -97,7 +97,7 @@ function ProductContent({ id }: { id: string }) {
       <Container className="py-20 text-center">
         <h1 className="font-display text-2xl text-brand-primary">Product not found</h1>
         <p className="mt-2 text-sm text-gray-500">This product is not in the current catalog. It may have been removed or the link may be out of date.</p>
-        <Link to="/shop" className="mt-4 inline-block text-sm text-ocean-blue underline">Back to Shop</Link>
+        <Link to="/shop" className="mt-4 inline-block text-sm text-ocean-blue underline">Back to shop</Link>
       </Container>
     );
   }
@@ -112,8 +112,9 @@ function ProductContent({ id }: { id: string }) {
   return <ProductView product={product} detail={detail} retry={retry} />;
 }
 
+/** Side by side from 640px while both fit; with enlarged text the 10rem basis wraps them onto their own rows. */
 const actionButton =
-  "inline-flex min-h-[48px] flex-1 items-center justify-center rounded-sm px-5 text-sm font-bold uppercase tracking-[0.12em] transition-colors duration-(--motion-feedback)";
+  "inline-flex min-h-[48px] flex-1 items-center justify-center rounded-sm px-5 text-sm font-bold uppercase tracking-[0.12em] transition-colors duration-(--motion-feedback) sm:basis-[10rem]";
 
 function ProductView({ product, detail, retry }: {
   product: CatalogProduct | CatalogProductDetail;
@@ -198,7 +199,7 @@ function ProductView({ product, detail, retry }: {
           <OptionChoices selection={selection} onChoose={choose} />
           <QuantityStepper value={selection.quantity} max={selection.maxQuantity} disabled={!selection.canAdd} onChange={setQuantity} />
           <div className="space-y-3">
-            <div className="flex flex-col gap-3 sm:flex-row">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <button
                 ref={action}
                 type="button"

@@ -45,8 +45,8 @@ vi.mock("../../store/StoreContext", () => ({ useStore: () => ({ state: { wishlis
 vi.mock("../../store/CatalogContext", () => ({ useCatalog: () => ({ mode: "live" }) }));
 vi.mock("../../contexts/AuthContext", () => ({ useAuth: () => ({ user: null }) }));
 
-/** Controls that would change something; a read-only screen renders none of them. */
-const WRITE_ACTIONS = /^(Add|Add Product|Save|Save Product|Save Draft|Save Category|Save Designer|Restock to max|Subtract|Create Discount|Stop Discount|Delete|Edit|\+ ?Sub|\+ Department|\+ Designer|Hide|Show|Publish|Discard Changes|Reload Draft|Send Verification to Selected|Verify|Disable|Enable|Upload images|\+ Image URL|Remove.*|\+ .*)$/;
+/** Controls that would change something; a read-only screen renders none of them. Case-insensitive, so a relabel cannot hide one. */
+const WRITE_ACTIONS = /^(Add|Add product|Save|Save product|Save draft|Save category|Save designer|Restock to max|Subtract|Create discount|Stop discount|Delete|Edit|\+ ?Sub|\+ Department|\+ Designer|Hide|Show|Publish|Discard changes|Reload draft|Send verification to selected|Verify|Disable|Enable|Upload images|\+ Image URL|Remove.*|\+ .*)$/i;
 
 function expectReadOnly(scope: HTMLElement = document.body) {
   expect(within(scope).queryAllByRole("button").map((button) => button.textContent?.trim()).filter((name) => WRITE_ACTIONS.test(name ?? ""))).toEqual([]);
@@ -94,7 +94,7 @@ describe("view-only presentation for roles without writes", () => {
     render(<DiscountManager canWrite={false} showToast={vi.fn()} />);
     expect(screen.getByText("View only: your role can see discounts and when they apply but cannot change them.")).toBeTruthy();
     expect(screen.getByText("Linen promotion")).toBeTruthy();
-    expect(screen.queryByText("Create Discount")).toBeNull();
+    expect(screen.queryByText(/^Create discount$/i)).toBeNull();
     expect(screen.queryAllByRole("textbox")).toEqual([]);
     expectReadOnly();
     noWrites();

@@ -35,7 +35,7 @@ test("a cart quote with a coupon is reviewed and reserved as one unpaid pending 
   const paymentWrites = watchPaymentWrites(page);
 
   await page.goto("/#/cart");
-  const summary = page.getByRole("region", { name: "Order Summary" });
+  const summary = page.getByRole("region", { name: "Order summary" });
   await expect(summary.getByText("KES 1,244")).toBeVisible();
   await expect(summary.getByText("VAT (16%)")).toBeVisible();
   const coupon = summary.getByRole("textbox", { name: "Coupon code (optional)" });
@@ -44,7 +44,7 @@ test("a cart quote with a coupon is reviewed and reserved as one unpaid pending 
   await expect(summary.getByText("KES 1,186")).toBeVisible();
   await expect(summary.getByText("Applied to your total.")).toBeVisible();
   await expect.poll(async () => (await shopperState(page)).couponCode).toBe("SAVE10");
-  await summary.getByRole("link", { name: "Continue to Checkout" }).click();
+  await summary.getByRole("link", { name: "Continue to checkout" }).click();
 
   await expect(page).toHaveURL(/#\/checkout$/);
   const total = page.getByRole("region", { name: "Order Total" });
@@ -78,7 +78,7 @@ test("saved and printed receipts explain the stored discount and VAT without rec
   await servePaymentOverview(context, order);
   await page.goto("/#/account/orders");
   await page.getByRole("button", { name: "Details", exact: true }).click();
-  const receipt = page.getByRole("dialog", { name: "Receipt Details" });
+  const receipt = page.getByRole("dialog", { name: "Receipt details" });
   await expect(receipt).toContainText("Subtotal: KES 1,000");
   await expect(receipt).toContainText("Discount: -KES 150");
   await expect(receipt).toContainText("VAT (16%): KES 136");
@@ -87,7 +87,7 @@ test("saved and printed receipts explain the stored discount and VAT without rec
   await expect(receipt.getByRole("region", { name: "Pay with M-Pesa" })).toContainText(PAYMENT_MESSAGES.disabled);
   const [printed] = await Promise.all([
     page.waitForEvent("popup"),
-    receipt.getByRole("button", { name: "Print Receipt", exact: true }).click(),
+    receipt.getByRole("button", { name: "Print receipt", exact: true }).click(),
   ]);
   await expect(printed.locator(".totals p").filter({ hasText: "Discount" })).toContainText("-KES 150");
   await expect(printed.locator(".totals p").filter({ hasText: "VAT (16%)" })).toContainText("KES 136");
@@ -176,7 +176,7 @@ test("cart and checkout stack on phones, sit side by side from tablets and never
   for (const width of isMobile ? [360, 390, 768] : [1280]) {
     await page.setViewportSize({ width, height: 900 });
     for (const view of [
-      { path: "/#/cart", items: page.getByRole("list", { name: "Cart items" }), summary: page.getByRole("region", { name: "Order Summary" }) },
+      { path: "/#/cart", items: page.getByRole("list", { name: "Cart items" }), summary: page.getByRole("region", { name: "Order summary" }) },
       { path: "/#/checkout", items: page.getByRole("region", { name: "Items" }), summary: page.getByRole("region", { name: "Order Total" }) },
     ]) {
       await page.goto(view.path);

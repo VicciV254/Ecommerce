@@ -28,7 +28,7 @@ export function AdminLogin({ onLogin }: { onLogin: (admin: AdminSession) => void
 
   return (
     <div className="flex min-h-screen flex-col justify-center bg-surface-page">
-      <AuthLayout title="Admin Login" intro="Staff credentials are required for dashboard access.">
+      <AuthLayout title="Staff sign-in" intro="Staff credentials are required for dashboard access.">
         <form onSubmit={submit} className="mt-6 space-y-4">
           {error && <p role="alert" className={`${authStyles.error} text-center font-semibold`}>{error}</p>}
           <div>
@@ -40,7 +40,7 @@ export function AdminLogin({ onLogin }: { onLogin: (admin: AdminSession) => void
             <PasswordInput id="admin-password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} className={authStyles.field} />
           </div>
           <button disabled={loading} className={authStyles.submit}>
-            {loading ? "Signing in..." : "Sign In"}
+            {loading ? "Signing in..." : "Sign in"}
           </button>
         </form>
       </AuthLayout>

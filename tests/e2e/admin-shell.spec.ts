@@ -79,9 +79,9 @@ test.describe("routed modules", () => {
     await waitForPlace(page, "Customers");
   });
 
-  test("the bare entry and the Staff Portal link open the dashboard without an extra history entry", async ({ page }) => {
+  test("the bare entry and the Staff portal link open the dashboard without an extra history entry", async ({ page }) => {
     await page.goto("/#/");
-    await page.getByRole("contentinfo").getByRole("link", { name: "Staff Portal" }).click();
+    await page.getByRole("contentinfo").getByRole("link", { name: "Staff portal" }).click();
     await waitForPlace(page, "Dashboard");
     await expect(page).toHaveURL(/#\/admin\/overview\/dashboard$/);
     await page.goBack();
@@ -166,7 +166,7 @@ test.describe("sign-in", () => {
     const form = page.getByRole("main");
     await form.getByLabel("Email").fill("admin@example.test");
     await form.getByLabel("Password", { exact: true }).fill("browser-only-password");
-    await form.getByRole("button", { name: "Sign In" }).click();
+    await form.getByRole("button", { name: "Sign in" }).click();
   }
 
   test("a signed-out deep link shows the sign-in, loads nothing, then lands on that page", async ({ page }) => {
@@ -178,7 +178,7 @@ test.describe("sign-in", () => {
       if (/^\/api\/(admin|orders\/admin|settings\/storefront\/draft|subscriptions\/admin)/.test(path) && path !== "/api/admin/login") staffReads.push(path);
     });
     await page.goto("/#/admin/catalog/stock");
-    await expect(page.getByRole("heading", { name: "Admin Login" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Staff sign-in" })).toBeVisible();
     await expect(page).toHaveTitle(title("Sign in"));
     expect(staffReads).toEqual([]);
     await signInWithForm(page);
@@ -189,7 +189,7 @@ test.describe("sign-in", () => {
     const account = page.getByRole("button", { name: /^Account/ });
     if (await account.isVisible()) await account.click();
     await page.getByRole("button", { name: "Sign out" }).filter({ visible: true }).click();
-    await expect(page.getByRole("heading", { name: "Admin Login" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Staff sign-in" })).toBeVisible();
     await expect(page).toHaveURL(/#\/admin$/);
   });
 
@@ -241,7 +241,7 @@ test.describe("staff session across tabs", () => {
 
   test("signing out in another tab signs this tab out too, and its edits end with the session", async ({ page }) => {
     await changeSessionElsewhere(page, null);
-    await expect(page.getByRole("heading", { name: "Admin Login" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Staff sign-in" })).toBeVisible();
     await expect(page.getByRole("textbox", { name: "Store name" })).toHaveCount(0);
   });
 

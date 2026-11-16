@@ -84,14 +84,15 @@ export function ResponsiveImage({
 
 /** A catalog image with its sample label, or an intentional placeholder when none exists. */
 export function MediaImage({
-  asset, alt, className = "", preset = "card",
-}: { asset: MediaAsset | undefined; alt: string; className?: string; preset?: ImagePreset }) {
+  asset, alt, className = "", preset = "card", sizes,
+}: { asset: MediaAsset | undefined; alt: string; className?: string; preset?: ImagePreset; sizes?: string }) {
   if (!asset) return <MissingImage />;
   return (
     <>
       <ResponsiveImage
         url={asset.url}
         preset={preset}
+        sizes={sizes}
         alt={asset.alt || alt}
         width={asset.width}
         height={asset.height}
@@ -103,9 +104,9 @@ export function MediaImage({
 }
 
 export function ProductImage({
-  product, className = "", preset,
-}: { product: Pick<CatalogProduct, "name" | "images">; className?: string; preset?: ImagePreset }) {
-  return <MediaImage asset={primaryImage(product)} alt={product.name} className={className} preset={preset} />;
+  product, className = "", preset, sizes,
+}: { product: Pick<CatalogProduct, "name" | "images">; className?: string; preset?: ImagePreset; sizes?: string }) {
+  return <MediaImage asset={primaryImage(product)} alt={product.name} className={className} preset={preset} sizes={sizes} />;
 }
 
 /* ---------- Badges ---------- */
@@ -150,7 +151,7 @@ export function ErrorPanel({ title, message, onRetry, children }: { title: strin
       <div className="mt-5 flex flex-wrap items-center justify-center gap-x-6 gap-y-3">
         {onRetry && (
           <button type="button" onClick={onRetry} className="inline-flex min-h-[44px] items-center justify-center rounded-sm bg-navy-900 px-6 text-sm font-bold uppercase tracking-[0.12em] text-white transition-colors duration-(--motion-feedback) hover:bg-gold-500 hover:text-navy-900">
-            Try Again
+            Try again
           </button>
         )}
         {children}

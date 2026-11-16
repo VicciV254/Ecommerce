@@ -89,8 +89,8 @@ export function StorefrontManager({ canWrite }: { canWrite: boolean }) {
             <Link to={ADMIN_PREVIEW_ROUTE} className={`inline-flex items-center ${smallButtonClass}`}>Draft preview</Link>
             {canWrite && (
               <>
-                <button type="button" onClick={reloadDraft} disabled={busy !== ""} className={smallButtonClass}>{dirty ? "Discard Changes" : "Reload Draft"}</button>
-                <button type="button" onClick={() => void save()} disabled={!dirty || problems.length > 0 || busy !== ""} className={primaryButtonClass}>{busy === "save" ? "Saving…" : "Save Draft"}</button>
+                <button type="button" onClick={reloadDraft} disabled={busy !== ""} className={smallButtonClass}>{dirty ? "Discard changes" : "Reload draft"}</button>
+                <button type="button" onClick={() => void save()} disabled={!dirty || problems.length > 0 || busy !== ""} className={primaryButtonClass}>{busy === "save" ? "Saving…" : "Save draft"}</button>
                 <button type="button" onClick={() => void publish()} disabled={dirty || unresolved.length > 0 || busy !== ""} title={dirty ? "Save the draft before publishing" : unresolved.length ? "Repair unavailable media first" : undefined} className={primaryButtonClass}>{busy === "publish" ? "Publishing…" : "Publish"}</button>
               </>
             )}

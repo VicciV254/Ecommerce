@@ -82,7 +82,7 @@ export default function Account({ children }: { children: ReactNode }) {
               onClick={() => { logout(); navigate("/login"); }}
               className={`${tabClass} w-auto text-error hover:bg-error-tint xl:w-full`}
             >
-              Logout
+              Sign out
             </button>
           </div>
         </nav>

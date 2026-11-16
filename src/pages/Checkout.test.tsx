@@ -404,7 +404,7 @@ describe("cart quote", () => {
     const first = deferred<{ data: unknown }>();
     mocks.orders.createQuote.mockReturnValueOnce(first.promise);
     render(tree(<Cart />));
-    const summary = screen.getByRole("region", { name: "Order Summary" });
+    const summary = screen.getByRole("region", { name: "Order summary" });
     const estimate = () => within(summary).queryByText("Subtotal (excl. VAT)");
     // While the quote is calculated, the browser's estimate stands in, labelled as one.
     expect(estimate()?.nextElementSibling?.textContent).toBe("KES 900");
@@ -432,14 +432,14 @@ describe("cart quote", () => {
       data: request.deliveryMethod === "SAME_DAY" ? fixtureQuote({ id: "quote-same-day", deliveryMethod: "SAME_DAY", shippingCost: 500, total: 1544 }) : fixtureQuote(),
     }));
     render(tree(<Cart />));
-    const summary = screen.getByRole("region", { name: "Order Summary" });
+    const summary = screen.getByRole("region", { name: "Order summary" });
     expect(await within(summary).findByText("KES 1,244", undefined, WAIT)).toBeTruthy();
     expect(within(summary).getByText("−KES 100")).toBeTruthy();
     expect(within(summary).getByText("VAT (16%)")).toBeTruthy();
     expect(within(summary).getByText("KES 200")).toBeTruthy();
     const line = screen.getByRole("link", { name: "Linen Short-Sleeve Shirt" }).closest("li")!;
     expect(within(line).getByText("KES 900")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Continue to Checkout" }).getAttribute("href")).toBe("#/checkout");
+    expect(screen.getByRole("link", { name: "Continue to checkout" }).getAttribute("href")).toBe("#/checkout");
 
     fireEvent.click(within(summary).getByRole("radio", { name: "Same-day delivery" }));
     expect(await within(summary).findByText("KES 1,544", undefined, WAIT)).toBeTruthy();
@@ -476,7 +476,7 @@ describe("cart quote", () => {
     render(tree(<Cart />));
     expect(await screen.findByText("Coupon is expired or does not apply to these items", undefined, WAIT)).toBeTruthy();
     expect(screen.getByText("Your total can't be calculated until the highlighted choice is changed.")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Continue to Checkout" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Continue to checkout" }).hasAttribute("disabled")).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: "Remove coupon EXPIRED10" }));
     expect(await screen.findByText("KES 1,244", undefined, WAIT)).toBeTruthy();

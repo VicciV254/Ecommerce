@@ -1,6 +1,7 @@
 import type { BrowserContext, Locator, Page, Request } from "@playwright/test";
 import type { CatalogProduct, CatalogSnapshot, MediaInput, UploadIntent } from "../../src/api/catalog";
 import { demoPhone, fixtureImage, linenShirt, poloShirt } from "../../src/test-support/catalogFixtures";
+import { shopperStateKey } from "../../src/utils/storage";
 import {
   ORIGIN,
   STAFF_TOKEN,
@@ -116,31 +117,93 @@ async function serveMediaCatalog(context: BrowserContext) {
 test("cards and department tiles request card-width renditions, never the zoom size", async ({ page, context, isMobile }) => {
   const requested = await serveImageHosts(context);
   await serveMediaCatalog(context);
-  // Phones (390px) show cards at 50vw and tiles at 50vw - 22px; 1280px desktops show 300px cards and 5 tiles per row.
-  const cardWidth = isMobile ? 240 : 320;
+  // Phones (390px) show 173px cards everywhere and tiles at 50vw - 22px. At 1280px the homepage's cards are 295px and
+  // the listing's 227px beside its filters (P7 close: both declared 300px before, 32% too wide for the listing), with
+  // 5 tiles per row.
+  const homeCardWidth = isMobile ? 240 : 320;
+  const listingCardWidth = 240;
 
   await page.goto("/");
   await expect(page.getByRole("list", { name: "Shop by department" }).getByRole("link")).toHaveCount(2);
   await expect.poll(() => widthsOf(requested, "dept-fashion")).toEqual([240]);
   await expect.poll(() => widthsOf(requested, "photo-dept-phones")).toEqual([240]);
+  // The featured linen shirt loads on the homepage; the listing then reuses that rendition, which is at least as wide.
+  await page.getByRole("list", { name: "Featured products" }).getByRole("link", { name: "Linen Short-Sleeve Shirt", exact: true }).scrollIntoViewIfNeeded();
+  await expect.poll(() => widthsOf(requested, "linen-cover")).toEqual([homeCardWidth]);
 
   await page.goto("/#/shop");
-  await expect(page.getByRole("heading", { name: "All Products", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "All products", exact: true })).toBeVisible();
   for (const name of ["Linen Short-Sleeve Shirt", "Cotton Polo Shirt", "Demo Smartphone"]) {
     await page.getByRole("link", { name, exact: true }).scrollIntoViewIfNeeded();
   }
-  await expect.poll(() => widthsOf(requested, "linen-cover")).toEqual([cardWidth]);
-  await expect.poll(() => widthsOf(requested, "photo-polo")).toEqual([cardWidth]);
-  await expect.poll(() => widthsOf(requested, "pexels-photo-1092644")).toEqual([cardWidth]);
+  await expect.poll(() => widthsOf(requested, "photo-polo")).toEqual([listingCardWidth]);
+  await expect.poll(() => widthsOf(requested, "pexels-photo-1092644")).toEqual([listingCardWidth]);
+  expect(widthsOf(requested, "linen-cover")).toEqual([homeCardWidth]);
 
   const polo = requested.find((url) => url.includes("photo-polo"))!;
-  expect(Object.fromEntries(new URL(polo).searchParams)).toEqual({ ixid: "keep", w: String(cardWidth), auto: "format", q: "75", fit: "max" });
+  expect(Object.fromEntries(new URL(polo).searchParams)).toEqual({ ixid: "keep", w: String(listingCardWidth), auto: "format", q: "75", fit: "max" });
   const placeholder = new URL(requested.find((url) => url.includes("pexels-photo-1092644"))!);
   expect(placeholder.pathname).toBe("/photos/1092644/pexels-photo-1092644.jpeg");
-  expect([...placeholder.searchParams]).toEqual([["auto", "compress"], ["cs", "tinysrgb"], ["w", String(cardWidth)]]);
+  expect([...placeholder.searchParams]).toEqual([["auto", "compress"], ["cs", "tinysrgb"], ["w", String(listingCardWidth)]]);
   expect(requested.map(renditionWidth).every((width) => width !== null && CARD_WIDTHS.includes(width))).toBe(true);
   expect(requested.some((url) => renditionWidth(url) === ZOOM_WIDTH)).toBe(false);
   await test.info().attach("requested-images.json", { body: JSON.stringify(requested, null, 2), contentType: "application/json" });
+});
+
+/** Every grid of product cards: where it is and the element holding the cards. */
+const CARD_GRIDS = [
+  { name: "listing beside its filters", path: "/#/shop", grid: 'ul[aria-label="Products"]' },
+  { name: "homepage section", path: "/", grid: 'ul[aria-label="Featured products"]' },
+  { name: "related products", path: `/#/product/${linenShirt.id}`, grid: 'section[aria-labelledby="related-title"] .product-grid' },
+  { name: "wishlist", path: "/#/wishlist", grid: "main .grid" },
+] as const;
+
+/** An image's rendered width and the width its `sizes` declares at the current viewport, in CSS pixels. */
+const declaredAndRendered = (image: Locator) => image.evaluate((element: HTMLImageElement) => {
+  let declared = Number.NaN;
+  for (const entry of (element.getAttribute("sizes") ?? "").split(/,\s*(?![^()]*\))/)) {
+    const match = /^\s*(\(.*?\))\s+(.+)$/.exec(entry);
+    const [condition, length] = match ? [match[1], match[2]] : [null, entry.trim()];
+    if (condition && !matchMedia(condition).matches) continue;
+    const probe = document.createElement("div");
+    probe.style.cssText = `position: absolute; visibility: hidden; width: ${length}`;
+    document.body.append(probe);
+    declared = probe.getBoundingClientRect().width;
+    probe.remove();
+    break;
+  }
+  return { declared, rendered: element.getBoundingClientRect().width };
+});
+
+test.describe("product card images", () => {
+  test.use({ deviceScaleFactor: 2 });
+
+  test("declare their rendered width in every grid, and a 2x screen loads the smallest sufficient rendition", async ({ page, context, isMobile }) => {
+    await serveImageHosts(context);
+    await serveMediaCatalog(context);
+    await context.addInitScript(({ key, ids, origin }) => {
+      if (location.origin === origin && !localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ cart: [], wishlist: ids }));
+    }, { key: shopperStateKey(null), ids: [linenShirt.id, poloShirt.id, demoPhone.id], origin: ORIGIN });
+    const evidence: Record<string, number | string>[] = [];
+    for (const width of isMobile ? [360, 390, 430] : [768, 1024, 1280, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      for (const { name, path, grid } of CARD_GRIDS) {
+        // A new document each time: within one, Chrome reuses any larger candidate it has already loaded.
+        await page.goto("about:blank");
+        await page.goto(path);
+        const image = page.locator(grid).locator("img").first();
+        await image.scrollIntoViewIfNeeded();
+        const choice = await chosenForSlot(image);
+        const { declared, rendered } = await declaredAndRendered(image);
+        // Never narrower than the rendered slot, and at most 15% wider.
+        expect(declared, `${name} at ${width}px: declared ${declared}, rendered ${rendered}`).toBeGreaterThanOrEqual(rendered - 0.5);
+        expect(declared, `${name} at ${width}px: declared ${declared}, rendered ${rendered}`).toBeLessThanOrEqual(rendered * 1.15);
+        expectSmallestSufficient(CARD_WIDTHS, choice);
+        evidence.push({ width, grid: name, rendered, declared, slot: choice.slot, chosen: choice.width });
+      }
+    }
+    await test.info().attach("card-sizes.json", { body: JSON.stringify(evidence, null, 2), contentType: "application/json" });
+  });
 });
 
 test("the detail cover loads once at a detail width with high priority, and no zoom rendition is fetched", async ({ page, context, isMobile }) => {
@@ -424,7 +487,7 @@ test("staff upload with progress, cancel and a freshly signed retry, then save t
   expect(uploads.map((request) => [request.method(), request.url()])).toEqual([["POST", intents[0].uploadUrl], ["POST", intents[1].uploadUrl]]);
   expect(formParts(uploads[1])).toEqual([...Object.entries(intents[1].fields), ["file", "file:photo.png"]]);
 
-  await editor.getByRole("button", { name: "Save Product" }).click();
+  await editor.getByRole("button", { name: "Save product" }).click();
   await expect(editor).toHaveCount(0);
   const unset = { isPlaceholder: false, sourceUrl: null, license: null, credit: null };
   expect(saves.map((save) => save.images)).toEqual([[

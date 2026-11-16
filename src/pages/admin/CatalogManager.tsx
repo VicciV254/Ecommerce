@@ -163,7 +163,7 @@ export function CatalogManager({ canWrite, showToast }: { canWrite: boolean; sho
       <Panel
         title="Products"
         description="Products are saved straight to the catalog. Hidden products and demo records never become real inventory through this screen."
-        actions={canWrite ? <button type="button" onClick={() => openProduct(NEW_PRODUCT)} className={primaryButtonClass}>Add Product</button> : undefined}
+        actions={canWrite ? <button type="button" onClick={() => openProduct(NEW_PRODUCT)} className={primaryButtonClass}>Add product</button> : undefined}
       >
         <div className="mb-4 flex flex-wrap items-center gap-3">
           <input aria-label="Search products" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by name or tag…" className={`min-w-0 basis-full md:flex-1 md:basis-48 ${inputClass}`} />

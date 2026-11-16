@@ -159,7 +159,7 @@ export function DiscountManager({ canWrite, showToast }: { canWrite: boolean; sh
   return (
     <div className={canWrite ? "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,400px)_minmax(0,1fr)]" : "space-y-4"}>
       {!canWrite && <p className="text-sm text-navy-800">View only: your role can see discounts and when they apply but cannot change them.</p>}
-      {canWrite && <Panel title="Create Discount" description="Automatic discounts are reflected in storefront prices calculated by the server; the strongest offer applies and discounts never stack. A coupon discount applies only in checkout quotes where the shopper enters its code.">
+      {canWrite && <Panel title="Create discount" description="Automatic discounts are reflected in storefront prices calculated by the server; the strongest offer applies and discounts never stack. A coupon discount applies only in checkout quotes where the shopper enters its code.">
         <div className="space-y-4">
           <fieldset>
             <legend className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-600">Discount type</legend>
@@ -173,7 +173,7 @@ export function DiscountManager({ canWrite, showToast }: { canWrite: boolean; sh
             </div>
           </fieldset>
           <fieldset>
-            <legend className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-600">Apply To</legend>
+            <legend className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-600">Apply to</legend>
             <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,6rem),1fr))] gap-1">
               {([["ALL", "All"], ["CATEGORY", "Category"], ["SELECTED", "Products"]] as const).map(([value, label]) => (
                 <button
@@ -279,12 +279,12 @@ export function DiscountManager({ canWrite, showToast }: { canWrite: boolean; sh
           </div>
 
           <button type="button" onClick={() => setConfirmCreate(true)} disabled={!canCreate || saving === "create"} className={`w-full ${primaryButtonClass} py-3`}>
-            {saving === "create" ? "Creating…" : "Create Discount"}
+            {saving === "create" ? "Creating…" : "Create discount"}
           </button>
         </div>
       </Panel>}
 
-      <Panel title={`Current Discounts (${discounts.length})`}>
+      <Panel title={`Current discounts (${discounts.length})`}>
         <div className="space-y-3">
           <Feedback message={error} tone="error" />
           {!discounts.length && <p className="py-12 text-center text-sm text-gray-500">No discounts yet.</p>}
@@ -336,7 +336,7 @@ export function DiscountManager({ canWrite, showToast }: { canWrite: boolean; sh
                     </div>
                     <div className="flex items-end">
                       <button type="button" disabled={saving === discount.id} onClick={() => setConfirmStop(discount)} className={`w-full ${dangerButtonClass}`}>
-                        Stop Discount
+                        Stop discount
                       </button>
                     </div>
                   </div>}
@@ -352,7 +352,7 @@ export function DiscountManager({ canWrite, showToast }: { canWrite: boolean; sh
         message={couponCode
           ? `A ${valueLabel} discount for coupon ${couponCode} will be saved. From ${startDate} it applies only to checkout quotes that enter the code.`
           : `A ${valueLabel} discount will be saved and shown to shoppers from ${startDate}.`}
-        confirmLabel="Create Discount"
+        confirmLabel="Create discount"
         onConfirm={() => void create()}
         onCancel={() => setConfirmCreate(false)}
       />
@@ -360,7 +360,7 @@ export function DiscountManager({ canWrite, showToast }: { canWrite: boolean; sh
         open={Boolean(confirmStop)}
         title="Stop this discount?"
         message={confirmStop ? `"${confirmStop.name}" will stop applying immediately.` : undefined}
-        confirmLabel="Stop Discount"
+        confirmLabel="Stop discount"
         tone="danger"
         onConfirm={() => { if (confirmStop) void stop(confirmStop); }}
         onCancel={() => setConfirmStop(null)}

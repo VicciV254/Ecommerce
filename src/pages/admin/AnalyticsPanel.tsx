@@ -75,15 +75,15 @@ export function AnalyticsPanel() {
       <div className="rounded-lg bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h3 className="text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Financial Report</h3>
+            <h3 className="text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Financial report</h3>
             <p className="mt-1 text-xs text-gray-600">Order revenue, cancellations, returns and refunds recorded by the API.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <select aria-label="Report period" value={period} onChange={(event) => setPeriod(event.target.value)} className="rounded-sm border border-light-gray px-3 py-2 text-xs">
               <option value="day">Today</option>
-              <option value="week">This Week</option>
-              <option value="month">This Month</option>
-              <option value="year">This Year</option>
+              <option value="week">This week</option>
+              <option value="month">This month</option>
+              <option value="year">This year</option>
             </select>
             <select aria-label="Download format" value={downloadFormat} onChange={(event) => setDownloadFormat(event.target.value === "excel" ? "excel" : event.target.value === "pdf" ? "pdf" : "csv")} className="rounded-sm border border-light-gray px-3 py-2 text-xs">
               <option value="csv">CSV</option>
@@ -91,7 +91,7 @@ export function AnalyticsPanel() {
               <option value="pdf">PDF</option>
             </select>
             <button type="button" disabled={!rows.length} onClick={handleDownload} className="rounded-sm bg-brand-primary px-3 py-2 text-[10px] font-bold uppercase text-white hover:bg-brand-secondary hover:text-brand-primary disabled:opacity-50">
-              Download Report
+              Download report
             </button>
           </div>
         </div>
@@ -111,7 +111,7 @@ export function AnalyticsPanel() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="rounded-lg bg-white p-6 shadow-sm">
-          <h3 className="mb-1 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Inventory Value by Department</h3>
+          <h3 className="mb-1 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Inventory value by department</h3>
           <p className="mb-5 text-[11px] text-gray-600">Active SKUs at current list price; demo records are excluded.</p>
           {catalog.data ? (
             <>
@@ -138,7 +138,7 @@ export function AnalyticsPanel() {
         </div>
 
         <div className="rounded-lg bg-white p-6 shadow-sm">
-          <h3 className="mb-4 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Report Orders</h3>
+          <h3 className="mb-4 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Report orders</h3>
           <div className="max-h-80 overflow-y-auto text-xs">
             {rows.slice(0, REPORT_PREVIEW_LIMIT).map((row) => (
               <div key={row.orderNumber} className="flex flex-wrap justify-between gap-x-3 border-b border-light-gray py-2">

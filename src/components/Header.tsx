@@ -30,7 +30,7 @@ const NAV_LINKS = [
   { to: "/shop", label: "Shop" },
   { to: "/about", label: "About" },
   { to: "/contact", label: "Contact" },
-  { to: "/track", label: "Track Order" },
+  { to: "/track", label: "Track order" },
 ];
 
 export function Header() {
@@ -89,7 +89,7 @@ export function Header() {
         );
       })}
       <Link to={user ? "/account" : loginRoute(route)} onClick={closeDrawer} className={`${drawerLink} text-navy-900 hover:bg-surface-warm`}>
-        {user ? "My Account" : "Sign In / Register"}
+        {user ? "My account" : "Sign in / register"}
       </Link>
     </>
   );

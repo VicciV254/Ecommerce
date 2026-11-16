@@ -66,9 +66,9 @@ export default function CancelOrderModal({ order, onClose, onOrderCancelled, onC
   };
 
   return (
-    <ModalDialog open label="Cancel Order" onClose={close}>
+    <ModalDialog open label="Cancel order" onClose={close}>
       <div className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-2xl bg-surface p-6 text-navy-800 shadow-overlay [overflow-wrap:anywhere]">
-        <h2 className="type-h3 mb-3 text-navy-900">Cancel Order</h2>
+        <h2 className="type-h3 mb-3 text-navy-900">Cancel order</h2>
         <p className="mb-4">{cancellationText(order)}</p>
 
         <div className="mb-4">
@@ -95,7 +95,7 @@ export default function CancelOrderModal({ order, onClose, onOrderCancelled, onC
             disabled={isSubmitting}
             className="min-h-[44px] rounded-sm border border-navy-900 px-4 text-sm font-semibold text-navy-900 transition-colors duration-(--motion-feedback) hover:bg-surface-soft disabled:cursor-not-allowed disabled:border-control disabled:text-muted"
           >
-            Keep Order
+            Keep order
           </button>
           <button
             type="button"
@@ -103,7 +103,7 @@ export default function CancelOrderModal({ order, onClose, onOrderCancelled, onC
             disabled={isSubmitting}
             className="min-h-[44px] rounded-sm bg-error px-4 text-sm font-semibold text-white transition-colors duration-(--motion-feedback) hover:bg-navy-900 disabled:cursor-not-allowed disabled:bg-surface-soft disabled:text-muted"
           >
-            {isSubmitting ? "Cancelling..." : "Cancel Order"}
+            {isSubmitting ? "Cancelling..." : "Cancel order"}
           </button>
         </div>
       </div>

@@ -74,7 +74,7 @@ function EmptyCart({ notices, undo }: { notices?: ReactNode; undo: CartUndo }) {
         <p className="mt-1 text-sm text-gray-500">Browse the shop and find something you love.</p>
         {undo.removal && <div className="mx-auto mt-4 max-w-md text-left"><CartLines views={[]} undo={undo} label="Cart items" /></div>}
         <Link to="/shop" className="mt-6 inline-flex min-h-[44px] items-center rounded-sm bg-brand-primary px-8 text-xs font-bold uppercase tracking-[0.12em] text-white hover:bg-brand-secondary hover:text-brand-primary">
-          Start Shopping
+          Start shopping
         </Link>
       </div>
     </Container>
@@ -108,8 +108,8 @@ function GuestCart() {
       count={cartCount}
       lines={<CartLines views={views} undo={undo} label="Cart items" />}
       summary={(
-        <section aria-labelledby="cart-summary-title" className="space-y-4 rounded-lg bg-white p-5 shadow-sm sm:p-6">
-          <h2 id="cart-summary-title" className={summaryTitle}>Order Summary</h2>
+        <section aria-labelledby="cart-summary-title" className="min-w-0 space-y-4 rounded-lg bg-white p-5 shadow-sm sm:p-6">
+          <h2 id="cart-summary-title" className={summaryTitle}>Order summary</h2>
           <CartEstimateSummary estimate={cartEstimate(views)} pendingFees />
           <Link to={CHECKOUT_SIGN_IN} className={`flex min-h-[44px] items-center justify-center ${primaryActionClass}`}>Sign in to check out</Link>
           <p className="text-center text-sm text-navy-800">
@@ -117,7 +117,7 @@ function GuestCart() {
           </p>
           <p className="text-center text-xs text-muted">Your cart comes with you when you sign in.</p>
           <Link to="/shop" className="flex min-h-[44px] items-center justify-center text-sm text-gray-600 underline-offset-4 hover:text-brand-primary hover:underline">
-            Continue Shopping
+            Continue shopping
           </Link>
         </section>
       )}
@@ -171,8 +171,8 @@ function CartContent({ user }: { user: User }) {
       notices={notices}
       lines={<CartLines views={views} undo={undo} label="Cart items" />}
       summary={(
-        <section aria-labelledby="cart-summary-title" className="rounded-lg bg-white p-5 shadow-sm sm:p-6">
-          <h2 id="cart-summary-title" className={summaryTitle}>Order Summary</h2>
+        <section aria-labelledby="cart-summary-title" className="min-w-0 rounded-lg bg-white p-5 shadow-sm sm:p-6">
+          <h2 id="cart-summary-title" className={summaryTitle}>Order summary</h2>
           <div className="mt-4 space-y-5">
             {!quoted && <CartEstimateSummary estimate={cartEstimate(views)} pendingFees={false} />}
             <DeliveryChoices
@@ -198,17 +198,17 @@ function CartContent({ user }: { user: User }) {
           </div>
 
           {canContinue ? (
-            <Link to="/checkout" className={`mt-5 ${primaryActionClass}`}>Continue to Checkout</Link>
+            <Link to="/checkout" className={`mt-5 ${primaryActionClass}`}>Continue to checkout</Link>
           ) : (
             <>
               <button type="button" disabled aria-describedby="checkout-unavailable" className={`mt-5 ${primaryActionClass}`}>
-                Continue to Checkout
+                Continue to checkout
               </button>
               <p id="checkout-unavailable" className="mt-2 text-center text-xs text-charcoal">{unavailableReason}</p>
             </>
           )}
           <Link to="/shop" className="mt-3 block text-center text-[11px] text-gray-600 underline-offset-4 hover:text-brand-primary hover:underline">
-            Continue Shopping
+            Continue shopping
           </Link>
         </section>
       )}

@@ -14,7 +14,16 @@ type PresetSpec = {
 };
 
 export const IMAGE_PRESETS: Readonly<Record<ImagePreset, PresetSpec>> = {
-  card: { widths: [240, 320, 480, 640, 960], fallbackWidth: 480, sizes: "(min-width: 1280px) 300px, (min-width: 768px) 33vw, 50vw" },
+  /**
+   * The full-width product grid (homepage sections, related products, wishlist) in the 1440px container: 2 columns
+   * (32px padding, 12px gap), 3 from 768px (48px padding, 24px of gaps), 4 from 1280px (64px padding, 36px of gaps).
+   * Grids with other columns pass their own `sizes`.
+   */
+  card: {
+    widths: [240, 320, 480, 640, 960],
+    fallbackWidth: 480,
+    sizes: "(min-width: 1440px) 335px, (min-width: 1280px) calc((100vw - 100px) / 4), (min-width: 768px) calc((100vw - 72px) / 3), calc((100vw - 44px) / 2)",
+  },
   thumbnail: { widths: [96, 160, 240], fallbackWidth: 160, sizes: "80px" },
   detail: { widths: [480, 640, 960, 1280, 1600], fallbackWidth: 960, sizes: "(min-width: 1024px) 50vw, 100vw" },
   hero: { widths: [640, 960, 1280, 1920, 2560], fallbackWidth: 1280, sizes: "100vw" },

@@ -166,7 +166,7 @@ test("a second account on the same browser receives nothing from the first", asy
   expect((await shopperState(page, customer.id)).cart).toEqual([polo]);
 
   await page.goto("/#/account");
-  await page.getByRole("button", { name: "Logout" }).click();
+  await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/#\/login$/);
   // Signing out copies nothing into the guest cart.
   expect((await shopperState(page, null)).cart).toEqual([]);
@@ -260,7 +260,7 @@ test("a guest tab left open follows a sign-in made in another tab and never pass
   // Signing out in the second tab signs the first out as well; then another account signs in there.
   await second.bringToFront();
   await second.goto("/#/account");
-  await second.getByRole("button", { name: "Logout" }).click();
+  await second.getByRole("button", { name: "Sign out" }).click();
   await expect(second).toHaveURL(/#\/login$/);
   await expect(banner.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
   await expect(banner.getByRole("button", { name: "Cart", exact: true })).toHaveText("");

@@ -14,7 +14,7 @@ export default function Home() {
       <Container className="py-16">
         <ErrorPanel title="Storefront content is unavailable" message={error ?? "Storefront content could not be loaded."} onRetry={reload}>
           <Link to="/shop" className="rounded-sm border border-brand-primary px-6 py-2.5 text-xs font-bold uppercase tracking-wider text-brand-primary hover:bg-brand-primary hover:text-white">
-            Browse Products
+            Browse products
           </Link>
         </ErrorPanel>
       </Container>

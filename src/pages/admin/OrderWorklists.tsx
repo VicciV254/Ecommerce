@@ -136,7 +136,7 @@ function OrderRow({ order, canWrite, onAction, onOpen }: {
       </p>
       <p className="font-semibold text-brand-primary"><span className="sr-only">Total </span>{formatKES(order.total)}</p>
       <div className="flex flex-wrap items-center gap-1.5">
-        <OrderStatusBadge order={order} />
+        <OrderStatusBadge order={order} audience="staff" />
         <span className="text-xs text-gray-600">{paymentLabel(order)}</span>
         {order.paymentReviewOpen && <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[11px] font-semibold text-warning">Payment review</span>}
         {openReturns > 0 && <span className="rounded-full bg-coral/10 px-2 py-0.5 text-[11px] font-semibold text-coral">{openReturns} open {openReturns === 1 ? "return" : "returns"}</span>}

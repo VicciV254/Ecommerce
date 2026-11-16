@@ -76,7 +76,7 @@ async function register(page: Page) {
 async function enterCode(page: Page) {
   const main = page.getByRole("main");
   for (const [index, digit] of [..."123456"].entries()) await main.getByLabel(`Digit ${index + 1} of 6`).fill(digit);
-  await main.getByRole("button", { name: "Verify OTP" }).click();
+  await main.getByRole("button", { name: "Verify code" }).click();
 }
 
 test("creating an account from checkout verifies the email, signs in and returns to checkout with the cart", async ({ page, context }) => {
@@ -224,7 +224,7 @@ test("a signed-in shopper's active orders are tracked from the list and open the
   await expect(page.getByRole("textbox", { name: "Order number" })).toHaveValue(shipped.orderNumber);
 
   await active.getByRole("link", { name: `View details of order ${shipped.orderNumber}` }).click();
-  const receipt = page.getByRole("dialog", { name: "Receipt Details" });
+  const receipt = page.getByRole("dialog", { name: "Receipt details" });
   await expect(receipt).toBeVisible();
   await expect(receipt.getByText(shipped.orderNumber, { exact: true })).toBeVisible();
   await expect(page).toHaveURL(/#\/account\/orders$/);
@@ -248,7 +248,7 @@ test("an order card leads with its summary and next action, and a return is requ
   });
   await page.goto("/#/account/orders");
   const card = page.getByRole("list", { name: "Your orders" }).getByRole("listitem").filter({ hasText: delivered.orderNumber }).first();
-  const next = card.getByRole("button", { name: "Request a Return", exact: true });
+  const next = card.getByRole("button", { name: "Request a return", exact: true });
   // Number, date, total and payment come first, then the next action, then the items.
   const [summaryTop, actionTop, itemsTop] = await Promise.all([
     card.getByText(delivered.orderNumber, { exact: true }).boundingBox(),
@@ -258,7 +258,7 @@ test("an order card leads with its summary and next action, and a return is requ
   expect(summaryTop!.y).toBeLessThan(actionTop!.y);
   expect(actionTop!.y).toBeLessThan(itemsTop!.y);
   await expect(card.getByText("Payment: M-Pesa (paid)")).toBeVisible();
-  expect(await card.getByRole("button").first().textContent()).toBe("Request a Return");
+  expect(await card.getByRole("button").first().textContent()).toBe("Request a return");
 
   await next.click();
   const dialog = page.getByRole("dialog", { name: "Request a return", exact: true });
@@ -272,7 +272,7 @@ test("an order card leads with its summary and next action, and a return is requ
     body: { reason: "DAMAGED", lines: [{ orderItemId: delivered.items[0].id, quantity: 1 }] },
   }]);
   // The server no longer offers a return for this order, so neither does the card.
-  await expect(card.getByRole("button", { name: "Request a Return", exact: true })).toHaveCount(0);
+  await expect(card.getByRole("button", { name: "Request a return", exact: true })).toHaveCount(0);
 });
 
 /* ------------------------------------------------------------------ */
@@ -303,7 +303,7 @@ function accountSurfaces(page: Page, orders: Awaited<ReturnType<typeof serveOrde
   // The sign-in screens' content panel (the brand band above it is the approved P7.1 lockup, whose trailing letter
   // spacing is deliberately outside its box).
   const authPanel = () => main().getByRole("heading", { level: 1 }).locator("..");
-  const receipt = () => page.getByRole("dialog", { name: "Receipt Details" });
+  const receipt = () => page.getByRole("dialog", { name: "Receipt details" });
   const returnForm = () => page.getByRole("dialog", { name: "Request a return", exact: true });
   return [
     { name: "order cards", scope: main, open: async () => {
@@ -312,12 +312,12 @@ function accountSurfaces(page: Page, orders: Awaited<ReturnType<typeof serveOrde
     } },
     { name: "receipt details", scope: receipt, open: async () => {
       await page.goto("/#/account/orders");
-      await main().getByRole("listitem").filter({ hasText: orders.payable.orderNumber }).getByRole("button", { name: /^Pay Now/ }).click();
+      await main().getByRole("listitem").filter({ hasText: orders.payable.orderNumber }).getByRole("button", { name: /^Pay now/ }).click();
       await expect(receipt().getByRole("button", { name: "Send M-Pesa prompt" })).toBeVisible();
     } },
     { name: "return request", scope: returnForm, open: async () => {
       await page.goto("/#/account/orders");
-      await main().getByRole("listitem").filter({ hasText: orders.delivered.orderNumber }).getByRole("button", { name: "Request a Return", exact: true }).click();
+      await main().getByRole("listitem").filter({ hasText: orders.delivered.orderNumber }).getByRole("button", { name: "Request a return", exact: true }).click();
       await expect(returnForm().getByRole("combobox", { name: "Reason for return" })).toBeVisible();
     } },
     { name: "profile", scope: main, open: async () => {
@@ -409,7 +409,7 @@ test("focus rings in the account, tracking and return screens are whole and neve
   };
   const main = () => page.getByRole("main");
   await visit("order cards", () => main().getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Home" }), 16,
-    ["Profile", "Orders", "Addresses", "Logout", "Track an order", "Details", "Request a Return"]);
+    ["Profile", "Orders", "Addresses", "Sign out", "Track an order", "Details", "Request a return"]);
   await visit("return request", () => page.getByRole("dialog", { name: "Request a return", exact: true }).getByRole("button", { name: "Close" }), 9,
     ["Reason for return", "Comment (optional)", "Submit return request"]);
   await visit("addresses with the form open", () => main().getByRole("heading", { level: 1 }), 8, ["Street address", "County", "Save address", "Cancel"]);

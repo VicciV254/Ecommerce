@@ -2,7 +2,7 @@ import type { User } from "../api/auth";
 import type { Order } from "../api/orders";
 import { describeVariant } from "../store/catalogModel";
 import { DELIVERY_LABELS } from "../store/checkoutModel";
-import { customerName, deliveryAddress, orderStatusLabel, paymentLabel } from "../store/orderCopy";
+import { customerName, deliveryAddress, paymentLabel, shopperOrderStatusLabel } from "../store/orderCopy";
 import { BRAND_NAVY, brandMarkSvg } from "./brandMark";
 import { formatDateTime, formatKES } from "./format";
 
@@ -82,7 +82,7 @@ export function receiptDocument(order: Order, user: User | null, brandName: stri
       </header>
       <section class="facts">
         ${fact("Date", escapeHtml(formatDateTime(order.createdAt)))}
-        ${fact("Status", escapeHtml(orderStatusLabel(order)))}
+        ${fact("Order status", escapeHtml(shopperOrderStatusLabel(order)))}
         ${fact("Payment", escapeHtml(paymentLabel(order)))}
         ${fact("Customer", lines(customerName(user), user?.email, user?.phone))}
         ${fact("Delivery", lines(DELIVERY_LABELS[order.deliveryMethod], deliveryAddress(order)))}

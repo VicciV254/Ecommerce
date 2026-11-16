@@ -79,7 +79,7 @@ const savedReturnIntents = (page: Page) =>
 
 async function openReturnDialog(page: Page) {
   await page.goto("/#/account/orders");
-  await page.getByRole("button", { name: "Request a Return" }).click();
+  await page.getByRole("button", { name: "Request a return" }).click();
   const dialog = page.getByRole("dialog", { name: "Request a return" });
   await expect(dialog.getByRole("button", { name: "Close" })).toBeFocused();
   return dialog;
@@ -131,7 +131,7 @@ test("a customer returns selected items from a delivered order with one request 
   await expect(page.getByText(`Return ${RETURN_NUMBER} requested. We will email you when staff have reviewed it. Nothing is refunded until the items are received and checked.`)).toBeVisible();
   await expect(page.getByText(`Return ${RETURN_NUMBER}: Awaiting review.`)).toBeVisible();
   // One linen shirt is still returnable, so the trigger remains and gets focus back.
-  await expect(page.getByRole("button", { name: "Request a Return" })).toBeFocused();
+  await expect(page.getByRole("button", { name: "Request a return" })).toBeFocused();
   expect(requests).toEqual([{
     key: expect.stringMatching(REQUEST_KEY),
     body: {
@@ -171,14 +171,14 @@ test("keyboard users reach every receipt disclosure, and Tab wraps within the re
   await servePaymentOverview(context, settled);
   await page.goto("/#/account/orders");
   await page.getByRole("button", { name: "Details", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "Receipt Details" });
+  const dialog = page.getByRole("dialog", { name: "Receipt details" });
   const close = dialog.getByRole("button", { name: "Close" });
-  const print = dialog.getByRole("button", { name: "Print Receipt" });
+  const print = dialog.getByRole("button", { name: "Print receipt" });
   const disclosure = (title: string) => dialog.locator("summary", { hasText: title });
   // Chromium starts on the receipt's scrollable region, which holds every control.
   await expect(dialog.locator(":focus")).toHaveCount(1);
 
-  // The disclosures follow Print Receipt, so they are the last stops before focus wraps to Close.
+  // The disclosures follow Print receipt, so they are the last stops before focus wraps to Close.
   for (const stop of [disclosure("Refunds"), disclosure("Returns"), disclosure("Progress"), print]) {
     await page.keyboard.press("Shift+Tab");
     await expect(stop).toBeFocused();

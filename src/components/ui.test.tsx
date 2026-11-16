@@ -17,7 +17,7 @@ describe("catalog images", () => {
     render(<MediaImage asset={uploaded} alt="Fallback name" />);
     const image = screen.getByRole("img", { name: "Linen shirt, front" });
     expect(widthsOf(image)).toEqual([240, 320, 480, 640, 960]);
-    expect(image.getAttribute("sizes")).toBe("(min-width: 1280px) 300px, (min-width: 768px) 33vw, 50vw");
+    expect(image.getAttribute("sizes")).toBe("(min-width: 1440px) 335px, (min-width: 1280px) calc((100vw - 100px) / 4), (min-width: 768px) calc((100vw - 72px) / 3), calc((100vw - 44px) / 2)");
     expect(image.getAttribute("src")).toContain("/upload/c_limit,w_480/q_auto/f_auto/v1763200000/");
     expect([image.getAttribute("width"), image.getAttribute("height")]).toEqual(["2400", "3000"]);
     expect(image.getAttribute("decoding")).toBe("async");

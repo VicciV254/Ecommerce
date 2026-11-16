@@ -59,7 +59,7 @@ export function StorefrontSections({ settings, mediaById, showProblems = false }
           <h2 className="type-h3 text-navy-900">No storefront sections are published yet</h2>
           <p className="mt-2 text-muted">Products remain available in the shop.</p>
           <Link to="/shop" className="mt-5 inline-flex min-h-[44px] items-center rounded-sm bg-navy-900 px-6 text-sm font-semibold text-white hover:bg-gold-500 hover:text-navy-900">
-            Browse Products
+            Browse products
           </Link>
         </div>
       </Container>

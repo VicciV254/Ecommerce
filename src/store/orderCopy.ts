@@ -41,6 +41,20 @@ export function orderStatusLabel(order: Pick<Order, "status" | "deliveryMethod">
   return order.status === "DELIVERED" && order.deliveryMethod === "STORE_PICKUP" ? "Collected" : ORDER_STATUS_LABELS[order.status];
 }
 
+/** What a pending order waits for, by payment state; money already refunded is neither awaited nor ready to prepare. */
+const SHOPPER_PENDING_LABELS: Record<PaymentStatus, string> = {
+  PENDING: "Awaiting payment",
+  FAILED: "Awaiting payment",
+  PAID: "Waiting to be prepared",
+  PARTIALLY_REFUNDED: ORDER_STATUS_LABELS.PENDING,
+  REFUNDED: ORDER_STATUS_LABELS.PENDING,
+};
+
+/** The status shoppers read: a pending order says whether it awaits payment or preparation. Staff keep `orderStatusLabel`. */
+export function shopperOrderStatusLabel(order: Pick<Order, "status" | "deliveryMethod" | "paymentStatus">) {
+  return order.status === "PENDING" ? SHOPPER_PENDING_LABELS[order.paymentStatus] : orderStatusLabel(order);
+}
+
 /** Semantic text-on-tint pairs from the design system (each at least 4.5:1); gold never stands for progress. */
 export const ORDER_STATUS_TONES: Record<OrderStatus, string> = {
   PENDING: "bg-warning-tint text-warning",
@@ -50,6 +64,14 @@ export const ORDER_STATUS_TONES: Record<OrderStatus, string> = {
   DELIVERED: "bg-success-tint text-success",
   CANCELLED: "bg-error-tint text-error",
 };
+
+/**
+ * The badge tone shoppers see, matching `shopperOrderStatusLabel`: a paid order waiting to be prepared is progress (the
+ * in-progress tone), so only an order that needs something from the shopper keeps the warning tone.
+ */
+export function shopperOrderStatusTone(order: Pick<Order, "status" | "paymentStatus">) {
+  return order.status === "PENDING" && order.paymentStatus === "PAID" ? ORDER_STATUS_TONES.PROCESSING : ORDER_STATUS_TONES[order.status];
+}
 
 /** `REFUNDED` and `PARTIALLY_REFUNDED` are set only by refunds confirmed as sent. */
 export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {

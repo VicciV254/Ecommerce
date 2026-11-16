@@ -88,7 +88,7 @@ export default function Contact() {
                 disabled={sending}
                 className="inline-flex min-h-[44px] items-center rounded-sm bg-navy-900 px-6 text-xs font-bold uppercase tracking-[0.12em] text-white transition-colors duration-(--motion-feedback) hover:bg-gold-500 hover:text-navy-900 disabled:cursor-not-allowed disabled:bg-surface-soft disabled:text-muted"
               >
-                {sending ? "Sending..." : "Send Message"}
+                {sending ? "Sending..." : "Send message"}
               </button>
             </form>
           )}

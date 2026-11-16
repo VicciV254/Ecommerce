@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 import type { Order, OrderFulfilment, TrackingEvent } from "../api/orders";
-import { ACTOR_LABELS, ORDER_STATUS_TONES, orderStatusLabel } from "../store/orderCopy";
+import { ACTOR_LABELS, ORDER_STATUS_TONES, orderStatusLabel, shopperOrderStatusLabel, shopperOrderStatusTone } from "../store/orderCopy";
 import { formatDateTime, formatKES } from "../utils/format";
 
 /** Wider layouts open every section by default; phones start collapsed. */
@@ -39,10 +39,15 @@ export function Disclosure({ title, summary, defaultOpen = false, id, children }
   );
 }
 
-export function OrderStatusBadge({ order }: { order: Pick<Order, "status" | "deliveryMethod"> }) {
+/** Staff read the canonical status; shoppers read what a pending order waits for. Every caller says which it is. */
+export function OrderStatusBadge({ order, audience }: {
+  order: Pick<Order, "status" | "deliveryMethod" | "paymentStatus">;
+  audience: "shopper" | "staff";
+}) {
+  const shopper = audience === "shopper";
   return (
-    <span className={`inline-block rounded-full px-3 py-1 text-sm font-semibold ${ORDER_STATUS_TONES[order.status]}`}>
-      {orderStatusLabel(order)}
+    <span className={`inline-block rounded-full px-3 py-1 text-sm font-semibold ${shopper ? shopperOrderStatusTone(order) : ORDER_STATUS_TONES[order.status]}`}>
+      {shopper ? shopperOrderStatusLabel(order) : orderStatusLabel(order)}
     </span>
   );
 }

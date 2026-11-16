@@ -515,7 +515,7 @@ test("after signing out and in as another account in this tab, Payment never sho
   await reserveToPayment(page, reserved);
 
   await page.goto("/#/account");
-  await page.getByRole("button", { name: "Logout" }).click();
+  await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/#\/login$/);
   await signInWithForm(page, otherCustomer);
   await expect(page).toHaveURL(/#\/$/);
@@ -545,7 +545,7 @@ test("when another tab switches account, this tab's Payment step drops the first
 
   const other = await context.newPage();
   await other.goto("/#/account");
-  await other.getByRole("button", { name: "Logout" }).click();
+  await other.getByRole("button", { name: "Sign out" }).click();
   await expect(other).toHaveURL(/#\/login$/);
   await page.bringToFront();
   // This tab follows the sign-out at once: the order is no longer on screen.
@@ -610,7 +610,7 @@ test("a typed address stays in its own tab and account, and is forgotten on sign
 
   // An account switch made in the other tab forgets this tab's draft, and the new account sees an empty form.
   await other.goto("/#/account");
-  await other.getByRole("button", { name: "Logout" }).click();
+  await other.getByRole("button", { name: "Sign out" }).click();
   await signInWithForm(other, second);
   await expect(other).toHaveURL(/#\/$/);
   await page.bringToFront();
@@ -621,7 +621,7 @@ test("a typed address stays in its own tab and account, and is forgotten on sign
   await street(page).fill("99 Second Street");
   expect(JSON.parse((await draftIn(page))!)).toMatchObject({ owner: second.id });
   await page.goto("/#/account");
-  await page.getByRole("button", { name: "Logout" }).click();
+  await page.getByRole("button", { name: "Sign out" }).click();
   expect(await draftIn(page)).toBeNull();
   await page.goto("/#/login?returnTo=%2Fcheckout");
   await signInWithForm(page, newcomer);

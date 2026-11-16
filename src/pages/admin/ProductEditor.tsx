@@ -280,10 +280,10 @@ function ProductForm({ product, canWrite, onClose, onSaved, onDelete }: EditorPr
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button type="button" onClick={() => void save()} disabled={saving} className={primaryButtonClass}>
-              {saving ? "Saving…" : "Save Product"}
+              {saving ? "Saving…" : "Save product"}
             </button>
             {onDelete && <button type="button" onClick={() => confirmLeave(onDelete)} className={dangerButtonClass}>Delete</button>}
-            <button type="button" aria-label="Close product editor" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-warm-beige">
+            <button type="button" aria-label="Close product editor" onClick={onClose} className="flex size-[44px] shrink-0 items-center justify-center rounded-full hover:bg-warm-beige">
               <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
             </button>
           </div>

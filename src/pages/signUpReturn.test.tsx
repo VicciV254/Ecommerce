@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { AxiosError, AxiosHeaders } from "axios";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import Login from "./Login";
 import Register from "./Register";
@@ -31,7 +32,7 @@ function enterCode() {
   for (const [index, digit] of [..."123456"].entries()) {
     fireEvent.change(screen.getByLabelText(`Digit ${index + 1} of 6`), { target: { value: digit } });
   }
-  fireEvent.click(screen.getByRole("button", { name: "Verify OTP" }));
+  fireEvent.click(screen.getByRole("button", { name: "Verify code" }));
 }
 
 beforeEach(() => {
@@ -102,5 +103,26 @@ describe("sign-up returns to the original intent", () => {
     fireEvent.change(screen.getByLabelText("Password"), { target: { value: "correct horse" } });
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
     await waitFor(() => expect(current()).toEqual({ path: "/verify-email", params: { email: EMAIL, returnTo: "/checkout" } }));
+  });
+});
+
+describe("verification wording", () => {
+  /** The verification API's 400 answer, as it words it. */
+  const refusal = (error: string) => {
+    const config = { headers: new AxiosHeaders() };
+    return new AxiosError("Bad Request", "ERR_BAD_REQUEST", config, undefined, { status: 400, statusText: "Bad Request", data: { error }, headers: new AxiosHeaders(), config });
+  };
+
+  it.each([
+    ["Invalid OTP. 4 attempt(s) remaining.", "Invalid code. 4 attempt(s) remaining."],
+    ["OTP expired. Request a new code.", "Code expired. Request a new code."],
+    ["Enter the 6-digit OTP code", "Enter the 6-digit code"],
+  ])("shows the API's %j as %j, never saying OTP", async (api, shown) => {
+    mocks.verifyOtp.mockRejectedValue(refusal(api));
+    window.location.hash = `#/verify-email?email=${encodeURIComponent(EMAIL)}`;
+    render(<VerifyEmail />);
+    enterCode();
+    expect((await screen.findByRole("alert")).textContent).toBe(shown);
+    expect(document.body.textContent).not.toMatch(/\bOTP\b/);
   });
 });

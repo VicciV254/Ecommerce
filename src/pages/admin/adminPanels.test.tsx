@@ -131,9 +131,9 @@ describe("admin catalog panels", () => {
     fireEvent.click(screen.getByRole("button", { name: "15%" }));
     fireEvent.change(screen.getByLabelText("Start"), { target: { value: "2026-11-01" } });
     fireEvent.change(screen.getByLabelText("End (inclusive)"), { target: { value: "2026-11-07" } });
-    fireEvent.click(screen.getByRole("button", { name: "Create Discount" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create discount" }));
     const dialog = screen.getByRole("dialog", { name: "Create this discount?" });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Create Discount" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create discount" }));
     await waitFor(() => expect(admin.reload).toHaveBeenCalled());
     expect(admin.api.createDiscount).toHaveBeenCalledWith({
       name: "Men sale", type: "PERCENTAGE", value: 15, applyTo: "CATEGORY", targetIds: ["cat-men"],
@@ -164,12 +164,12 @@ describe("admin catalog panels", () => {
     const code = screen.getByLabelText("Coupon code (optional)");
     fireEvent.change(code, { target: { value: "bad code" } });
     expect(screen.getByRole("alert").textContent).toBe("Use 3–40 letters, numbers, hyphens or underscores.");
-    expect(screen.getByRole("button", { name: "Create Discount" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Create discount" }).hasAttribute("disabled")).toBe(true);
     fireEvent.change(code, { target: { value: " linen-20 " } });
-    fireEvent.click(screen.getByRole("button", { name: "Create Discount" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create discount" }));
     const dialog = screen.getByRole("dialog", { name: "Create this discount?" });
     expect(within(dialog).getByText(/applies only to checkout quotes that enter the code/)).toBeTruthy();
-    fireEvent.click(within(dialog).getByRole("button", { name: "Create Discount" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create discount" }));
     await waitFor(() => expect(admin.reload).toHaveBeenCalled());
     expect(admin.api.createDiscount).toHaveBeenCalledWith(expect.objectContaining({ type: "PERCENTAGE", value: 10, couponCode: "LINEN-20" }));
 
@@ -204,8 +204,8 @@ describe("admin catalog panels", () => {
     fireEvent.change(screen.getByLabelText("Fixed amount (KES)"), { target: { value: "150.25" } });
     fireEvent.change(screen.getByLabelText("Coupon code (optional)"), { target: { value: "save150" } });
     expect(screen.getByText(/deducted once from eligible merchandise/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Create Discount" }));
-    fireEvent.click(within(screen.getByRole("dialog", { name: "Create this discount?" })).getByRole("button", { name: "Create Discount" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create discount" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Create this discount?" })).getByRole("button", { name: "Create discount" }));
     await waitFor(() => expect(admin.api.createDiscount).toHaveBeenCalledWith(expect.objectContaining({
       type: "FIXED", value: 150.25, couponCode: "SAVE150",
     })));
@@ -221,9 +221,9 @@ describe("admin catalog panels", () => {
     await waitFor(() => expect(admin.api.updateDiscount).toHaveBeenCalledWith("disc-fixed", expect.objectContaining({
       type: "FIXED", value: 250.75, couponCode: "FIXED150",
     })));
-    await waitFor(() => expect(within(card).getByRole("button", { name: "Stop Discount" }).hasAttribute("disabled")).toBe(false));
-    fireEvent.click(within(card).getByRole("button", { name: "Stop Discount" }));
-    fireEvent.click(within(screen.getByRole("dialog", { name: "Stop this discount?" })).getByRole("button", { name: "Stop Discount" }));
+    await waitFor(() => expect(within(card).getByRole("button", { name: "Stop discount" }).hasAttribute("disabled")).toBe(false));
+    fireEvent.click(within(card).getByRole("button", { name: "Stop discount" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Stop this discount?" })).getByRole("button", { name: "Stop discount" }));
     await waitFor(() => expect(admin.api.deleteDiscount).toHaveBeenCalledWith("disc-fixed"));
   });
 
@@ -260,7 +260,7 @@ describe("admin catalog panels", () => {
     fireEvent.click(screen.getByRole("link", { name: "Back to editor" }));
     expect((await screen.findByLabelText<HTMLInputElement>("Store name")).value).toBe("Apex Cart Draft");
 
-    fireEvent.click(screen.getByRole("button", { name: "Save Draft" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
     expect(await screen.findByText("The storefront changed. Reload before saving your draft.")).toBeTruthy();
     expect(admin.api.saveStorefrontDraft).toHaveBeenCalledWith(5, expect.objectContaining({ brand: expect.objectContaining({ name: "Apex Cart Draft" }) }));
     expect(admin.api.publishStorefront).not.toHaveBeenCalled();
@@ -301,11 +301,11 @@ describe("admin catalog panels", () => {
 
     fireEvent.change(screen.getByLabelText("Store name"), { target: { value: "Apex Cart Repair" } });
     expect(screen.getByText('Campaign "Launch week" desktop image (media-missing) is unavailable; choose another image.')).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Save Draft" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Save draft" }).hasAttribute("disabled")).toBe(true);
 
     fireEvent.change(desktop, { target: { value: standalone.id } });
     expect(screen.queryByText("Unavailable media references")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Save Draft" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
     await waitFor(() => expect(admin.api.saveStorefrontDraft).toHaveBeenCalledTimes(1));
     expect(admin.api.saveStorefrontDraft.mock.calls[0][1].campaigns[0].desktopMediaId).toBe(standalone.id);
     expect(await screen.findByText("Draft saved. Shoppers still see the published version.")).toBeTruthy();
@@ -329,6 +329,6 @@ describe("admin catalog panels", () => {
     await screen.findByLabelText("Store name");
     fireEvent.click(screen.getByRole("button", { name: "+ products" }));
     expect(screen.getByText('"Selected products" needs at least one product.')).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Save Draft" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Save draft" }).hasAttribute("disabled")).toBe(true);
   });
 });

@@ -118,7 +118,7 @@ test("a lost prompt response is resumed from order history with the identical re
   await page.goto("/#/account/orders");
   await page.reload();
   await page.getByRole("button", { name: "Details", exact: true }).click();
-  const resumed = page.getByRole("dialog", { name: "Receipt Details" }).getByRole("region", { name: "Pay with M-Pesa" });
+  const resumed = page.getByRole("dialog", { name: "Receipt details" }).getByRole("region", { name: "Pay with M-Pesa" });
   const retry = resumed.getByRole("button", { name: "Retry the same request" });
   await expect(retry).toBeVisible();
   expect(prompts).toHaveLength(1);
@@ -177,15 +177,15 @@ test("cancelling from an open receipt immediately removes payment initiation wit
   page.on("request", (request) => { if (new URL(request.url()).pathname === "/api/mpesa/stk-push") prompts.push(request.method()); });
   await page.goto("/#/account/orders");
   await page.getByRole("button", { name: "Details", exact: true }).click();
-  const receipt = page.getByRole("dialog", { name: "Receipt Details" });
+  const receipt = page.getByRole("dialog", { name: "Receipt details" });
   await expect(receipt.getByRole("button", { name: "Send M-Pesa prompt" })).toBeVisible();
-  await receipt.getByRole("button", { name: "Cancel Order", exact: true }).click();
-  await page.getByRole("dialog", { name: "Cancel Order", exact: true }).getByRole("button", { name: "Cancel Order", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "Cancel Order", exact: true })).toHaveCount(0);
+  await receipt.getByRole("button", { name: "Cancel order", exact: true }).click();
+  await page.getByRole("dialog", { name: "Cancel order", exact: true }).getByRole("button", { name: "Cancel order", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Cancel order", exact: true })).toHaveCount(0);
   await expect(receipt).toBeVisible();
   await expect(receipt.getByText("This order is no longer payable.")).toBeVisible();
   await expect(receipt.getByRole("button", { name: "Send M-Pesa prompt" })).toHaveCount(0);
-  await expect(receipt.getByRole("button", { name: "Cancel Order", exact: true })).toHaveCount(0);
+  await expect(receipt.getByRole("button", { name: "Cancel order", exact: true })).toHaveCount(0);
   expect(prompts).toEqual([]);
 });
 
@@ -270,7 +270,7 @@ test("the payment panel stacks on phones, sits beside the amount from 768px and 
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/#/account/orders");
     await page.getByRole("button", { name: "Details", exact: true }).click();
-    const receipt = page.getByRole("dialog", { name: "Receipt Details" });
+    const receipt = page.getByRole("dialog", { name: "Receipt details" });
     const panel = receipt.getByRole("region", { name: "Pay with M-Pesa" });
     const send = panel.getByRole("button", { name: "Send M-Pesa prompt" });
     await expect(send).toBeVisible();
@@ -284,7 +284,7 @@ test("the payment panel stacks on phones, sits beside the amount from 768px and 
     else expect(phone.x, `side by side at ${width}px`).toBeGreaterThanOrEqual(amount.x + amount.width);
     expect(button.height, `touch target at ${width}px`).toBeGreaterThanOrEqual(44);
 
-    const cancel = receipt.getByRole("button", { name: "Cancel Order", exact: true });
+    const cancel = receipt.getByRole("button", { name: "Cancel order", exact: true });
     await cancel.scrollIntoViewIfNeeded();
     await expect(cancel).toBeInViewport();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -304,7 +304,7 @@ test("the payment form and its primary action reflow with doubled text", async (
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/#/account/orders");
   await page.getByRole("button", { name: "Details", exact: true }).click();
-  const panel = page.getByRole("dialog", { name: "Receipt Details" }).getByRole("region", { name: "Pay with M-Pesa" });
+  const panel = page.getByRole("dialog", { name: "Receipt details" }).getByRole("region", { name: "Pay with M-Pesa" });
   await expect(panel.getByRole("button", { name: "Send M-Pesa prompt" })).toBeVisible();
   await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
   const send = panel.getByRole("button", { name: "Send M-Pesa prompt" });

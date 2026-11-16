@@ -13,7 +13,7 @@ const candidates = (srcSet: string | undefined) => (srcSet ?? "").split(", ").ma
 describe("image presets", () => {
   it("match the contract's widths and sizes, with a middle fallback width", () => {
     expect(IMAGE_PRESETS).toEqual({
-      card: { widths: [240, 320, 480, 640, 960], fallbackWidth: 480, sizes: "(min-width: 1280px) 300px, (min-width: 768px) 33vw, 50vw" },
+      card: { widths: [240, 320, 480, 640, 960], fallbackWidth: 480, sizes: "(min-width: 1440px) 335px, (min-width: 1280px) calc((100vw - 100px) / 4), (min-width: 768px) calc((100vw - 72px) / 3), calc((100vw - 44px) / 2)" },
       thumbnail: { widths: [96, 160, 240], fallbackWidth: 160, sizes: "80px" },
       detail: { widths: [480, 640, 960, 1280, 1600], fallbackWidth: 960, sizes: "(min-width: 1024px) 50vw, 100vw" },
       hero: { widths: [640, 960, 1280, 1920, 2560], fallbackWidth: 1280, sizes: "100vw" },
@@ -30,7 +30,7 @@ describe("Cloudinary renditions", () => {
     expect(imageRendition(STORED, "card")).toEqual({
       src: resizedStored(480),
       srcSet: [240, 320, 480, 640, 960].map((width) => `${resizedStored(width)} ${width}w`).join(", "),
-      sizes: "(min-width: 1280px) 300px, (min-width: 768px) 33vw, 50vw",
+      sizes: "(min-width: 1440px) 335px, (min-width: 1280px) calc((100vw - 100px) / 4), (min-width: 768px) calc((100vw - 72px) / 3), calc((100vw - 44px) / 2)",
     });
     expect(candidates(imageRendition(STORED, "thumbnail").srcSet)).toEqual([[resizedStored(96), "96w"], [resizedStored(160), "160w"], [resizedStored(240), "240w"]]);
     expect(imageRendition(STORED, "detail").src).toBe(resizedStored(960));

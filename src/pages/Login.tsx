@@ -1,7 +1,6 @@
 import { FormEvent, useState } from 'react';
 import { Link, navigate, parseRoute, useRoute } from '../router';
 import { useAuth } from '../contexts/AuthContext';
-import { authAPI } from '../api/auth';
 import { PasswordInput } from '../components/PasswordInput';
 import { AuthLayout, authStyles } from '../components/AuthLayout';
 import { registerRoute, safeReturnTo, verifyEmailRoute } from '../store/returnTo';
@@ -15,47 +14,26 @@ export default function Login() {
   const [email, setEmail] = useState(params.get('email') ?? '');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [resending, setResending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const { login } = useAuth();
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    setNotice(null);
 
     const result = await login(email, password);
     if (result.ok) {
       // The sign-in page leaves history: Back from the returned-to page skips it.
       navigate(returnTo, { replace: true });
     } else if (result.requiresOtp) {
+      // Unverified accounts go to the verification page, which owns sending a new code.
       navigate(verifyEmailRoute(result.email || email, returnTo));
     } else {
       setError(result.error || 'Could not sign in. Please check your details.');
     }
 
     setLoading(false);
-  };
-
-  const resendVerification = async () => {
-    if (!email) {
-      setError('Enter your email address first, then request a new OTP.');
-      return;
-    }
-    setResending(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const { data } = await authAPI.resendVerification(email);
-      if (data?.verificationEmailSent === false) throw new Error('Email not sent');
-      setNotice('A fresh OTP has been sent. The previous code is now void.');
-    } catch {
-      setError('Could not send a new OTP. Please try again.');
-    } finally {
-      setResending(false);
-    }
   };
 
   return (
@@ -65,20 +43,7 @@ export default function Login() {
     >
       <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
         {verified && <p role="status" className={`${authStyles.success} text-center`}>Email verified. Sign in to continue.</p>}
-        {error && (
-          <div role="alert" className={`${authStyles.error} text-center`}>
-            <p>{error}</p>
-            <button
-              type="button"
-              onClick={resendVerification}
-              disabled={resending}
-              className="mt-1 inline-flex min-h-[44px] items-center font-bold underline underline-offset-4 disabled:cursor-not-allowed"
-            >
-              {resending ? 'Sending...' : 'Resend OTP'}
-            </button>
-          </div>
-        )}
-        {notice && <p role="status" className={`${authStyles.success} text-center`}>{notice}</p>}
+        {error && <p role="alert" className={`${authStyles.error} text-center`}>{error}</p>}
         <div>
           <label htmlFor="email" className={authStyles.label}>Email address</label>
           <input

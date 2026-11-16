@@ -14,7 +14,7 @@ export default function Wishlist() {
   return (
     <Container className="py-8">
       <Breadcrumb items={[{ label: "Wishlist" }]} />
-      <h1 className="mt-5 font-display text-2xl uppercase tracking-wider text-brand-primary">My Wishlist</h1>
+      <h1 className="mt-5 font-display text-2xl uppercase tracking-wider text-brand-primary">My wishlist</h1>
 
       {saved.length === 0 ? (
         <div className="mt-6 rounded-lg bg-white p-16 text-center shadow-sm">
@@ -24,7 +24,7 @@ export default function Wishlist() {
             to="/shop"
             className="mt-6 inline-block rounded-sm bg-brand-primary px-8 py-3 text-xs font-bold uppercase tracking-[0.12em] text-white hover:bg-brand-secondary hover:text-brand-primary"
           >
-            Browse Products
+            Browse products
           </Link>
         </div>
       ) : catalog.status === "loading" ? (

@@ -69,15 +69,15 @@ export function CategoryForm({
   return (
     <ConfirmModal
       open
-      title={category ? "Edit Category" : "Create New Category"}
-      confirmLabel={saving ? "Saving…" : category ? "Save Category" : "Create Category"}
+      title={category ? "Edit category" : "Create new category"}
+      confirmLabel={saving ? "Saving…" : category ? "Save category" : "Create category"}
       confirmDisabled={!valid || saving}
       size="lg"
       onConfirm={() => void save()}
       onCancel={() => confirmLeave(onClose)}
     >
       <div className="mt-4 space-y-3">
-        <Field label="Category Name">
+        <Field label="Category name">
           {(id) => <input id={id} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Smartphones" className={inputClass} />}
         </Field>
         <Field label="Parent" hint="Leave empty to make a top-level department. Hiding a parent hides everything below it.">
@@ -166,8 +166,8 @@ export function DesignerForm({
   return (
     <ConfirmModal
       open
-      title={designer ? "Edit Designer" : "Create New Designer"}
-      confirmLabel={saving ? "Saving…" : designer ? "Save Designer" : "Create Designer"}
+      title={designer ? "Edit designer" : "Create new designer"}
+      confirmLabel={saving ? "Saving…" : designer ? "Save designer" : "Create designer"}
       confirmDisabled={!valid || saving}
       size="lg"
       onConfirm={() => void save()}
@@ -175,7 +175,7 @@ export function DesignerForm({
     >
       <div className="mt-4 space-y-3">
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Full Name">
+          <Field label="Full name">
             {(id) => <input id={id} value={name} onChange={(event) => setName(event.target.value)} className={inputClass} />}
           </Field>
           <Field label="Handle" hint={handleValid || !handle ? "Lowercase letters, numbers and hyphens." : "Use lowercase letters, numbers and single hyphens."}>

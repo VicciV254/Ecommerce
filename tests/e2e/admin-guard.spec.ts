@@ -77,7 +77,7 @@ test.describe("unsaved-change guard", () => {
     await expect(storeName).toHaveValue(storefrontDraft.settings.brand.name);
     await signOut(page);
     await expect(guard(page)).toHaveCount(0);
-    await expect(page.getByRole("heading", { name: "Admin Login" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Staff sign-in" })).toBeVisible();
   });
 
   test("after the session expires, Sign in again asks first while edits are unsaved, then signs out", async ({ page }) => {
@@ -95,7 +95,7 @@ test.describe("unsaved-change guard", () => {
     await expect(storeName).toHaveValue("Apex Cart Draft");
     await expired.getByRole("button", { name: "Sign in again" }).click();
     await guard(page).getByRole("button", { name: "Discard changes" }).click();
-    await expect(page.getByRole("heading", { name: "Admin Login" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Staff sign-in" })).toBeVisible();
     await expect(page).toHaveURL(/#\/admin$/);
   });
 
@@ -146,7 +146,7 @@ test.describe("unsaved-change guard", () => {
     await expect.poll(() => dialogs).toEqual(["beforeunload"]);
     expect(page.isClosed()).toBe(false);
 
-    await page.getByRole("button", { name: "Save Draft" }).click();
+    await page.getByRole("button", { name: "Save draft" }).click();
     await expect(page.getByText("Draft saved. Shoppers still see the published version.")).toBeVisible();
     expect(saves).toHaveLength(1);
     // Saved: leaving asks nothing.
@@ -210,12 +210,12 @@ test.describe("unsaved-change guard", () => {
     await page.goto("/#/admin/catalog/products");
     await waitForPlace(page, "Products");
     await page.getByRole("button", { name: "+ Department" }).click();
-    const form = page.getByRole("dialog", { name: "Create New Category" });
-    await form.getByRole("textbox", { name: "Category Name" }).fill("Garden");
+    const form = page.getByRole("dialog", { name: "Create new category" });
+    await form.getByRole("textbox", { name: "Category name" }).fill("Garden");
     await form.getByRole("button", { name: "Cancel" }).click();
     await expect(guard(page)).toContainText("Category form has unsaved changes.");
     await guard(page).getByRole("button", { name: "Keep editing" }).click();
-    await expect(form.getByRole("textbox", { name: "Category Name" })).toHaveValue("Garden");
+    await expect(form.getByRole("textbox", { name: "Category name" })).toHaveValue("Garden");
     await page.keyboard.press("Escape");
     await guard(page).getByRole("button", { name: "Discard changes" }).click();
     await expect(form).toHaveCount(0);
@@ -266,7 +266,7 @@ test.describe("storefront draft preview", () => {
     const drafts: string[] = [];
     page.on("request", (request) => { if (request.url().includes("/api/settings/storefront/draft")) drafts.push(request.url()); });
     await page.goto("/#/admin/storefront/preview");
-    await expect(page.getByRole("heading", { name: "Admin Login" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Staff sign-in" })).toBeVisible();
     await expect(page.getByRole("region", { name: "Draft preview" })).toHaveCount(0);
     expect(drafts).toEqual([]);
   });

@@ -47,17 +47,17 @@ describe("order history payments", () => {
     expect(mocks.payments.getOverview).not.toHaveBeenCalled();
 
     fireEvent.click(legacyDetails);
-    const legacyReceipt = screen.getByRole("dialog", { name: "Receipt Details" });
+    const legacyReceipt = screen.getByRole("dialog", { name: "Receipt details" });
     expect(within(legacyReceipt).queryByRole("region", { name: "Pay with M-Pesa" })).toBeNull();
     fireEvent.click(within(legacyReceipt).getByRole("button", { name: "Close" }));
     expect(mocks.payments.getOverview).not.toHaveBeenCalled();
 
     fireEvent.click(placedDetails);
-    const receipt = screen.getByRole("dialog", { name: "Receipt Details" });
+    const receipt = screen.getByRole("dialog", { name: "Receipt details" });
     expect(await within(receipt).findByText("Payment confirmed", undefined, WAIT)).toBeTruthy();
     expect(mocks.payments.getOverview.mock.calls).toEqual([[placed.id]]);
     expect(within(receipt).getByText("M-Pesa (paid)")).toBeTruthy();
-    expect(await within(receipt).findByRole("button", { name: "Cancel & Request Refund" }, WAIT)).toBeTruthy();
+    expect(await within(receipt).findByRole("button", { name: "Cancel & request refund" }, WAIT)).toBeTruthy();
     expect(mocks.orders.get.mock.calls).toEqual([[placed.id]]);
     expect(screen.getByText("Payment: M-Pesa (paid)")).toBeTruthy();
     expect(screen.getByText("Payment: M-Pesa (pending)")).toBeTruthy();
@@ -73,15 +73,15 @@ describe("order history payments", () => {
       }) });
     render(<AccountOrders />);
     fireEvent.click((await screen.findAllByRole("button", { name: "Details" }, WAIT))[0]);
-    const receipt = screen.getByRole("dialog", { name: "Receipt Details" });
+    const receipt = screen.getByRole("dialog", { name: "Receipt details" });
     await within(receipt).findByRole("button", { name: "Send M-Pesa prompt" }, WAIT);
-    fireEvent.click(within(receipt).getByRole("button", { name: "Cancel Order" }));
-    const cancellation = screen.getByRole("dialog", { name: "Cancel Order" });
+    fireEvent.click(within(receipt).getByRole("button", { name: "Cancel order" }));
+    const cancellation = screen.getByRole("dialog", { name: "Cancel order" });
     expect(within(cancellation).getByText(`Cancel order ${placed.orderNumber}? Any items held for it will be released.`)).toBeTruthy();
-    fireEvent.click(within(cancellation).getByRole("button", { name: "Cancel Order" }));
+    fireEvent.click(within(cancellation).getByRole("button", { name: "Cancel order" }));
     expect(await within(receipt).findByText("This order is no longer payable.", undefined, WAIT)).toBeTruthy();
     expect(within(receipt).queryByRole("button", { name: "Send M-Pesa prompt" })).toBeNull();
-    expect(within(receipt).queryByRole("button", { name: "Cancel Order" })).toBeNull();
+    expect(within(receipt).queryByRole("button", { name: "Cancel order" })).toBeNull();
     expect(mocks.orders.cancel.mock.calls).toEqual([[placed.id, {}]]);
     expect(mocks.orders.getMyOrders).toHaveBeenCalledTimes(1);
   });
@@ -94,7 +94,7 @@ describe("order history payments", () => {
     mocks.user = { ...customer, id: "customer-b", email: "b@example.test" };
     mocks.orders.getMyOrders.mockResolvedValue(page([]));
     view.rerender(<AccountOrders />);
-    expect(screen.queryByRole("dialog", { name: "Receipt Details" })).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Receipt details" })).toBeNull();
     expect(await screen.findByText(/No orders yet\./, undefined, WAIT)).toBeTruthy();
     expect(mocks.payments.getOverview.mock.calls).toEqual([[placed.id]]);
   });
@@ -103,6 +103,36 @@ describe("order history payments", () => {
 describe("order actions, returns and refunds", () => {
   const order = (overrides: Partial<CustomerOrder>, number: string) =>
     fixtureCustomerOrder(fixturePendingOrder(fixtureQuote({ id: number.toLowerCase() })), overrides);
+
+  it("says what a pending order is waiting for on its card and in its details, never just \"Pending\"", async () => {
+    const paid = order({ id: "order-paid", orderNumber: "APX-PAID", paymentStatus: "PAID", reservationStatus: "COMMITTED", reservationExpiresAt: null }, "Q-PAID");
+    mocks.orders.getMyOrders.mockResolvedValue(page([placed, paid]));
+    mocks.payments.getOverview.mockResolvedValue({ data: fixturePaymentOverview(paid) });
+    render(<AccountOrders />);
+    const [unpaidItems, paidItems] = await screen.findAllByRole("list", { name: /^Items in order/ }, WAIT);
+    const card = (items: HTMLElement) => items.closest("li")!;
+    expect(within(card(unpaidItems)).getByText("Awaiting payment")).toBeTruthy();
+    expect(within(card(paidItems)).getByText("Waiting to be prepared")).toBeTruthy();
+    expect(within(card(paidItems)).getByText("Payment: M-Pesa (paid)")).toBeTruthy();
+    expect(screen.queryByText("Pending")).toBeNull();
+
+    fireEvent.click(within(card(paidItems)).getByRole("button", { name: "Details" }));
+    const details = screen.getByRole("dialog");
+    expect(within(within(details).getByRole("region", { name: "Order summary" })).getByText("Waiting to be prepared")).toBeTruthy();
+    expect(within(details).queryByText("Pending")).toBeNull();
+  });
+
+  it("colours a paid order waiting to be prepared as progress, and only an unpaid one as needing attention", async () => {
+    const paid = order({ id: "order-paid", orderNumber: "APX-PAID", paymentStatus: "PAID", reservationStatus: "COMMITTED", reservationExpiresAt: null }, "Q-PAID");
+    mocks.orders.getMyOrders.mockResolvedValue(page([placed, paid]));
+    mocks.payments.getOverview.mockResolvedValue({ data: fixturePaymentOverview(paid) });
+    render(<AccountOrders />);
+    const [unpaidItems, paidItems] = await screen.findAllByRole("list", { name: /^Items in order/ }, WAIT);
+    const badge = (items: HTMLElement, label: string) => within(items.closest("li")!).getByText(label).className.split(/\s+/);
+    expect(badge(unpaidItems, "Awaiting payment")).toContain("text-warning");
+    expect(badge(paidItems, "Waiting to be prepared")).toContain("text-info");
+    expect(badge(paidItems, "Waiting to be prepared")).not.toContain("text-warning");
+  });
 
   it("offers only the actions the server permits, and never a customer pickup confirmation", async () => {
     const reviewing = order({ status: "PROCESSING", paymentStatus: "PAID", customerActions: [] }, "Q-REVIEW");
@@ -120,11 +150,11 @@ describe("order actions, returns and refunds", () => {
     expect(cards).toHaveLength(4);
     expect(screen.queryByRole("button", { name: /Cancel/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /Pick ?up|Collected|Confirm/i })).toBeNull();
-    expect(screen.getAllByRole("button", { name: "Request a Return" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Request a return" })).toHaveLength(1);
     expect(screen.getByText(/^The return window closed on /)).toBeTruthy();
     expect(screen.getByText(/^Returns can be requested until /)).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Request a Return" }));
+    fireEvent.click(screen.getByRole("button", { name: "Request a return" }));
     expect(screen.getByRole("dialog", { name: "Request a return" })).toBeTruthy();
   });
 
@@ -142,7 +172,7 @@ describe("order actions, returns and refunds", () => {
     render(<AccountOrders />);
     expect(await screen.findByText("Refund of KES 1,244: Approved — not sent yet.", undefined, WAIT)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Details" }));
-    const receipt = screen.getByRole("dialog", { name: "Receipt Details" });
+    const receipt = screen.getByRole("dialog", { name: "Receipt details" });
     const approved = within(receipt).getByText("Approved — not sent yet").closest("li");
     const confirmed = within(receipt).getByText(/^Sent by M-Pesa on .+ · M-Pesa reference QA12BC34DE$/).closest("li");
     expect(approved?.textContent).toContain("includes the delivery fee");
@@ -165,8 +195,8 @@ describe("order actions, returns and refunds", () => {
     // The first answer was lost; by the time the customer retried, staff had already sent the refund.
     mocks.orders.cancel.mockResolvedValue({ data: { ...paidOrder, status: "CANCELLED", customerActions: [], refunds: [sent] } });
     render(<AccountOrders />);
-    fireEvent.click(await screen.findByRole("button", { name: "Cancel & Request Refund" }, WAIT));
-    fireEvent.click(within(screen.getByRole("dialog", { name: "Cancel Order" })).getByRole("button", { name: "Cancel Order" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel & request refund" }, WAIT));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Cancel order" })).getByRole("button", { name: "Cancel order" }));
     await vi.waitFor(() => expect(notice()).toMatch(/^Order APX-Q-REPLAY cancelled\./), WAIT);
     expect(notice()).toMatch(CONFIRMED_SENT);
     expect(notice()).not.toMatch(/not been sent|not sent/i);
@@ -185,7 +215,7 @@ describe("order actions, returns and refunds", () => {
       status: 200, data: { returnRequest: received, order: { ...delivered, customerActions: [], returns: [received], refunds: [sent] } },
     });
     render(<AccountOrders />);
-    fireEvent.click(await screen.findByRole("button", { name: "Request a Return" }, WAIT));
+    fireEvent.click(await screen.findByRole("button", { name: "Request a return" }, WAIT));
     const dialog = screen.getByRole("dialog", { name: "Request a return" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Return one more Linen Short-Sleeve Shirt" }));
     fireEvent.change(within(dialog).getByRole("combobox", { name: "Reason for return" }), { target: { value: "DAMAGED" } });
@@ -201,9 +231,9 @@ describe("order actions, returns and refunds", () => {
   };
   const processingPaid = (id: string) => order({ status: "PROCESSING", paymentStatus: "PAID", reservationStatus: "COMMITTED", reservationExpiresAt: null }, id);
   const tryToCancel = async () => {
-    fireEvent.click(await screen.findByRole("button", { name: "Cancel & Request Refund" }, WAIT));
-    const dialog = screen.getByRole("dialog", { name: "Cancel Order" });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel Order" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel & request refund" }, WAIT));
+    const dialog = screen.getByRole("dialog", { name: "Cancel order" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel order" }));
     return dialog;
   };
 
@@ -217,7 +247,7 @@ describe("order actions, returns and refunds", () => {
     await vi.waitFor(() => expect(mocks.orders.get.mock.calls).toEqual([[pending.id]]), WAIT);
     expect((await within(dialog).findByRole("alert", undefined, WAIT)).textContent)
       .toBe("This order can no longer be cancelled because it has moved on since this page loaded. The order has been refreshed.");
-    fireEvent.click(within(dialog).getByRole("button", { name: "Keep Order" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Keep order" }));
     expect(screen.queryByRole("button", { name: /Cancel/ })).toBeNull();
     expect(screen.getByText("Dispatched")).toBeTruthy();
   });
@@ -253,7 +283,7 @@ describe("order actions, returns and refunds", () => {
   });
   /** Opens the return dialog with the shirt chosen as damaged; each refused request reloads the order. */
   const startShirtReturn = async () => {
-    fireEvent.click(await screen.findByRole("button", { name: "Request a Return" }, WAIT));
+    fireEvent.click(await screen.findByRole("button", { name: "Request a return" }, WAIT));
     const dialog = screen.getByRole("dialog", { name: "Request a return" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Return one more Linen Short-Sleeve Shirt" }));
     fireEvent.change(within(dialog).getByRole("combobox", { name: "Reason for return" }), { target: { value: "DAMAGED" } });
@@ -275,7 +305,7 @@ describe("order actions, returns and refunds", () => {
 
     await answerReload(reloads[0], shirtOrder);
     expect(screen.getByText(returnNote)).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Request a Return" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Request a return" })).toBeNull();
   });
 
   it("ignores an order reload that answers after a newer reload of the same order", async () => {
@@ -295,7 +325,7 @@ describe("order actions, returns and refunds", () => {
     expect(screen.getByText(returnNote)).toBeTruthy();
     await answerReload(reloads[0], shirtOrder);
     expect(screen.getByText(returnNote)).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Request a Return" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Request a return" })).toBeNull();
   });
 
   it("keeps the list when the same account is refreshed, so an accepted cancellation is not overwritten", async () => {
@@ -306,7 +336,7 @@ describe("order actions, returns and refunds", () => {
       .mockReturnValueOnce(new Promise((resolve) => { answerListReload = (orders) => resolve(page(orders)); }));
     mocks.orders.cancel.mockResolvedValue({ data: { ...paidOrder, status: "CANCELLED", customerActions: [], refunds: [requested] } });
     const view = render(<AccountOrders />);
-    await screen.findByRole("button", { name: "Cancel & Request Refund" }, WAIT);
+    await screen.findByRole("button", { name: "Cancel & request refund" }, WAIT);
 
     // `/me` answers with a fresh copy of the same account, as AuthProvider does on every page load.
     mocks.user = { ...customer };
@@ -319,7 +349,7 @@ describe("order actions, returns and refunds", () => {
       answerListReload([paidOrder]);
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
-    expect.soft(screen.queryByRole("button", { name: "Cancel & Request Refund" })).toBeNull();
+    expect.soft(screen.queryByRole("button", { name: "Cancel & request refund" })).toBeNull();
     expect(mocks.orders.getMyOrders).toHaveBeenCalledTimes(1);
   });
 });
@@ -331,7 +361,7 @@ describe("order links", () => {
     at(`#/account/orders?order=${legacy.id}`);
     render(<AccountOrders />);
     expect(screen.getByRole("heading", { level: 1, name: "Orders and receipts" })).toBeTruthy();
-    const receipt = await screen.findByRole("dialog", { name: "Receipt Details" }, WAIT);
+    const receipt = await screen.findByRole("dialog", { name: "Receipt details" }, WAIT);
     expect(within(receipt).getByText(legacy.orderNumber)).toBeTruthy();
     expect(window.location.hash).toBe("#/account/orders");
     expect(screen.queryByText("That order isn't in your account")).toBeNull();
@@ -358,7 +388,7 @@ describe("order links", () => {
     await act(async () => fail(new AxiosError("offline", "ERR_NETWORK")));
     expect(await screen.findByRole("heading", { level: 2, name: "Orders are unavailable" })).toBeTruthy();
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
-    fireEvent.click(screen.getByRole("button", { name: "Try Again" }));
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText(/No orders yet\./, undefined, WAIT)).toBeTruthy();
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.getByRole("link", { name: "Start shopping" }).getAttribute("href")).toBe("#/shop");

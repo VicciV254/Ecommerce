@@ -282,7 +282,7 @@ describe("payment step from the address", () => {
     expect(await screen.findByRole("heading", { name: "Your order could not be loaded" }, WAIT)).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Order reserved" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "Your cart is empty" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Try Again" }));
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByRole("heading", { level: 2, name: "Order reserved" }, WAIT)).toBeTruthy();
   });
 

@@ -94,7 +94,7 @@ describe("ProductDetail", () => {
     render(<ProductDetail id="mens-fashion-1" />);
     expect(await screen.findByRole("heading", { name: "Product not found" })).toBeTruthy();
     expect(screen.queryByText("Linen Short-Sleeve Shirt")).toBeNull();
-    expect(screen.getByRole("link", { name: "Back to Shop" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Back to shop" })).toBeTruthy();
   });
 
   it("offers retry when the product request fails and nothing canonical is loaded", async () => {
@@ -103,7 +103,7 @@ describe("ProductDetail", () => {
     render(<ProductDetail id={poloShirt.id} />);
     expect(await screen.findByRole("heading", { name: "This product could not be loaded" })).toBeTruthy();
     mocks.getProduct.mockReturnValueOnce(resolved(poloShirt));
-    fireEvent.click(screen.getByRole("button", { name: "Try Again" }));
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByRole("heading", { name: "Cotton Polo Shirt" })).toBeTruthy();
   });
 
@@ -259,6 +259,6 @@ describe("ProductDetail", () => {
     mocks.getProduct.mockImplementation(pending);
     render(<ProductDetail id={linenShirt.id} />);
     expect(screen.getByRole("heading", { name: "Products are unavailable" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Try Again" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
   });
 });

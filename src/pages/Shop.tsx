@@ -12,6 +12,12 @@ import { recallListingScroll, rememberListingScroll } from "../store/listingScro
 
 /** From this width the filters sit beside the results; below it they open in a sheet. */
 const SIDEBAR_QUERY = "(min-width: 1280px)";
+/**
+ * Card images in the results: from 1280px four columns share what the 240px filter column and its 32px gap leave
+ * (64px container padding and 36px of gaps: 372px in all, capped by the 1440px container); below, the card preset's grid.
+ */
+const LISTING_CARD_SIZES =
+  "(min-width: 1440px) 267px, (min-width: 1280px) calc((100vw - 372px) / 4), (min-width: 768px) calc((100vw - 72px) / 3), calc((100vw - 44px) / 2)";
 /** Page links shown on each side of the current page before the rest are shortened to an ellipsis. */
 const PAGE_WINDOW = 1;
 const SKELETON_CARDS = 12;
@@ -46,7 +52,7 @@ export default function Shop({ route }: { route: string }) {
           title={query.cat && !category ? "Category not found" : "Designer not found"}
           message="This link does not match anything in the current catalog. It may have been renamed, hidden or removed."
         >
-          <Link to="/shop" className={primaryAction}>View All Products</Link>
+          <Link to="/shop" className={primaryAction}>View all products</Link>
         </ErrorPanel>
       </Container>
     );
@@ -76,7 +82,7 @@ function ShopListing({ query, category, designer }: { query: ListingQuery; categ
   const total = listing.results.length;
   const closeFilters = () => setShowFilters(false);
 
-  const title = designer?.name ?? category?.name ?? (applied.q ? `Results for "${applied.q}"` : applied.featured ? "Featured products" : "All Products");
+  const title = designer?.name ?? category?.name ?? (applied.q ? `Results for "${applied.q}"` : applied.featured ? "Featured products" : "All products");
   const crumbs = category
     ? [
       { label: "Shop", to: "/shop" },
@@ -140,7 +146,7 @@ function ShopListing({ query, category, designer }: { query: ListingQuery; categ
           {listing.page.length ? (
             <>
               <ul aria-label="Products" className="product-grid">
-                {listing.page.map((product) => <li key={product.id} className="min-w-0"><ProductCard product={product} /></li>)}
+                {listing.page.map((product) => <li key={product.id} className="min-w-0"><ProductCard product={product} imageSizes={LISTING_CARD_SIZES} /></li>)}
               </ul>
               <Pagination listing={listing} query={applied} />
             </>

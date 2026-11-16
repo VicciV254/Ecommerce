@@ -122,7 +122,7 @@ export function Footer() {
         <div className="mt-10 flex flex-col items-center justify-between gap-2 border-t border-white/10 pt-6 text-xs md:flex-row">
           <p>© 2026 {brandName}. All rights reserved.</p>
           <Link to="/admin" className="inline-flex min-h-[44px] items-center transition-colors duration-(--motion-feedback) hover:text-white">
-            Staff Portal
+            Staff portal
           </Link>
         </div>
       </Container>

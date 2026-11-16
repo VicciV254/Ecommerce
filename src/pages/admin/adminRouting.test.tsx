@@ -165,7 +165,7 @@ describe("products in the address", () => {
     expect(window.history.length).toBe(entries + 1);
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit product" })).toBeNull());
 
-    fireEvent.click(screen.getByRole("button", { name: "Add Product" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add product" }));
     expect(window.location.hash).toBe("#/admin/catalog/products?product=new");
     expect(await screen.findByRole("dialog", { name: "Add product" })).toBeTruthy();
   });

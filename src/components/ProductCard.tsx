@@ -16,8 +16,9 @@ const cardAction =
 /**
  * Display prices are the server's per-SKU projection, shown once without client arithmetic. A product with one SKU is
  * added directly (the mini-cart opens); one with several opens Quick View to choose, never a default.
+ * `imageSizes` replaces the card preset's `sizes` in a grid with other columns (the listing beside its filters).
  */
-export function ProductCard({ product }: { product: CatalogProduct }) {
+export function ProductCard({ product, imageSizes }: { product: CatalogProduct; imageSizes?: string }) {
   const { toggleWish, state } = useStore();
   const addLine = useAddToCart();
   const miniCart = useMiniCart();
@@ -66,7 +67,7 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
       {/* Duplicate of the title link for pointer users; hidden from keyboard and screen readers. */}
       <Link to={productRoute} tabIndex={-1} aria-hidden="true" className="relative block">
         <div className="relative aspect-square overflow-hidden bg-warm-beige">
-          <ProductImage product={product} className="transition-transform duration-700 group-hover:scale-110" />
+          <ProductImage product={product} sizes={imageSizes} className="transition-transform duration-700 group-hover:scale-110" />
           {product.isDemo && <DemoBadge className="absolute left-3 top-3 shadow-sm" />}
           {price && price.discountPercent > 0 ? (
             <span className="absolute right-3 top-3 rounded-sm bg-coral px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-sm">

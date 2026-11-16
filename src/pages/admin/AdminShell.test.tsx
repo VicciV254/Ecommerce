@@ -79,12 +79,12 @@ describe("admin entry and sign-in landing", () => {
   it("shows the sign-in for a signed-out deep link, loads no module data, then lands on that route", async () => {
     api.admin.login.mockResolvedValue({ data: { admin: staff("ADMIN"), token: "staff-token", refreshToken: "staff-refresh" } });
     renderAdmin("/admin/orders/orders?view=all");
-    expect(screen.getByRole("heading", { name: "Admin Login" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Staff sign-in" })).toBeTruthy();
     expect(api.catalogAdmin.getSnapshot).not.toHaveBeenCalled();
     expect(api.admin.orders.getAll).not.toHaveBeenCalled();
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "admin@example.test" } });
     fireEvent.change(screen.getByLabelText("Password"), { target: { value: "browser-only-password" } });
-    fireEvent.click(screen.getByRole("button", { name: "Sign In" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
     expect(await screen.findByRole("heading", { level: 1, name: "Orders" }, WAIT)).toBeTruthy();
     expect(window.location.hash).toBe("#/admin/orders/orders?view=all");
     await waitFor(() => expect(api.admin.orders.getAll).toHaveBeenCalledWith(expect.objectContaining({ page: 1 })));
@@ -96,7 +96,7 @@ describe("admin entry and sign-in landing", () => {
     const entries = window.history.length;
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "viewer@example.test" } });
     fireEvent.change(screen.getByLabelText("Password"), { target: { value: "browser-only-password" } });
-    fireEvent.click(screen.getByRole("button", { name: "Sign In" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
     expect(await screen.findByRole("heading", { level: 1, name: "Dashboard" }, WAIT)).toBeTruthy();
     expect(window.location.hash).toBe("#/admin/overview/dashboard");
     expect(window.history.length).toBe(entries);
@@ -108,7 +108,7 @@ describe("admin entry and sign-in landing", () => {
     renderAdmin("/admin/catalog/stock");
     await screen.findByRole("heading", { level: 1, name: "Stock" });
     fireEvent.click(screen.getAllByRole("button", { name: "Sign out" })[0]);
-    expect(await screen.findByRole("heading", { name: "Admin Login" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Staff sign-in" })).toBeTruthy();
     expect(window.location.hash).toBe("#/admin");
   });
 });

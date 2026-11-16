@@ -306,7 +306,7 @@ function ActiveOrdersPanel({ onTrack }: { onTrack: (orderNumber: string) => void
                   <p className="font-mono font-bold text-navy-900">{order.orderNumber}</p>
                   <p className="text-sm text-muted">Placed {formatDateTime(order.createdAt)}</p>
                 </div>
-                <OrderStatusBadge order={order} />
+                <OrderStatusBadge order={order} audience="shopper" />
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2">
                 <button type="button" onClick={() => onTrack(order.orderNumber)} className={outlineButton}>
