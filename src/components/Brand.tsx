@@ -69,11 +69,15 @@ export function BrandLogo({ name, surface, layout = "horizontal", size = "sm", c
   const tone: MarkTone = surface === "light" ? "navy" : mark >= GRADIENT_MIN_SIZE ? "gradient" : "gold";
   const nameColor = surface === "light" ? "text-navy-900" : layout === "stacked" ? "text-gold-400" : "text-white";
   const arrangement = layout === "stacked" ? "flex-col gap-3 text-center" : "gap-2 lg:gap-3";
+  // Centred (stacked) names cancel their trailing letter-spacing so they sit centred; a horizontal name doesn't need
+  // to, and a negative margin there would poke out of a row that wraps the name.
+  const trailing = layout === "stacked" ? "-mr-[0.14em]" : "";
   return (
-    <span className={`inline-flex items-center ${arrangement} ${className}`}>
+    // A store name of any length (the API allows 100 characters) wraps between words inside the space it is given,
+    // so the lockup never widens its row or the page, including with enlarged text.
+    <span className={`inline-flex min-w-0 max-w-full items-center ${arrangement} ${className}`}>
       <BrandMark size={mark} tone={tone} className={markGrowth} />
-      {/* The negative end margin cancels the trailing letter-spacing so the name sits centred. */}
-      <span className={`-mr-[0.14em] font-wordmark uppercase leading-none tracking-[0.14em] ${nameSize} ${nameColor}`}>
+      <span className={`${trailing} min-w-0 max-w-full font-wordmark uppercase leading-none tracking-[0.14em] [overflow-wrap:break-word] ${nameSize} ${nameColor}`}>
         {name}
       </span>
     </span>

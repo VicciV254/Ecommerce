@@ -104,7 +104,8 @@ export function Header() {
       >
         {/* Brand row */}
         <Container className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 py-2 xl:gap-x-6">
-          <Link to="/" className="flex min-h-[44px] shrink-0 items-center">
+          {/* The brand may shrink to the row, so a long store name wraps instead of pushing the page wider. */}
+          <Link to="/" className="flex min-h-[44px] min-w-0 max-w-full items-center">
             <BrandLogo name={brandName} surface="navy" size="md" />
           </Link>
 

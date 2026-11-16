@@ -188,6 +188,13 @@ export type AdminUser = {
 
 export type Subscription = { id: string; email: string; isActive: boolean; createdAt: string };
 
+/** The send endpoint's tally, with one result per active subscriber (`code` names why a send failed). */
+export type PromotionalSendResult = {
+  successful: number;
+  failed: number;
+  results?: { success: boolean; code?: string }[];
+};
+
 export const adminAPI = {
   login: (data: { email: string; password: string }) => api.post<AdminLoginResponse>("/admin/login", data),
 
@@ -251,7 +258,7 @@ export const adminAPI = {
     getAll: async (params: { active?: string }) =>
       api.get<{ subscriptions: Subscription[] }>("/subscriptions/admin/all", staffRequest(params)),
     sendPromotional: async (data: { subject: string; content: string }) =>
-      api.post<{ successful: number; failed: number }>("/subscriptions/admin/send-promotional", data, staffRequest()),
+      api.post<PromotionalSendResult>("/subscriptions/admin/send-promotional", data, staffRequest()),
     delete: async (id: string) =>
       api.delete<{ message: string }>(`/subscriptions/admin/${encodeURIComponent(id)}`, staffRequest()),
   },

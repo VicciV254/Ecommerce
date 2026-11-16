@@ -58,34 +58,41 @@ export function Footer() {
           {done ? (
             <p className="font-semibold text-gold-400">✓ Thank you for subscribing!</p>
           ) : (
-            <form onSubmit={handleSubscribe} className="flex w-full max-w-md">
-              <label htmlFor={emailId} className="sr-only">Email address</label>
-              <input
-                id={emailId}
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Your email address"
-                disabled={loading}
-                className="min-w-0 w-full rounded-l-sm bg-surface px-4 py-2.5 text-navy-900 placeholder:text-muted disabled:bg-surface-soft"
-              />
-              <button
-                type="submit"
-                disabled={loading}
-                className="shrink-0 rounded-r-sm bg-gold-500 px-5 text-xs font-bold uppercase tracking-[0.12em] text-navy-900 transition-colors duration-(--motion-feedback) hover:bg-gold-400 disabled:cursor-not-allowed disabled:bg-on-navy-muted"
-              >
-                {loading ? "Subscribing..." : "Subscribe"}
-              </button>
-            </form>
+            /* Side by side only while the form is at least 20rem wide: rem grows with the text size, so at large text or
+               on very narrow screens the field and button stack and the field keeps the full width. */
+            <div className="@container w-full max-w-md">
+              <form onSubmit={handleSubscribe} className="flex flex-col gap-2 @xs:flex-row @xs:gap-0">
+                <label htmlFor={emailId} className="sr-only">Email address</label>
+                <input
+                  id={emailId}
+                  type="email"
+                  autoComplete="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Your email address"
+                  disabled={loading}
+                  className="min-h-[44px] min-w-0 w-full rounded-sm bg-surface px-4 py-2.5 text-navy-900 placeholder:text-muted disabled:bg-surface-soft @xs:rounded-r-none"
+                />
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="min-h-[44px] shrink-0 rounded-sm bg-gold-500 px-5 text-xs font-bold uppercase tracking-[0.12em] text-navy-900 transition-colors duration-(--motion-feedback) hover:bg-gold-400 disabled:cursor-not-allowed disabled:bg-on-navy-muted @xs:rounded-l-none"
+                >
+                  {loading ? "Subscribing..." : "Subscribe"}
+                </button>
+              </form>
+            </div>
           )}
         </Container>
       </div>
 
       <Container className="py-12">
-        <div className="grid gap-10 [overflow-wrap:anywhere] md:grid-cols-[auto_minmax(0,1fr)] md:gap-14">
-          <Link to="/" className="justify-self-center md:justify-self-start">
+        {/* The brand column is as wide as the lockup needs but never more than 40%, so a long store name wraps instead of
+            leaving the link columns no room. */}
+        <div className="grid gap-10 [overflow-wrap:anywhere] md:grid-cols-[fit-content(40%)_minmax(0,1fr)] md:gap-14">
+          {/* min-w-0: an unbroken store name may break inside the word rather than size the phone column to the word. */}
+          <Link to="/" className="min-w-0 max-w-full justify-self-center md:justify-self-start">
             <BrandLogo name={brandName} surface="navy" layout="stacked" size="xl" />
           </Link>
           <div className="grid grid-cols-2 gap-x-6 gap-y-8 lg:grid-cols-3">
@@ -120,7 +127,7 @@ export function Footer() {
         </div>
 
         <div className="mt-10 flex flex-col items-center justify-between gap-2 border-t border-white/10 pt-6 text-xs md:flex-row">
-          <p>© 2026 {brandName}. All rights reserved.</p>
+          <p className="min-w-0 max-w-full text-center [overflow-wrap:break-word] md:text-left">© 2026 {brandName}. All rights reserved.</p>
           <Link to="/admin" className="inline-flex min-h-[44px] items-center transition-colors duration-(--motion-feedback) hover:text-white">
             Staff portal
           </Link>

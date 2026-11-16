@@ -59,10 +59,11 @@ export function TableRegion({ label, className = "", children }: { label: string
 }
 
 /** Feedback inside the active layer (page or dialog) so it is announced and visible. */
-export function Feedback({ message, tone }: { message: string; tone: "error" | "success" }) {
+export function Feedback({ message, tone }: { message: string; tone: "error" | "warning" | "success" }) {
   if (!message) return null;
-  return tone === "error"
-    ? <p role="alert" className="rounded-md border border-error/30 bg-error/10 p-3 text-xs font-semibold text-error">{message}</p>
+  if (tone === "error") return <p role="alert" className="rounded-md border border-error/30 bg-error/10 p-3 text-xs font-semibold text-error">{message}</p>;
+  return tone === "warning"
+    ? <p role="status" className="rounded-md border border-warning/40 bg-warning-tint p-3 text-xs font-semibold text-warning">{message}</p>
     : <p role="status" className="rounded-md border border-success/30 bg-success/10 p-3 text-xs font-semibold text-success">{message}</p>;
 }
 

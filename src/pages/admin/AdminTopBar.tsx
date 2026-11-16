@@ -122,7 +122,7 @@ export function AdminTopBar({ brandName, location, refreshing, admin, menuOpen, 
               <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
             </svg>
           </button>
-          <div className="mr-auto flex min-h-[44px] flex-wrap items-center gap-x-2.5 gap-y-1">
+          <div className="mr-auto flex min-h-[44px] min-w-0 max-w-full flex-wrap items-center gap-x-2.5 gap-y-1">
             <BrandLogo name={brandName} surface="navy" size="sm" />
             <span className="rounded-sm border border-gold-400 px-1.5 text-xs font-bold leading-5 text-gold-400">Admin</span>
           </div>

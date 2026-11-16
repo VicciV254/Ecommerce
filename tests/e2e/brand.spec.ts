@@ -1,5 +1,9 @@
 import type { Locator, Page } from "@playwright/test";
-import { browserQuote, expect, orderPage, pageOverflow, servePaymentOverview, signInCustomer, test } from "./fixtures";
+import { serveAdminData } from "./adminFixtures";
+import {
+  browserQuote, clippedWithin, expect, orderPage, pageOverflow, publishedStorefront, servePaymentOverview, signInCustomer, signInStaff,
+  storefrontDraft, test,
+} from "./fixtures";
 import { fixturePendingOrder } from "../../src/test-support/checkoutFixtures";
 import { fixtureCustomerOrder } from "../../src/test-support/orderFixtures";
 
@@ -58,6 +62,39 @@ test("the footer carries the stacked gradient lockup in gold on navy", async ({ 
   await expect(lockup.getByText("Apex Cart", { exact: true })).toHaveCSS("color", GOLD_400);
   expect((await lockup.locator("svg").boundingBox())?.width).toBe(isMobile ? 80 : 96);
   await expect(footer).not.toContainText(/maneno|mombasa|digo|784\s*379/i);
+});
+
+test("the footer newsletter field keeps its whole placeholder in view at phone and tablet widths, with 200% text too, and 44px controls", async ({ page, isMobile }) => {
+  test.skip(!isMobile, "Phone and tablet widths are where the field meets the least room.");
+  await page.goto("/#/about");
+  const form = page.getByRole("contentinfo").locator("form").filter({ has: page.getByRole("button", { name: "Subscribe" }) });
+  for (const size of [NARROW_PHONE, { width: 390, height: 844 }, { width: 768, height: 1024 }]) {
+    await page.setViewportSize(size);
+    for (const text of ["100%", "200%"]) {
+      await page.evaluate((value) => { document.documentElement.style.fontSize = value; }, text);
+      const where = `${size.width}px with ${text} text`;
+      const measured = await form.evaluate((element) => {
+        const input = element.querySelector("input")!;
+        const style = getComputedStyle(input);
+        const pen = document.createElement("canvas").getContext("2d")!;
+        pen.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+        const field = input.getBoundingClientRect();
+        const action = element.querySelector("button")!.getBoundingClientRect();
+        return {
+          spare: Math.round(input.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) - pen.measureText(input.placeholder).width),
+          spansForm: Math.abs(field.width - element.getBoundingClientRect().width) < 1,
+          fieldHeight: field.height, buttonHeight: action.height, sideBySide: Math.abs(field.top - action.top) < 1,
+        };
+      });
+      // Where even the whole row is too narrow for the placeholder, the field must at least have all of it.
+      expect.soft(measured.spare >= 0 || measured.spansForm,
+        `${where}: the field shows its whole placeholder (${measured.spare}px spare) or spans the form`).toBe(true);
+      expect.soft(measured.fieldHeight, `${where}: email field height`).toBeGreaterThanOrEqual(44);
+      expect.soft(measured.buttonHeight, `${where}: Subscribe height`).toBeGreaterThanOrEqual(44);
+      if (text === "100%") expect.soft(measured.sideBySide, `${where}: field and Subscribe side by side`).toBe(true);
+      expect.soft(await pageOverflow(page), `${where}: page-level sideways scrolling (px)`).toBeLessThanOrEqual(0);
+    }
+  }
 });
 
 test("old showroom links land on the shop without adding a history entry", async ({ page }) => {
@@ -270,4 +307,55 @@ test("focus and typing inside the sticky header never scroll the page", async ({
   await page.keyboard.press("Escape");
   await expect(page.getByRole("listbox")).toHaveCount(0);
   expect(await scrollY(), "after closing the suggestions").toBe(SCROLLED);
+});
+
+/** A store name the real-backend check published, one at the API's 100-character limit (several words), and one long
+ *  word with no spaces, which must break inside the word. */
+const LONG_STORE_NAMES = [
+  "Apex Cart Real Check",
+  "Apex Cart Home and Living Outlet for Nairobi Mombasa Kisumu Eldoret Nakuru Thika and Malindi Towns",
+  "ApexCartHomeAndLivingOutletNairobi",
+];
+
+/** Every place the lockup shows the store name, and how to find that lockup there. */
+const LOCKUP_PLACES: { place: string; path: string; lockup: (page: Page, name: string) => Locator }[] = [
+  { place: "shopper header", path: "/#/", lockup: (page, name) => page.getByRole("banner").getByRole("link", { name, exact: true }) },
+  { place: "footer", path: "/#/", lockup: (page, name) => page.getByRole("contentinfo").getByText(name, { exact: true }) },
+  { place: "sign-in band", path: "/#/login", lockup: (page, name) => page.getByRole("main").getByText(name, { exact: true }) },
+  { place: "admin top bar", path: "/#/admin/overview/dashboard", lockup: (page, name) => page.getByRole("banner").getByText(name, { exact: true }) },
+  {
+    place: "draft preview",
+    path: "/#/admin/storefront/preview",
+    lockup: (page, name) => page.getByRole("region", { name: "Draft preview" }).getByText(name, { exact: true }).first(),
+  },
+];
+
+test("a long published store name wraps in every lockup at phone and tablet widths with 200% text, never widening the page", async ({ page, context, isMobile }) => {
+  test.skip(!isMobile, "Phone and tablet widths are where a long name meets the least room.");
+  test.setTimeout(120_000);
+  await signInStaff(page, "ADMIN");
+  await serveAdminData(context);
+  for (const name of LONG_STORE_NAMES) {
+    expect(name.length, "the API accepts store names up to 100 characters").toBeLessThanOrEqual(100);
+    const brand = { ...publishedStorefront.settings.brand, name };
+    await context.route("**/api/settings/storefront", (route) =>
+      route.fulfill({ json: { ...publishedStorefront, settings: { ...publishedStorefront.settings, brand } } }));
+    await context.route("**/api/settings/storefront/draft", (route) =>
+      route.fulfill({ json: { ...storefrontDraft, settings: { ...storefrontDraft.settings, brand } } }));
+    for (const size of [NARROW_PHONE, { width: 768, height: 1024 }]) {
+      await page.setViewportSize(size);
+      for (const { place, path, lockup } of LOCKUP_PLACES) {
+        // A fresh document each time, so the overridden settings are the ones loaded.
+        await page.goto("about:blank");
+        await page.goto(path);
+        const shown = lockup(page, name);
+        await expect(shown, `${place}: ${name}`).toBeVisible();
+        await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+        await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        const where = `${place} at ${size.width}px with 200% text, ${name.length}-character name`;
+        expect.soft(await pageOverflow(page), `${where}: page-level sideways scrolling (px)`).toBe(0);
+        expect.soft(await clippedWithin(shown), `${where}: clipped name`).toEqual([]);
+      }
+    }
+  }
 });

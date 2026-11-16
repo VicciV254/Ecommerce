@@ -1,8 +1,35 @@
 import { useEffect, useRef, useState } from "react";
-import { adminAPI, type Subscription } from "../../api/admin";
+import { adminAPI, type PromotionalSendResult, type Subscription } from "../../api/admin";
 import { describeApiError } from "../../api/errors";
-import { TableRegion } from "./shared";
+import { Feedback, TableRegion } from "./shared";
 import { useUnsavedChanges } from "./unsavedChanges";
+
+/** The same inline padding on every cell, so neighbouring headings and values never run together. */
+const headCell = "px-3 py-2";
+const bodyCell = "px-3 py-2";
+/** A row action keeps its short name inside a 44px target. */
+const rowAction = "inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-sm px-[8px] text-error hover:underline";
+
+type SendOutcome = { kind: "sent" | "partial" | "failed"; text: string };
+const subscribers = (count: number) => `${count} subscriber${count === 1 ? "" : "s"}`;
+
+/**
+ * What a send achieved, from the server's tally. Nothing sent is a failure that keeps the draft; a partial send is a
+ * warning (the draft is cleared, so sending again cannot reach the same people twice).
+ */
+function describeSendOutcome({ successful, failed, results }: PromotionalSendResult): SendOutcome {
+  if (!Number.isInteger(successful) || !Number.isInteger(failed)) {
+    return { kind: "failed", text: "The server's answer could not be read, so it is unclear what was sent. Check before sending again. Your draft is kept." };
+  }
+  if (successful > 0 && failed === 0) return { kind: "sent", text: `Email sent to ${subscribers(successful)}` };
+  if (successful > 0) return { kind: "partial", text: `Sent to ${successful} of ${subscribers(successful + failed)}. ${failed} could not be sent.` };
+  const notConfigured = Boolean(results?.length) && results!.every((result) => !result.success && result.code === "MAIL_NOT_CONFIGURED");
+  if (notConfigured) return { kind: "failed", text: "No emails were sent. Email delivery isn't set up on the server yet. Your draft is kept." };
+  return { kind: "failed", text: `No emails were sent. ${failed} could not be sent. Your draft is kept; try again later.` };
+}
+
+/** Server reasons may arrive without a full stop; one is added before another sentence follows. */
+const asSentence = (text: string) => (/[.!?]$/.test(text) ? text : `${text}.`);
 
 export function PromotionsManager({ showToast }: { showToast: (message: string) => void }) {
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
@@ -12,6 +39,7 @@ export function PromotionsManager({ showToast }: { showToast: (message: string) 
   const [subject, setSubject] = useState("");
   const [content, setContent] = useState("");
   const [sending, setSending] = useState(false);
+  const [outcome, setOutcome] = useState<{ tone: "error" | "warning"; text: string } | null>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   useUnsavedChanges(Boolean(subject.trim() || content.trim()), "Email promotion");
 
@@ -48,13 +76,20 @@ export function PromotionsManager({ showToast }: { showToast: (message: string) 
   const sendPromotionalEmail = async () => {
     if (!subject || !content) return showToast("Subject and content are required");
     setSending(true);
+    setOutcome(null);
     try {
       const { data } = await adminAPI.subscriptions.sendPromotional({ subject, content });
-      showToast(`Email sent to ${data.successful} subscribers (${data.failed} failed)`);
+      const result = describeSendOutcome(data);
+      if (result.kind === "failed") {
+        setOutcome({ tone: "error", text: result.text });
+        return;
+      }
+      if (result.kind === "sent") showToast(result.text);
+      else setOutcome({ tone: "warning", text: result.text });
       setSubject("");
       setContent("");
     } catch (error) {
-      showToast(describeApiError(error, "Could not send promotional email."));
+      setOutcome({ tone: "error", text: `${asSentence(describeApiError(error, "Could not send promotional email."))} Your draft is kept.` });
     } finally {
       setSending(false);
     }
@@ -131,6 +166,7 @@ export function PromotionsManager({ showToast }: { showToast: (message: string) 
             {sending ? "Sending..." : `Send to ${subscriptions.length} subscribers`}
           </button>
         </div>
+        {outcome && <Feedback message={outcome.text} tone={outcome.tone} />}
       </div>
     </div>
 
@@ -143,25 +179,25 @@ export function PromotionsManager({ showToast }: { showToast: (message: string) 
           <TableRegion label="Subscriptions table" className="-my-[6px]">
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b border-light-gray text-left text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                  <th className="py-2">Email</th>
-                  <th className="py-2">Status</th>
-                  <th className="py-2">Subscribed</th>
-                  <th className="py-2">Actions</th>
+                <tr className="border-b border-light-gray text-left text-[10px] font-bold uppercase tracking-wider text-muted">
+                  <th className={headCell}>Email</th>
+                  <th className={headCell}>Status</th>
+                  <th className={headCell}>Subscribed</th>
+                  <th className={headCell}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {subscriptions.map((sub) => (
                   <tr key={sub.id} className="border-b border-light-gray">
-                    <td className="py-2">{sub.email}</td>
-                    <td className="py-2">
+                    <td className={bodyCell}>{sub.email}</td>
+                    <td className={bodyCell}>
                       <span className={`rounded-full px-2 py-1 text-xs ${sub.isActive ? 'bg-success/10 text-success' : 'bg-error/10 text-error'}`}>
                         {sub.isActive ? 'Active' : 'Inactive'}
                       </span>
                     </td>
-                    <td className="py-2">{new Date(sub.createdAt).toLocaleDateString()}</td>
-                    <td className="py-2">
-                      <button onClick={() => deleteSubscription(sub.id)} className="text-error hover:underline">Delete</button>
+                    <td className={bodyCell}>{new Date(sub.createdAt).toLocaleDateString()}</td>
+                    <td className={bodyCell}>
+                      <button onClick={() => deleteSubscription(sub.id)} className={rowAction}>Delete</button>
                     </td>
                   </tr>
                 ))}

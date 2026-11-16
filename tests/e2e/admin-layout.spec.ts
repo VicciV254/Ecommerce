@@ -191,3 +191,37 @@ test("customers table: each row's checkbox is named for its customer, and its ac
   expect(problems.overflow, JSON.stringify(problems)).toBeLessThanOrEqual(0);
   expect(problems.scrollers).toEqual([]);
 });
+
+test("subscriptions table: the Customers table's rules too: padded cells, headings apart and at 4.5:1, and a 44px Delete", async ({ page, isMobile }) => {
+  await signInStaff(page, "ADMIN");
+  await serveAdminData(page.context());
+  await page.setViewportSize(isMobile ? { width: 360, height: 800 } : { width: 1280, height: 900 });
+  await page.goto("/#/admin/customers/promotions");
+  await waitForPlace(page, "Email promotions");
+  const table = page.getByRole("region", { name: "Subscriptions table" }).locator("table");
+  const rows = table.locator("tbody tr");
+  await expect(rows.first()).toBeVisible();
+  const padding = await table.locator("th, td").evaluateAll((cells) =>
+    [...new Set(cells.map((cell) => `${getComputedStyle(cell).paddingLeft} ${getComputedStyle(cell).paddingRight}`))]);
+  expect.soft(padding).toEqual(["12px 12px"]);
+  const gaps = await table.locator("thead th").evaluateAll((headings) => {
+    const range = document.createRange();
+    const boxes = headings.map((heading) => {
+      range.selectNodeContents(heading);
+      return range.getBoundingClientRect();
+    });
+    return boxes.slice(1).map((box, index) => box.left - boxes[index].right);
+  });
+  expect.soft(Math.min(...gaps), JSON.stringify(gaps)).toBeGreaterThanOrEqual(20);
+  for (const heading of await table.locator("thead th").all()) {
+    expect.soft(await backdropContrast(page, heading), await heading.innerText()).toBeGreaterThanOrEqual(4.5);
+  }
+  for (const row of await rows.all()) {
+    const box = await row.getByRole("button", { name: "Delete", exact: true }).boundingBox();
+    expect(box, "Delete is rendered").not.toBeNull();
+    expect.soft(Math.min(box?.width ?? 0, box?.height ?? 0), `Delete target ${box?.width}x${box?.height}`).toBeGreaterThanOrEqual(TARGET_SIZE);
+  }
+  const problems = await layoutProblems(page);
+  expect(problems.overflow, JSON.stringify(problems)).toBeLessThanOrEqual(0);
+  expect(problems.scrollers).toEqual([]);
+});
