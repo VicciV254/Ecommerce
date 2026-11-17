@@ -3,13 +3,22 @@ import {
   ADMIN_GROUPS,
   ADMIN_MODULE_IDS,
   ADMIN_PREVIEW_ROUTE,
+  NO_ORDER_FILTERS,
   adminModuleRoute,
   ordersRoute,
   parseAdminPlace,
+  parseOrderFilters,
   parseOrdersParams,
+  parsePeriodParam,
   parseProductParam,
+  parseRefundFilters,
+  parseReturnFilters,
+  parseStockParams,
+  periodRoute,
   productsRoute,
   routePath,
+  stockRoute,
+  type OrderListFilters,
 } from "./adminRoutes";
 
 describe("admin places", () => {
@@ -130,5 +139,119 @@ describe("products parameter", () => {
     expect(productsRoute("new")).toBe("/admin/catalog/products?product=new");
     expect(productsRoute("prod-1")).toBe("/admin/catalog/products?product=prod-1");
     expect(productsRoute("a/b")).toBe("/admin/catalog/products");
+  });
+});
+
+describe("orders filters in the address", () => {
+  const full: OrderListFilters = { delivery: "SAME_DAY", from: "2026-11-01", to: "2026-11-17", status: "CANCELLED", payment: "REFUNDED", page: 3 };
+  const allOrders = "/admin/orders/orders?view=all&delivery=SAME_DAY&from=2026-11-01&to=2026-11-17&status=CANCELLED&payment=REFUNDED&page=3";
+
+  it("reads nothing as no filter, on page 1", () => {
+    for (const view of ["needs-action", "all", "closed"] as const) {
+      expect(parseOrderFilters(view, "/admin/orders/orders")).toEqual({ filters: NO_ORDER_FILTERS, invalid: false });
+    }
+  });
+
+  it("reads every All orders filter and writes it back in one canonical order", () => {
+    expect(parseOrderFilters("all", allOrders)).toEqual({ filters: full, invalid: false });
+    expect(ordersRoute("orders", { view: "all", filters: full })).toBe(allOrders);
+    expect(ordersRoute("orders", { view: "all", filters: full, order: "order-1" })).toBe(`${allOrders}&order=order-1`);
+    expect(parseOrderFilters("all", ordersRoute("orders", { view: "all", filters: full }))).toEqual({ filters: full, invalid: false });
+  });
+
+  it("keeps delivery and dates in every view, and status, payment and page only in All orders", () => {
+    expect(ordersRoute("orders", { filters: full })).toBe("/admin/orders/orders?delivery=SAME_DAY&from=2026-11-01&to=2026-11-17");
+    expect(ordersRoute("orders", { view: "closed", filters: full })).toBe("/admin/orders/orders?view=closed&delivery=SAME_DAY&from=2026-11-01&to=2026-11-17");
+    expect(parseOrderFilters("closed", "/admin/orders/orders?view=closed&from=2026-11-01")).toEqual({
+      filters: { ...NO_ORDER_FILTERS, from: "2026-11-01" }, invalid: false,
+    });
+    for (const stray of ["status=PENDING", "payment=PAID", "page=2"]) {
+      expect(parseOrderFilters("needs-action", `/admin/orders/orders?${stray}`), stray).toEqual({ filters: NO_ORDER_FILTERS, invalid: true });
+    }
+  });
+
+  it("leaves out defaults: page 1 and empty filters", () => {
+    expect(ordersRoute("orders", { view: "all", filters: { ...NO_ORDER_FILTERS } })).toBe("/admin/orders/orders?view=all");
+    expect(ordersRoute("orders", { view: "all", filters: { page: 1 } })).toBe("/admin/orders/orders?view=all");
+    expect(ordersRoute("orders", { view: "all", filters: { from: "2026-11-17" } })).toBe("/admin/orders/orders?view=all&from=2026-11-17");
+  });
+
+  it.each([
+    ["delivery=DRONE"], ["delivery=constructor"], ["from=2026-02-30"], ["to=2026-13-01"], ["from=17-11-2026"], ["to="],
+    ["status=SHIPPED%20"], ["status=toString"], ["payment=paid"], ["page=0"], ["page=-1"], ["page=1.5"], ["page=01"],
+    ["page=abc"], ["page=10001"], ["page="],
+  ])("drops and flags the malformed %s, so it is never sent", (query) => {
+    const parsed = parseOrderFilters("all", `/admin/orders/orders?view=all&${query}`);
+    expect(parsed).toEqual({ filters: NO_ORDER_FILTERS, invalid: true });
+  });
+
+  it("drops a from date after its to date as a pair, and never writes one", () => {
+    expect(parseOrderFilters("all", "/admin/orders/orders?view=all&from=2026-11-18&to=2026-11-17")).toEqual({ filters: NO_ORDER_FILTERS, invalid: true });
+    expect(parseOrderFilters("all", "/admin/orders/orders?view=all&from=2026-11-17&to=2026-11-17").filters).toMatchObject({ from: "2026-11-17", to: "2026-11-17" });
+    expect(ordersRoute("orders", { view: "all", filters: { from: "2026-11-18", to: "2026-11-17" } })).toBe("/admin/orders/orders?view=all");
+  });
+
+  it("never writes a malformed filter value", () => {
+    const filters = { delivery: "DRONE", from: "2026-02-30", to: "x", status: "BOGUS", payment: "BOGUS", page: 0 } as unknown as OrderListFilters;
+    expect(ordersRoute("orders", { view: "all", filters })).toBe("/admin/orders/orders?view=all");
+    expect(ordersRoute("orders", { view: "all", filters: { page: 10_001 } })).toBe("/admin/orders/orders?view=all");
+  });
+});
+
+describe("returns and refunds filters in the address", () => {
+  it("reads a status and a page for each list, with its own statuses", () => {
+    expect(parseReturnFilters("/admin/orders/returns")).toEqual({ filters: { status: null, page: 1 }, invalid: false });
+    expect(parseReturnFilters("/admin/orders/returns?status=REQUESTED&page=2")).toEqual({ filters: { status: "REQUESTED", page: 2 }, invalid: false });
+    expect(parseRefundFilters("/admin/orders/refunds?status=UNRESOLVED")).toEqual({ filters: { status: "UNRESOLVED", page: 1 }, invalid: false });
+    // A refund status is not a return status, and the reverse.
+    expect(parseReturnFilters("/admin/orders/returns?status=PROCESSING")).toEqual({ filters: { status: null, page: 1 }, invalid: true });
+    expect(parseRefundFilters("/admin/orders/refunds?status=RECEIVED")).toEqual({ filters: { status: null, page: 1 }, invalid: true });
+    expect(parseRefundFilters("/admin/orders/refunds?status=FAILED&page=x")).toEqual({ filters: { status: "FAILED", page: 1 }, invalid: true });
+  });
+
+  it("writes status and page, then the open order, and drops statuses from another list", () => {
+    expect(ordersRoute("returns", { records: { status: "APPROVED", page: 2 } })).toBe("/admin/orders/returns?status=APPROVED&page=2");
+    expect(ordersRoute("refunds", { records: { status: "FAILED" }, order: "order-1" })).toBe("/admin/orders/refunds?status=FAILED&order=order-1");
+    expect(ordersRoute("returns", { records: { status: "UNRESOLVED", page: 1 } })).toBe("/admin/orders/returns");
+    // Orders filters belong to the Orders module only.
+    expect(ordersRoute("returns", { filters: { delivery: "SAME_DAY", status: "PENDING" } })).toBe("/admin/orders/returns");
+    expect(ordersRoute("orders", { view: "all", records: { status: "REQUESTED", page: 4 } })).toBe("/admin/orders/orders?view=all");
+  });
+});
+
+describe("report period in the address", () => {
+  it("defaults to this month and flags anything but the four periods", () => {
+    expect(parsePeriodParam("/admin/overview/dashboard")).toEqual({ period: "month", invalid: false });
+    for (const period of ["today", "week", "month", "year"] as const) {
+      expect(parsePeriodParam(`/admin/overview/analytics?period=${period}`)).toEqual({ period, invalid: false });
+    }
+    for (const period of ["day", "Month", "", "constructor"]) {
+      expect(parsePeriodParam(`/admin/overview/dashboard?period=${period}`), period).toEqual({ period: "month", invalid: true });
+    }
+  });
+
+  it("leaves this month out of the route", () => {
+    expect(periodRoute("dashboard")).toBe("/admin/overview/dashboard");
+    expect(periodRoute("dashboard", "month")).toBe("/admin/overview/dashboard");
+    expect(periodRoute("analytics", "week")).toBe("/admin/overview/analytics?period=week");
+    expect(parseAdminPlace(periodRoute("analytics", "year"))).toEqual({ kind: "module", module: "analytics" });
+  });
+});
+
+describe("stock filters in the address", () => {
+  it("reads a status and a well-formed category id, and flags anything else", () => {
+    expect(parseStockParams("/admin/catalog/stock")).toEqual({ filters: { status: null, category: null }, invalid: false });
+    expect(parseStockParams("/admin/catalog/stock?status=LOW_STOCK&category=cat-shirts")).toEqual({
+      filters: { status: "LOW_STOCK", category: "cat-shirts" }, invalid: false,
+    });
+    expect(parseStockParams("/admin/catalog/stock?status=low")).toEqual({ filters: { status: null, category: null }, invalid: true });
+    expect(parseStockParams("/admin/catalog/stock?category=%3Cimg%3E")).toEqual({ filters: { status: null, category: null }, invalid: true });
+  });
+
+  it("writes only well-formed filters", () => {
+    expect(stockRoute()).toBe("/admin/catalog/stock");
+    expect(stockRoute({ status: "OUT_OF_STOCK" })).toBe("/admin/catalog/stock?status=OUT_OF_STOCK");
+    expect(stockRoute({ status: "LOW_STOCK", category: "cat-shirts" })).toBe("/admin/catalog/stock?status=LOW_STOCK&category=cat-shirts");
+    expect(stockRoute({ category: "a/b" })).toBe("/admin/catalog/stock");
   });
 });

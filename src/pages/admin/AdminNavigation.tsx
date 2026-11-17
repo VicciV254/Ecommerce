@@ -28,13 +28,15 @@ function PreviewIcon() {
  * The admin's grouped navigation: group names are plain labels, modules are links, and only the modules the role may
  * open are listed. "Live store" and "Draft preview" sit apart, below the groups, in their own styles.
  */
-export function AdminNavigation({ permitted, current, previewCurrent, showPreview, activeDiscounts, onNavigate }: {
+export function AdminNavigation({ permitted, current, previewCurrent, showPreview, activeDiscounts, unreadAlerts, onNavigate }: {
   permitted: readonly AdminModuleId[];
   current: AdminModuleId | null;
   previewCurrent: boolean;
   showPreview: boolean;
   /** Active discounts for the Discounts badge; unknown while the catalog loads. */
   activeDiscounts: number | undefined;
+  /** This staff member's unread attention items for the Orders badge; null when unknown or the fetch failed. */
+  unreadAlerts: number | null;
   onNavigate?: () => void;
 }) {
   const idBase = useId();
@@ -53,17 +55,22 @@ export function AdminNavigation({ permitted, current, previewCurrent, showPrevie
               <ul aria-labelledby={labelId} className="flex flex-col gap-0.5">
                 {group.modules.map((module) => {
                   const active = module.id === current;
+                  const alerts = module.id === "orders" && unreadAlerts ? unreadAlerts : 0;
                   const badge: ReactNode = module.id === "discounts" && activeDiscounts ? (
                     <>
                       <span aria-hidden="true" className="shrink-0 rounded-full bg-gold-400 px-2 text-xs font-bold leading-5 tabular-nums text-navy-900">{activeDiscounts}</span>
                       <span className="sr-only">, {activeDiscounts} active</span>
                     </>
+                  ) : alerts ? (
+                    <span aria-hidden="true" className="shrink-0 rounded-full border border-error bg-error-tint px-2 text-xs font-bold leading-5 tabular-nums text-error">{alerts}</span>
                   ) : null;
                   return (
                     <li key={module.id}>
                       <Link
                         to={adminModuleRoute(module.id)}
                         aria-current={active ? "page" : undefined}
+                        // Named in one piece ("Orders, 3 unread alerts"): split into boxes, browsers add a space before the comma.
+                        aria-label={alerts ? `${module.label}, ${alerts} unread ${alerts === 1 ? "alert" : "alerts"}` : undefined}
                         onClick={onNavigate}
                         className={`${moduleLink} ${active ? "bg-navy-900 text-white" : "text-navy-900 hover:bg-surface-soft"}`}
                       >

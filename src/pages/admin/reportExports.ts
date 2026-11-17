@@ -1,8 +1,9 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
+import { formatNairobiClock, formatNairobiDate } from '../../utils/nairobiDate';
 
-/* Sales report downloads, built in the browser from the report the API returned. */
+/* Sales report downloads, built in the browser from the report the API returned; names and titles carry its dates. */
 
 export function downloadCsv(filename: string, rows: Record<string, unknown>[]) {
   if (!rows.length) return;
@@ -20,10 +21,11 @@ export function downloadCsv(filename: string, rows: Record<string, unknown>[]) {
   URL.revokeObjectURL(url);
 }
 
-export function downloadExcel(filename: string, rows: Record<string, unknown>[]) {
+export function downloadExcel(filename: string, rows: Record<string, unknown>[], title: string) {
   if (!rows.length) return;
   const worksheet = XLSX.utils.json_to_sheet(rows);
   const workbook = XLSX.utils.book_new();
+  workbook.Props = { Title: title };
   XLSX.utils.book_append_sheet(workbook, worksheet, "Report");
   
   // Add brand colors to header
@@ -40,7 +42,8 @@ export function downloadExcel(filename: string, rows: Record<string, unknown>[])
   XLSX.writeFile(workbook, filename);
 }
 
-export function downloadPdf(filename: string, rows: Record<string, unknown>[], title: string, brandName: string) {
+/** `generatedAt` is when the API made the report (an ISO instant), stated in Nairobi time. */
+export function downloadPdf(filename: string, rows: Record<string, unknown>[], title: string, brandName: string, generatedAt: string) {
   if (!rows.length) return;
   const doc = new jsPDF();
   
@@ -53,19 +56,15 @@ export function downloadPdf(filename: string, rows: Record<string, unknown>[], t
   doc.setTextColor(parseInt(brandPrimary.slice(1, 3), 16), parseInt(brandPrimary.slice(3, 5), 16), parseInt(brandPrimary.slice(5, 7), 16));
   doc.text(brandName, 14, 20);
   
-  doc.setFontSize(10);
+  // Title: the report and its dates
+  doc.setFontSize(14);
   doc.setTextColor(parseInt(brandSecondary.slice(1, 3), 16), parseInt(brandSecondary.slice(3, 5), 16), parseInt(brandSecondary.slice(5, 7), 16));
-  doc.text("Financial Report", 14, 28);
+  doc.text(title, 14, 32);
   
-  // Add title
-  doc.setFontSize(16);
-  doc.setTextColor(parseInt(brandPrimary.slice(1, 3), 16), parseInt(brandPrimary.slice(3, 5), 16), parseInt(brandPrimary.slice(5, 7), 16));
-  doc.text(title, 14, 40);
-  
-  // Add date
+  // When the API made it
   doc.setFontSize(10);
   doc.setTextColor(100, 100, 100);
-  doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 48);
+  doc.text(`Generated ${formatNairobiDate(generatedAt)}, ${formatNairobiClock(generatedAt)} (Nairobi time)`, 14, 42);
   
   // Generate table
   const headers = Object.keys(rows[0]);
@@ -74,7 +73,7 @@ export function downloadPdf(filename: string, rows: Record<string, unknown>[], t
   autoTable(doc, {
     head: [headers],
     body: data,
-    startY: 55,
+    startY: 50,
     headStyles: {
       fillColor: [20, 33, 61],
       textColor: [255, 255, 255],

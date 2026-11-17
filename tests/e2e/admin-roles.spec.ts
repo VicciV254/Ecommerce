@@ -3,7 +3,7 @@ import { serveAdminData, waitForPlace } from "./adminFixtures";
 import { expect, signInStaff, test } from "./fixtures";
 
 /** Buttons that would change something; none may render for a view-only role. Case-insensitive, so a relabel cannot hide one. */
-const WRITE_ACTIONS = /^(Add|Add product|Save|Save product|Save draft|Restock to max|Subtract|Create discount|Stop discount|Delete|Edit|\+ ?Sub|\+ Department|\+ Designer|Hide|Show|Publish|Discard changes|Reload draft|Send verification to selected|Verify|Disable|Enable|Send to \d+ subscribers|\+ Image URL|\+ Variant|\+ Specification|Add option|Dispatch|Cancel order|Start processing|Mark ready.*|Confirm (delivery|pickup)|Retry email|Check with M-Pesa|Record M-Pesa reference.*|Approve.*|Reject.*)$/i;
+const WRITE_ACTIONS = /^(Add|Add product|Save|Save product|Save draft|Restock to max|Subtract|Create discount|Stop discount|Delete( .+)?|Edit|\+ ?Sub|\+ Department|\+ Designer|Hide|Show|Publish|Discard changes|Reload draft|Send verification to (selected|\d+ selected)|(Verify|Disable|Enable)( .+)?|Send to \d+ subscribers|\+ Image URL|\+ Variant|\+ Specification|Add option|Dispatch|Cancel order|Start processing|Mark ready.*|Confirm (delivery|pickup)|Retry email|Check with M-Pesa|Record M-Pesa reference.*|Approve.*|Reject.*)$/i;
 
 async function expectNothingEditable(scope: Locator, allowedFields: string[], label: string) {
   const names = await scope.getByRole("button").evaluateAll((buttons) =>
@@ -103,11 +103,13 @@ test.describe("view-only role", () => {
     const main = page.getByRole("main");
 
     await visit(page, "/admin/overview/analytics", "Sales report");
-    await main.getByLabel("Report period").selectOption("week");
+    await main.getByRole("group", { name: "Period" }).getByRole("link", { name: "This week" }).click();
+    await expect(page).toHaveURL(/#\/admin\/overview\/analytics\?period=week$/);
+    await expect(main.getByText("16–17 November 2026 · Nairobi time (EAT)")).toBeVisible();
     await main.getByLabel("Download format").selectOption("csv");
     const download = page.waitForEvent("download");
     await main.getByRole("button", { name: "Download report" }).click();
-    expect((await download).suggestedFilename()).toBe("apex-cart-financial-week.csv");
+    expect((await download).suggestedFilename()).toBe("apex-cart-sales-2026-11-16-to-2026-11-17.csv");
 
     await visit(page, "/admin/orders/orders", "Orders");
     const views = main.getByRole("navigation", { name: "Order worklists" });

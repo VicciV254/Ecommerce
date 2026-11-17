@@ -1,15 +1,16 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BULK_STOCK_LIMIT, catalogAdminAPI, type CatalogStock } from "../../api/catalog";
 import { describeApiError } from "../../api/errors";
 import { ConfirmModal } from "../../components/Modal";
+import { navigate, useRoute } from "../../router";
 import { describeVariant } from "../../store/catalogModel";
 import { useAdminCatalog } from "./AdminCatalogContext";
+import { STOCK_STATUSES, parseStockParams, stockRoute, type StockFilters } from "./adminRoutes";
 import { Feedback, Panel, TableRegion, categoryOptions, descendantIds, inputClass, smallButtonClass } from "./shared";
 import { useUnsavedChanges } from "./unsavedChanges";
 
 const ROW_LIMIT = 100;
 const DEFAULT_BULK_AMOUNT = 10;
-const STATUSES: CatalogStock["status"][] = ["IN_STOCK", "LOW_STOCK", "OUT_OF_STOCK"];
 const STATUS_STYLES: Record<CatalogStock["status"], { cls: string; label: string }> = {
   IN_STOCK: { cls: "text-success", label: "In stock" },
   LOW_STOCK: { cls: "text-warning", label: "Low stock" },
@@ -22,9 +23,20 @@ export function StockManager({ canWrite, showToast }: { canWrite: boolean; showT
   const { data, categories, reload } = useAdminCatalog();
   const stocks = useMemo(() => data?.stocks ?? [], [data]);
   const options = useMemo(() => categoryOptions(categories), [categories]);
+  // Status and category live in the address (a change replaces the entry); the search text stays on this screen.
+  const route = useRoute();
+  const parsed = useMemo(() => parseStockParams(route), [route]);
+  const unknownCategory = parsed.filters.category !== null && !options.some((option) => option.id === parsed.filters.category);
+  const categoryId = unknownCategory ? "" : parsed.filters.category ?? "";
+  const statusFilter = parsed.filters.status ?? "";
+  const filterBy = (change: Partial<StockFilters>) =>
+    navigate(stockRoute({ status: parsed.filters.status, category: categoryId || null, ...change }), { replace: true });
+  // An unknown status or category is dropped from the address in place, never applied.
+  const correction = parsed.invalid || unknownCategory ? stockRoute({ status: parsed.filters.status, category: categoryId || null }) : null;
+  useEffect(() => {
+    if (correction !== null) navigate(correction, { replace: true });
+  }, [correction]);
   const [search, setSearch] = useState("");
-  const [categoryId, setCategoryId] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"" | CatalogStock["status"]>("");
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [bulkAmount, setBulkAmount] = useState(DEFAULT_BULK_AMOUNT);
   /** The bulk amount last applied (or the default): a different amount is a pending change. */
@@ -90,13 +102,13 @@ export function StockManager({ canWrite, showToast }: { canWrite: boolean; showT
     >
       <div className="mb-5 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,220px)_minmax(0,160px)]">
         <input aria-label="Search stock" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by product or SKU…" className={inputClass} />
-        <select aria-label="Filter stock by category" value={categoryId} onChange={(event) => setCategoryId(event.target.value)} className={inputClass}>
+        <select aria-label="Filter stock by category" value={categoryId} onChange={(event) => filterBy({ category: event.target.value || null })} className={inputClass}>
           <option value="">All categories</option>
           {options.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
         </select>
-        <select aria-label="Filter stock by status" value={statusFilter} onChange={(event) => setStatusFilter(STATUSES.find((status) => status === event.target.value) ?? "")} className={inputClass}>
+        <select aria-label="Filter stock by status" value={statusFilter} onChange={(event) => filterBy({ status: STOCK_STATUSES.find((status) => status === event.target.value) ?? null })} className={inputClass}>
           <option value="">All statuses</option>
-          {STATUSES.map((status) => <option key={status} value={status}>{STATUS_STYLES[status].label}</option>)}
+          {STOCK_STATUSES.map((status) => <option key={status} value={status}>{STATUS_STYLES[status].label}</option>)}
         </select>
       </div>
 

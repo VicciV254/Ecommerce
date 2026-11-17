@@ -1,6 +1,7 @@
 import api from "./client";
 import type {
   CustomerOrder,
+  DeliveryMethod,
   OrderRefund,
   OrderReturn,
   OrderStatus,
@@ -13,23 +14,54 @@ import { staffRequest, type AdminSession } from "./staffSession";
 
 export type AdminLoginResponse = { admin: AdminSession; token: string; refreshToken: string };
 
-export type DashboardMetrics = {
-  sales: { total: number };
-  orders: { total: number; pending: number; processing: number; cancelled: number; returned: number };
-  refunds: { total: number };
-  recentOrders: Array<{
-    id: string;
-    orderNumber: string;
-    status: OrderStatus;
-    total: number;
-    user?: { firstName: string; lastName: string } | null;
-  }>;
+/** The labelled range a figure covers: ISO instants, with the time zone its days are counted in (Africa/Nairobi). */
+export type ReportRange = { period: string; start: string; end: string; timeZone: string };
+
+/** Figures for real (non-demo) orders placed in the range; the sales report reports the same ones. */
+export type DashboardFigures = {
+  netSales: number;
+  paidOrders: number;
+  ordersPlaced: number;
+  cancelledOrders: number;
+  refunds: { count: number; amount: number };
 };
 
+/** Work waiting now, whatever the period, counted as the lists they link to count it (demo records excluded). */
+export type DashboardCurrent = {
+  orders: { awaitingStart: number; processing: number; readyForPickup: number; dispatched: number };
+  paymentsNeedingReview: number;
+  returns: { REQUESTED: number; APPROVED: number };
+  refunds: { REQUESTED: number; APPROVED: number; PROCESSING: number; FAILED: number; UNRESOLVED: number };
+  stock: { LOW_STOCK: number; OUT_OF_STOCK: number };
+};
+
+export type RecentOrder = {
+  id: string;
+  orderNumber: string;
+  status: OrderStatus;
+  deliveryMethod: DeliveryMethod;
+  total: number;
+  user: { firstName: string; lastName: string } | null;
+};
+
+/** `GET /admin/analytics/dashboard?period=…`; validated by `parseDashboard` before use. */
+export type DashboardMetrics = {
+  range: ReportRange;
+  generatedAt: string;
+  figures: DashboardFigures;
+  current: DashboardCurrent;
+  recentOrders: RecentOrder[];
+};
+
+/** `GET /admin/analytics/sales?period=…`; validated by `parseSalesReport` before use. */
 export type SalesReport = {
   period: string;
+  range: ReportRange;
+  generatedAt: string;
   totalRevenue: number;
+  paidOrders: number;
   totalOrders: number;
+  cancelledOrders: number;
   cancelledValue: number;
   returnedValue: number;
   refundedValue: number;
@@ -119,7 +151,9 @@ export type StaffOrderFilters = {
   status?: OrderStatus;
   paymentStatus?: PaymentStatus;
   deliveryMethod?: string;
-  orderedDay?: string;
+  /** First and last Nairobi day the order was placed on (`YYYY-MM-DD`, both included). */
+  orderedFrom?: string;
+  orderedTo?: string;
   page?: number;
   limit?: number;
 };
@@ -199,8 +233,8 @@ export const adminAPI = {
   login: (data: { email: string; password: string }) => api.post<AdminLoginResponse>("/admin/login", data),
 
   analytics: {
-    getDashboard: async () => api.get<DashboardMetrics>("/admin/analytics/dashboard", staffRequest()),
-    getSales: async (params: { period: string }) => api.get<SalesReport>("/admin/analytics/sales", staffRequest(params)),
+    getDashboard: async (period: string) => api.get<unknown>("/admin/analytics/dashboard", staffRequest({ period })),
+    getSales: async (period: string) => api.get<unknown>("/admin/analytics/sales", staffRequest({ period })),
   },
 
   users: {

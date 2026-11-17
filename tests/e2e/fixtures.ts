@@ -14,7 +14,9 @@ import {
 } from "../../src/test-support/catalogFixtures";
 import { fixtureQuote } from "../../src/test-support/checkoutFixtures";
 import { fixtureCustomerOrder } from "../../src/test-support/orderFixtures";
+import { NOTHING_WAITING, fixtureDashboard } from "../../src/test-support/overviewFixtures";
 import { fixturePaymentOverview } from "../../src/test-support/paymentFixtures";
+import { nairobiDate } from "../../src/utils/nairobiDate";
 import { STORAGE_KEYS, shopperStateKey } from "../../src/utils/storage";
 import { E2E_ORIGIN } from "../browser-config";
 
@@ -139,7 +141,11 @@ async function respond(route: Route, url: URL) {
   if (url.pathname === "/api/admin/catalog") return route.fulfill({ json: adminSnapshot });
   if (url.pathname === "/api/admin/stock") return route.fulfill({ json: { stocks: adminStocks } });
   if (url.pathname === "/api/admin/analytics/dashboard") {
-    return route.fulfill({ json: { sales: { total: 0 }, orders: { total: 0, pending: 0, processing: 0, cancelled: 0, returned: 0 }, refunds: { total: 0 }, recentOrders: [] } });
+    // A quiet store: nothing sold or waiting in any period.
+    return route.fulfill({ json: fixtureDashboard(url.searchParams.get("period") ?? "month", {
+      figures: { netSales: 0, paidOrders: 0, ordersPlaced: 0, cancelledOrders: 0, refunds: { count: 0, amount: 0 } },
+      current: NOTHING_WAITING, recentOrders: [],
+    }) });
   }
   if (url.pathname === "/api/admin/attention") return route.fulfill({ json: { items: [] } });
   const productId = /^\/api\/products\/([^/]+)$/.exec(url.pathname)?.[1];
@@ -245,8 +251,9 @@ function paginate<T>(items: readonly T[], url: URL) {
 }
 
 /**
- * Staff order reads as the API serves them: `/orders/admin/all` honours its status, payment and delivery
- * filters and pages; returns and refunds lists are derived from the same orders. Writes fall through to the test.
+ * Staff order reads as the API serves them: `/orders/admin/all` honours its status, payment and delivery filters, its
+ * inclusive Nairobi-day range (`orderedFrom`, `orderedTo`) and pages; returns and refunds lists are derived from the
+ * same orders. Writes fall through to the test.
  */
 export async function serveStaffOrders(context: BrowserContext, orders: () => readonly StaffOrder[]) {
   await context.route("**/api/orders/admin/**", (route) => {
@@ -259,7 +266,9 @@ export async function serveStaffOrders(context: BrowserContext, orders: () => re
     const status = url.searchParams.get("status");
     if (path === "all") {
       const filters = ["status", "paymentStatus", "deliveryMethod"] as const;
-      const matched = current.filter((item) => filters.every((key) => !url.searchParams.get(key) || item[key] === url.searchParams.get(key)));
+      const [from, to] = [url.searchParams.get("orderedFrom"), url.searchParams.get("orderedTo")];
+      const placed = (item: StaffOrder) => (!from || nairobiDate(item.createdAt) >= from) && (!to || nairobiDate(item.createdAt) <= to);
+      const matched = current.filter((item) => placed(item) && filters.every((key) => !url.searchParams.get(key) || item[key] === url.searchParams.get(key)));
       const { items, pagination } = paginate(matched, url);
       return route.fulfill({ json: { orders: items, pagination } });
     }

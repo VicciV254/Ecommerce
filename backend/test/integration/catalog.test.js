@@ -62,9 +62,15 @@ test('fresh initialization supports a no-write dry run and creates exactly the a
   assert.equal(new Set(categories.map((item) => item.slug)).size, 291);
   const admin = await prisma.admin.findUnique({ where: { email: initEnv.ADMIN_EMAIL } });
   staffToken = generateToken({ adminId: admin.id });
+  // The demo scaffold counts nowhere on the dashboard, even where its SKUs are low or out of stock (restored after).
+  const [lowDemo, outDemo] = rows.stocks.slice(0, 2);
+  await prisma.stock.update({ where: { id: lowDemo.id }, data: { status: 'LOW_STOCK' } });
+  await prisma.stock.update({ where: { id: outDemo.id }, data: { status: 'OUT_OF_STOCK' } });
   const dashboard = await call('/admin/analytics/dashboard');
-  assert.equal(dashboard.data.products.total, 0);
-  assert.equal(dashboard.data.products.active, 0);
+  assert.deepEqual(dashboard.data.current.stock, { LOW_STOCK: 0, OUT_OF_STOCK: 0 });
+  assert.deepEqual(dashboard.data.figures, { netSales: 0, paidOrders: 0, ordersPlaced: 0, cancelledOrders: 0, refunds: { count: 0, amount: 0 } });
+  await prisma.stock.update({ where: { id: lowDemo.id }, data: { status: lowDemo.status } });
+  await prisma.stock.update({ where: { id: outDemo.id }, data: { status: outDemo.status } });
   const inventory = await call('/admin/analytics/inventory');
   assert.equal(inventory.data.reduce((sum, category) => sum + category.totalValue, 0), 0);
   const viewer = await prisma.admin.create({ data: { email: 'catalog-viewer@example.test', username: 'catalog-viewer', password: 'not-used-for-login', role: 'VIEWER' } });
@@ -208,15 +214,20 @@ test('unknown variants, demo orders and legacy input paths fail before commercia
 });
 
 test('production visibility and real analytics exclude demo data even when the preview flag is set', async () => {
-  const dashboard = (await call('/admin/analytics/dashboard')).data;
+  // Every period's figures and the current counts, which a paid, pending demo order would otherwise change.
+  const overview = () => Promise.all(['today', 'week', 'month', 'year'].map(async (period) => {
+    const { figures, current } = (await call(`/admin/analytics/dashboard?period=${period}`)).data;
+    return { period, figures, current };
+  }));
+  const dashboard = await overview();
   const demoOrder = await prisma.order.create({ data: {
     orderNumber: 'DEMO-REPORT-ONLY', userId: user.id, addressId: user.addresses[0].id,
     subtotal: 999999, tax: 0, shippingCost: 0, total: 999999,
     paymentMethod: 'MPESA', paymentStatus: 'PAID', isDemo: true,
   } });
-  const after = (await call('/admin/analytics/dashboard')).data;
-  assert.equal(after.sales.total, dashboard.sales.total);
-  assert.equal(after.orders.total, dashboard.orders.total);
+  const after = await overview();
+  assert.deepEqual(after, dashboard);
+  assert.ok(!(await call('/admin/analytics/dashboard')).data.recentOrders.some((order) => order.id === demoOrder.id));
   assert.equal((await call(`/orders/${demoOrder.id}`, { token: customerToken })).status, 404);
   assert.equal((await call(`/orders/track/${demoOrder.orderNumber}`, { token: null })).status, 404);
   assert.ok((await call('/orders', { token: customerToken })).data.orders.every((item) => !item.isDemo));

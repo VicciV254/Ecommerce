@@ -151,6 +151,119 @@ describe("orders in the address", () => {
   });
 });
 
+describe("worklist filters in the address", () => {
+  const filtered = "/admin/orders/orders?view=all&delivery=SAME_DAY&from=2026-11-01&to=2026-11-17&status=PROCESSING&payment=PAID";
+  const page = (orders: unknown[], total: number, current = 1) => ({ data: { orders, pagination: { page: current, limit: 20, total, pages: Math.ceil(total / 20) } } });
+
+  it("sends a deep link's filters and page with the request and shows them in the fields", async () => {
+    at(`${filtered}&page=2`);
+    api.orders.getAll.mockResolvedValue(page([processing], 21, 2));
+    render(<OrdersManager canWrite showToast={vi.fn()} />);
+    await waitFor(() => expect(api.orders.getAll).toHaveBeenCalledWith({
+      deliveryMethod: "SAME_DAY", orderedFrom: "2026-11-01", orderedTo: "2026-11-17", status: "PROCESSING", paymentStatus: "PAID", page: 2, limit: 20,
+    }));
+    expect(api.orders.getAll).toHaveBeenCalledTimes(1);
+    expect((screen.getByLabelText("Delivery") as HTMLSelectElement).value).toBe("SAME_DAY");
+    expect((screen.getByLabelText("Ordered from") as HTMLInputElement).value).toBe("2026-11-01");
+    expect((screen.getByLabelText("Ordered to") as HTMLInputElement).value).toBe("2026-11-17");
+    expect((screen.getByLabelText("Order status") as HTMLSelectElement).value).toBe("PROCESSING");
+    expect((screen.getByLabelText("Payment") as HTMLSelectElement).value).toBe("PAID");
+    expect(await screen.findByText("21–21 of 21 orders", undefined, WAIT)).toBeTruthy();
+  });
+
+  it("replaces the entry on a filter change, back to page 1, and on a page change", async () => {
+    at(`${filtered}&page=2`);
+    api.orders.getAll.mockImplementation(async (params: { page?: number }) => page([processing], 41, params.page));
+    const entries = window.history.length;
+    render(<OrdersManager canWrite showToast={vi.fn()} />);
+    await screen.findByText("21–40 of 41 orders", undefined, WAIT);
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(window.location.hash).toBe(`#${filtered}&page=3`);
+    fireEvent.change(screen.getByLabelText("Payment"), { target: { value: "REFUNDED" } });
+    expect(window.location.hash).toBe("#/admin/orders/orders?view=all&delivery=SAME_DAY&from=2026-11-01&to=2026-11-17&status=PROCESSING&payment=REFUNDED");
+    fireEvent.change(screen.getByLabelText("Delivery"), { target: { value: "" } });
+    expect(window.location.hash).toBe("#/admin/orders/orders?view=all&from=2026-11-01&to=2026-11-17&status=PROCESSING&payment=REFUNDED");
+    expect(window.history.length).toBe(entries);
+    await waitFor(() => expect(api.orders.getAll).toHaveBeenLastCalledWith({
+      orderedFrom: "2026-11-01", orderedTo: "2026-11-17", status: "PROCESSING", paymentStatus: "REFUNDED", page: 1, limit: 20,
+    }));
+  });
+
+  it("never lets a date range run backwards: moving one end past the other moves both", async () => {
+    at("/admin/orders/orders?from=2026-11-01&to=2026-11-17");
+    render(<OrdersManager canWrite showToast={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("Ordered from"), { target: { value: "2026-11-20" } });
+    expect(window.location.hash).toBe("#/admin/orders/orders?from=2026-11-20&to=2026-11-20");
+    fireEvent.change(screen.getByLabelText("Ordered to"), { target: { value: "2026-11-05" } });
+    expect(window.location.hash).toBe("#/admin/orders/orders?from=2026-11-05&to=2026-11-05");
+    fireEvent.change(screen.getByLabelText("Ordered from"), { target: { value: "" } });
+    expect(window.location.hash).toBe("#/admin/orders/orders?to=2026-11-05");
+  });
+
+  it("opens an order with its filters kept, and Back returns to the same filtered list", async () => {
+    at(filtered);
+    const entries = window.history.length;
+    render(<OrdersManager canWrite showToast={vi.fn()} />);
+    const open = await screen.findByRole("button", { name: new RegExp(`^Open\\s*order ${paid.orderNumber}$`) }, WAIT);
+    const listRequests = api.orders.getAll.mock.calls.length;
+    fireEvent.click(open);
+    expect(window.location.hash).toBe(`#${filtered}&order=${paid.id}`);
+    expect(window.history.length).toBe(entries + 1);
+    await screen.findByRole("heading", { name: `Order ${paid.orderNumber}` }, WAIT);
+    act(() => window.history.back());
+    await waitFor(() => expect(window.location.hash).toBe(`#${filtered}`), WAIT);
+    await waitFor(() => expect(screen.queryByRole("heading", { name: `Order ${paid.orderNumber}` })).toBeNull(), WAIT);
+    expect((screen.getByLabelText("Order status") as HTMLSelectElement).value).toBe("PROCESSING");
+    // The list kept its request: opening and closing an order sends no new list request.
+    expect(api.orders.getAll).toHaveBeenCalledTimes(listRequests);
+    expect(api.orders.getAll.mock.calls.every(([params]) => params.status === "PROCESSING" && params.orderedFrom === "2026-11-01")).toBe(true);
+    // Forward reopens the order with the same filters (and leaves no forward entry for later tests).
+    act(() => window.history.forward());
+    await screen.findByRole("heading", { name: `Order ${paid.orderNumber}` }, WAIT);
+    expect(window.location.hash).toBe(`#${filtered}&order=${paid.id}`);
+    fireEvent.click(screen.getByRole("button", { name: "← Back to orders" }));
+    expect(window.location.hash).toBe(`#${filtered}`);
+  });
+
+  it("corrects unknown or malformed values in place and never sends them", async () => {
+    at("/admin/orders/orders?view=all&delivery=DRONE&from=2026-02-30&to=2026-11-17&status=toString&payment=PAID&page=0");
+    const entries = window.history.length;
+    render(<OrdersManager canWrite showToast={vi.fn()} />);
+    await waitFor(() => expect(window.location.hash).toBe("#/admin/orders/orders?view=all&to=2026-11-17&payment=PAID"));
+    expect(window.history.length).toBe(entries);
+    for (const [params] of api.orders.getAll.mock.calls) {
+      expect(params).toEqual({ orderedTo: "2026-11-17", paymentStatus: "PAID", page: 1, limit: 20 });
+    }
+  });
+
+  it("drops All orders filters from the other views", async () => {
+    at("/admin/orders/orders?view=closed&status=PENDING&delivery=STORE_PICKUP");
+    render(<OrdersManager canWrite showToast={vi.fn()} />);
+    await waitFor(() => expect(window.location.hash).toBe("#/admin/orders/orders?view=closed&delivery=STORE_PICKUP"));
+    expect(api.orders.getAll.mock.calls.every(([params]) => params.status !== "PENDING" && params.deliveryMethod === "STORE_PICKUP")).toBe(true);
+    expect(within(screen.getByRole("navigation", { name: "Order worklists" })).getByRole("link", { name: "All orders" }).getAttribute("href"))
+      .toBe("#/admin/orders/orders?view=all&delivery=STORE_PICKUP");
+  });
+
+  it("keeps the Returns status and page in the address, and corrects a status from another list", async () => {
+    api.returns.getAll.mockResolvedValue({ data: { returns: [], pagination: { page: 2, limit: 20, total: 21, pages: 2 } } });
+    at("/admin/orders/returns?status=REQUESTED&page=2");
+    const entries = window.history.length;
+    const view = render(<OrdersManager module="returns" canWrite showToast={vi.fn()} />);
+    await waitFor(() => expect(api.returns.getAll).toHaveBeenCalledWith({ status: "REQUESTED", page: 2, limit: 20 }));
+    fireEvent.change(screen.getByLabelText("Return status"), { target: { value: "APPROVED" } });
+    expect(window.location.hash).toBe("#/admin/orders/returns?status=APPROVED");
+    expect(window.history.length).toBe(entries);
+    view.unmount();
+
+    api.returns.getAll.mockClear();
+    at("/admin/orders/returns?status=UNRESOLVED");
+    render(<OrdersManager module="returns" canWrite showToast={vi.fn()} />);
+    await waitFor(() => expect(window.location.hash).toBe("#/admin/orders/returns"));
+    expect(api.returns.getAll.mock.calls.every(([params]) => !("status" in params))).toBe(true);
+  });
+});
+
 describe("products in the address", () => {
   it("opens the editor with a push and closes it with a replace", async () => {
     at("/admin/catalog/products");

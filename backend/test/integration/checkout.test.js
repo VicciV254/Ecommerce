@@ -167,7 +167,10 @@ test('both creation routes persist pending snapshots, ignore stale cart prices, 
   assert.equal((await stock(f.variant.id)).reserved, 1);
   const metrics = await call('/admin/analytics/dashboard', { token: staffToken });
   assert.equal(metrics.status, 200);
-  assert.equal(metrics.data.sales.total, 0);
+  // Placed this month, but unpaid: no net sales and no paid order (the old all-time total was 0 too).
+  assert.equal(metrics.data.figures.netSales, 0);
+  assert.equal(metrics.data.figures.paidOrders, 0);
+  assert.ok(metrics.data.figures.ordersPlaced >= 1);
   for (const action of ['START_PROCESSING', 'DISPATCH']) {
     const unpaid = await call(`/orders/admin/${created.data.id}/actions`, { method: 'POST', token: staffToken, body: { action, expectedStatus: 'PENDING' } });
     assert.equal(unpaid.status, 409);

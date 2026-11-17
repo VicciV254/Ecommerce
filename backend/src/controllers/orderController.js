@@ -14,6 +14,7 @@ import {
   returnDecisionSchema, returnReceiptSchema, returnRequestSchema, staffActionSchema,
 } from "../utils/operationsValidation.js";
 import { orderInclude, publicTrackingTimeline } from "../utils/orderDto.js";
+import { nairobiDaySpan } from "../utils/nairobiTime.js";
 
 const staffActor = (req) => ({ type: "STAFF", id: req.admin.id });
 const PAYMENT_STATUSES = ["PENDING", "PAID", "FAILED", "REFUNDED", "PARTIALLY_REFUNDED"];
@@ -138,7 +139,7 @@ export const getAllOrders = async (req, res, next) => {
     if (ORDER_STATUSES.includes(req.query.status)) where.status = req.query.status;
     if (PAYMENT_STATUSES.includes(req.query.paymentStatus)) where.paymentStatus = req.query.paymentStatus;
     if (["STORE_PICKUP", "SAME_DAY", "STANDARD"].includes(req.query.deliveryMethod)) where.deliveryMethod = req.query.deliveryMethod;
-    const createdAt = dayRange(req.query.orderedDay);
+    const createdAt = orderedRange(req.query);
     if (createdAt) where.createdAt = createdAt;
     const [orders, total] = await Promise.all([
       prisma.order.findMany({ where, skip: (page - 1) * limit, take: limit, include: orderInclude, orderBy: { createdAt: "desc" } }),
@@ -221,12 +222,15 @@ export const requestOrderRefund = async (req, res, next) => {
   }
 };
 
-function dayRange(day) {
-  if (!day || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return undefined;
-  const start = new Date(`${day}T00:00:00.000Z`);
-  const end = new Date(`${day}T23:59:59.999Z`);
-  if (Number.isNaN(start.getTime())) return undefined;
-  return { gte: start, lte: end };
+/**
+ * Orders placed on whole Nairobi days: `orderedFrom` to `orderedTo` (both included, either may be absent), or the single
+ * `orderedDay`. An impossible or reversed date is a 400; it never falls back to listing every order.
+ */
+function orderedRange({ orderedDay, orderedFrom, orderedTo }) {
+  const given = (value) => value !== undefined && value !== "";
+  if (!given(orderedDay)) return nairobiDaySpan(orderedFrom, orderedTo, ["orderedFrom", "orderedTo"]);
+  if (given(orderedFrom) || given(orderedTo)) throw httpError(400, "Use orderedDay or orderedFrom/orderedTo, not both.", "DATE_RANGE_INVALID");
+  return nairobiDaySpan(orderedDay, orderedDay, ["orderedDay", "orderedDay"]);
 }
 
 export const createCheckoutOrder = createOrder;

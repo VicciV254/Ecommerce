@@ -1,14 +1,23 @@
 import prisma from '../config/database.js';
-import { availableStock, httpError, loadCategories, productWhere } from '../services/catalogService.js';
+import { availableStock, httpError, loadCategories } from '../services/catalogService.js';
 import { decimal, sumMoney } from '../utils/money.js';
 import { expireReservations } from '../services/inventoryService.js';
 import { inOrderPool } from '../services/refundService.js';
+import {
+  OPEN_REFUND_STATUSES, OPEN_RETURN_STATUSES, ORDER_STEP_FILTERS, paymentsNeedingReview,
+} from '../services/attentionService.js';
+import { NAIROBI_TIME_ZONE, isReportPeriod, nairobiDaySpan, nairobiPeriodRange } from '../utils/nairobiTime.js';
 
 /** Paid, uncancelled orders. Fully refunded orders net to zero and are excluded. */
 const SOLD_ORDER = { paymentStatus: { in: ['PAID', 'PARTIALLY_REFUNDED'] }, status: { not: 'CANCELLED' } };
 const MONEY_RECEIVED = ['PAID', 'PARTIALLY_REFUNDED', 'REFUNDED'];
 const CONFIRMED_REFUNDS = { where: { status: 'CONFIRMED' }, select: { amount: true, source: true, paymentId: true } };
 const isSold = (order) => SOLD_ORDER.paymentStatus.in.includes(order.paymentStatus) && order.status !== 'CANCELLED';
+/** Demo orders and products stay out of every figure, whatever the demo settings. */
+const REAL = { isDemo: false };
+const DEFAULT_PERIOD = 'month';
+const STOCK_ALERT_STATUSES = ['LOW_STOCK', 'OUT_OF_STOCK'];
+const RECENT_ORDER_LIMIT = 10;
 
 /** Order total less confirmed refunds drawn from the order's own payment. */
 const netOrderValue = (order) => decimal(order.total)
@@ -45,125 +54,79 @@ function inventoryVariants(products) {
   }));
 }
 
-function periodRange(period = 'month') {
-  const now = new Date();
-  const start = new Date(now);
-  if (period === 'day') {
-    start.setHours(0, 0, 0, 0);
-  } else if (period === 'week') {
-    const day = start.getDay() || 7;
-    start.setDate(start.getDate() - day + 1);
-    start.setHours(0, 0, 0, 0);
-  } else if (period === 'year') {
-    start.setMonth(0, 1);
-    start.setHours(0, 0, 0, 0);
-  } else {
-    start.setDate(1);
-    start.setHours(0, 0, 0, 0);
-  }
-  return { gte: start, lte: now };
+/** A reporting period from the request: today, week, month (the default) or year; anything else is refused. */
+function reportPeriod(value = DEFAULT_PERIOD) {
+  if (!isReportPeriod(value)) throw httpError(400, 'period must be today, week, month or year.', 'PERIOD_INVALID');
+  return value;
+}
+
+/** The labelled range a response describes: ISO instants and the time zone its days are counted in. */
+const rangeDto = (period, { gte, lte }) => ({
+  period, start: gte?.toISOString() ?? null, end: lte.toISOString(), timeZone: NAIROBI_TIME_ZONE,
+});
+
+/** Figures for real orders placed in `createdAt`; the sales report computes the same ones from its order list. */
+async function periodFigures(createdAt) {
+  const placed = { ...REAL, createdAt };
+  const [sales, ordersPlaced, cancelledOrders, refunds] = await Promise.all([
+    netSales(placed),
+    prisma.order.count({ where: placed }),
+    prisma.order.count({ where: { ...placed, status: 'CANCELLED' } }),
+    prisma.refund.aggregate({ where: { status: 'CONFIRMED', order: { is: placed } }, _count: true, _sum: { amount: true } }),
+  ]);
+  return {
+    netSales: sales.total, paidOrders: sales.count, ordersPlaced, cancelledOrders,
+    refunds: { count: refunds._count, amount: decimal(refunds._sum.amount ?? 0) },
+  };
+}
+
+const countByStatus = (groups, statuses) =>
+  Object.fromEntries(statuses.map((status) => [status, groups.find((group) => group.status === status)?._count._all ?? 0]));
+
+/** Work waiting now, whatever the period, with the Orders queues' and the attention feed's own predicates. */
+async function currentWork() {
+  const steps = Object.keys(ORDER_STEP_FILTERS);
+  const [stepCounts, reviews, returns, refunds, stock] = await Promise.all([
+    Promise.all(steps.map((step) => prisma.order.count({ where: { ...REAL, ...ORDER_STEP_FILTERS[step] } }))),
+    paymentsNeedingReview(REAL),
+    prisma.returnRequest.groupBy({
+      by: ['status'], where: { status: { in: OPEN_RETURN_STATUSES }, order: { is: REAL } }, _count: { _all: true },
+    }),
+    prisma.refund.groupBy({
+      by: ['status'], where: { status: { in: OPEN_REFUND_STATUSES }, order: { is: REAL } }, _count: { _all: true },
+    }),
+    prisma.stock.groupBy({
+      by: ['status'],
+      where: { status: { in: STOCK_ALERT_STATUSES }, variant: { is: { isActive: true, product: { is: { ...REAL, deletedAt: null } } } } },
+      _count: { _all: true },
+    }),
+  ]);
+  return {
+    orders: Object.fromEntries(steps.map((step, index) => [step, stepCounts[index]])),
+    paymentsNeedingReview: reviews.length,
+    returns: countByStatus(returns, OPEN_RETURN_STATUSES),
+    refunds: countByStatus(refunds, OPEN_REFUND_STATUSES),
+    stock: countByStatus(stock, STOCK_ALERT_STATUSES),
+  };
 }
 
 export const getDashboardMetrics = async (req, res, next) => {
   try {
+    const period = reportPeriod(req.query.period);
     await expireReservations();
     const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const categories = await loadCategories();
-
-    const [totalSales, thisMonthSales, lastMonthSales] = await Promise.all([
-      netSales({ isDemo: false }),
-      netSales({ isDemo: false, createdAt: { gte: startOfMonth } }),
-      netSales({ isDemo: false, createdAt: { gte: startOfLastMonth, lt: endOfLastMonth } }),
+    const createdAt = nairobiPeriodRange(period, now);
+    const [figures, current, recentOrders] = await Promise.all([
+      periodFigures(createdAt),
+      currentWork(),
+      prisma.order.findMany({
+        where: REAL,
+        take: RECENT_ORDER_LIMIT,
+        orderBy: { createdAt: 'desc' },
+        include: { user: { select: { firstName: true, lastName: true, email: true } } },
+      }),
     ]);
-
-    // Total orders
-    const totalOrders = await prisma.order.count({ where: { isDemo: false } });
-    const statusGroups = await prisma.order.groupBy({
-      by: ['status'],
-      where: { isDemo: false },
-      _count: { status: true },
-      _sum: { total: true },
-    });
-    const orderStatus = Object.fromEntries(statusGroups.map((item) => [item.status, item._count.status]));
-    const cancelledOrders = orderStatus.CANCELLED || 0;
-    const returnedOrders = await prisma.order.count({ where: { isDemo: false, returnRequests: { some: { status: 'RECEIVED' } } } });
-    const confirmedRefunds = await prisma.refund.aggregate({
-      where: { status: 'CONFIRMED', order: { is: { isDemo: false } } },
-      _count: true,
-      _sum: { amount: true },
-    });
-
-    // Total products
-    const totalProducts = await prisma.product.count({ where: { isDemo: false, deletedAt: null } });
-    const activeProducts = await prisma.product.count({ where: { ...productWhere(categories), isDemo: false } });
-    const lowStockProducts = await prisma.stock.count({
-      where: { status: 'LOW_STOCK', variant: { is: { isActive: true, product: { is: { isDemo: false, deletedAt: null } } } } },
-    });
-    const outOfStockProducts = await prisma.stock.count({
-      where: { status: 'OUT_OF_STOCK', variant: { is: { isActive: true, product: { is: { isDemo: false, deletedAt: null } } } } },
-    });
-
-    // Total customers
-    const totalCustomers = await prisma.user.count();
-
-    // Recent orders
-    const recentOrders = await prisma.order.findMany({
-      where: { isDemo: false },
-      take: 10,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        user: {
-          select: {
-            firstName: true,
-            lastName: true,
-            email: true,
-          },
-        },
-      },
-    });
-
-    const currentRevenue = thisMonthSales.total;
-    const previousRevenue = lastMonthSales.total;
-    res.json({
-      sales: {
-        total: totalSales.total,
-        thisMonth: currentRevenue,
-        thisMonthOrders: thisMonthSales.count,
-        lastMonth: previousRevenue,
-        lastMonthOrders: lastMonthSales.count,
-        growth: !previousRevenue.isZero()
-          ? currentRevenue.minus(previousRevenue).div(previousRevenue).mul(100).toDecimalPlaces(2).toNumber()
-          : 0,
-      },
-      orders: {
-        total: totalOrders,
-        pending: orderStatus.PENDING || 0,
-        processing: orderStatus.PROCESSING || 0,
-        shipped: orderStatus.SHIPPED || 0,
-        outForDelivery: orderStatus.READY_FOR_PICKUP || 0,
-        delivered: orderStatus.DELIVERED || 0,
-        cancelled: cancelledOrders,
-        returned: returnedOrders,
-        byStatus: orderStatus,
-      },
-      refunds: {
-        count: confirmedRefunds._count || 0,
-        total: confirmedRefunds._sum.amount || 0,
-      },
-      products: {
-        total: totalProducts,
-        active: activeProducts,
-        lowStock: lowStockProducts,
-        outOfStock: outOfStockProducts,
-      },
-      customers: {
-        total: totalCustomers,
-      },
-      recentOrders,
-    });
+    res.json({ range: rangeDto(period, createdAt), generatedAt: now.toISOString(), figures, current, recentOrders });
   } catch (error) {
     next(error);
   }
@@ -192,22 +155,14 @@ export const getInventoryBreakdown = async (req, res, next) => {
 
 export const getSalesReport = async (req, res, next) => {
   try {
-    const { startDate, endDate, period = 'month' } = req.query;
-    
-    const where = { isDemo: false };
-
-    if (startDate) {
-      where.createdAt = { ...where.createdAt, gte: new Date(startDate) };
-    }
-    if (endDate) {
-      where.createdAt = { ...where.createdAt, lte: new Date(endDate) };
-    }
-    if (!startDate && !endDate) {
-      where.createdAt = periodRange(period);
-    }
+    const now = new Date();
+    // Date-only startDate/endDate are whole Nairobi days and take precedence over the period, as before.
+    const days = nairobiDaySpan(req.query.startDate, req.query.endDate, ['startDate', 'endDate']);
+    const period = days ? 'custom' : reportPeriod(req.query.period);
+    const createdAt = days ? { ...days, lte: days.lte ?? now } : nairobiPeriodRange(period, now);
 
     const orders = await prisma.order.findMany({
-      where,
+      where: { ...REAL, createdAt },
       include: {
         items: true,
         user: { select: { email: true, firstName: true, lastName: true } },
@@ -231,21 +186,10 @@ export const getSalesReport = async (req, res, next) => {
       .reduce((sum, line) => sum + (line.receivedQuantity ?? 0), 0);
     const totalItemsSold = paidOrders.reduce((sum, o) => sum + o.items.reduce((s, i) => s + i.quantity, 0) - returnedUnits(o), 0);
 
-    // Sales by category
-    const salesByCategory = {};
-    paidOrders.forEach((order) => {
-      order.items.forEach((item) => {
-        const category = item.productName.split(' ')[0] || 'Other';
-        if (!salesByCategory[category]) {
-          salesByCategory[category] = { revenue: decimal(0), items: 0 };
-        }
-        salesByCategory[category].revenue = salesByCategory[category].revenue.plus(item.subtotal);
-        salesByCategory[category].items += item.quantity;
-      });
-    });
-
     res.json({
       period,
+      range: rangeDto(period, createdAt),
+      generatedAt: now.toISOString(),
       totalRevenue,
       grossRevenue,
       cancelledValue,
@@ -257,7 +201,6 @@ export const getSalesReport = async (req, res, next) => {
       returnedOrders: returnedOrders.length,
       refundedOrders: refundedOrders.length,
       totalItemsSold,
-      salesByCategory,
       orders: orders.map((order) => ({
         id: order.id,
         orderNumber: order.orderNumber,

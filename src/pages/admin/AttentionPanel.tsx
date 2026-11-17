@@ -5,6 +5,7 @@ import { ATTENTION_TYPE_LABELS, describeStaffFailure } from "../../store/orderCo
 import { OrderFormatError, parseAttention, parseNotificationReport } from "../../store/orderModel";
 import { formatDateTime } from "../../utils/format";
 import { Feedback } from "./shared";
+import { useRefreshUnreadAlerts } from "./unreadAlerts";
 
 /** Items listed before "Show all"; the rest stay one press away and nothing is hidden for being read. */
 const PREVIEW = 5;
@@ -34,6 +35,7 @@ export function AttentionPanel({ canWrite, reloadToken, onOpen }: {
   const [itemErrors, setItemErrors] = useState<Record<string, string>>({});
   const [status, setStatus] = useState("");
   const [attempt, setAttempt] = useState(0);
+  const refreshUnread = useRefreshUnreadAlerts();
   const titleId = useId();
   const listId = useId();
 
@@ -65,6 +67,8 @@ export function AttentionPanel({ canWrite, reloadToken, onOpen }: {
         ? { status: "ready", items: current.items.map((entry) => (entry.key === item.key ? { ...entry, read: true } : entry)) }
         : current);
       setStatus(`Marked read: ${item.title}. It stays listed until the work is done.`);
+      // The navigation's unread count follows.
+      refreshUnread();
     } catch (error) {
       failItem(item.key, describeApiError(error, "This item could not be marked read."));
     } finally {

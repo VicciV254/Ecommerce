@@ -164,7 +164,7 @@ test("customers table: every cell has the same inline padding, headings never ru
 /** The smallest target a row action may offer (the brief's touch-target rule). */
 const TARGET_SIZE = 44;
 
-test("customers table: each row's checkbox is named for its customer, and its actions are 44px targets that keep their names", async ({ page, isMobile }) => {
+test("customers table: each row's checkbox and actions are named for its customer and are 44px targets; selection is counted", async ({ page, isMobile }) => {
   await signInStaff(page, "ADMIN");
   await serveAdminData(page.context());
   await page.setViewportSize(isMobile ? { width: 360, height: 800 } : { width: 1280, height: 900 });
@@ -179,20 +179,33 @@ test("customers table: each row's checkbox is named for its customer, and its ac
     const row = rows.nth(index);
     // Soft, so one run reports every unnamed checkbox and every small target.
     await expect.soft(row.getByRole("checkbox")).toHaveAccessibleName(`Select ${customerName}`);
+    // The visible box may stay small; the label around it is the 44px target.
+    const target = await row.getByRole("checkbox").locator("xpath=ancestor::label[1]").boundingBox();
+    expect.soft(Math.min(target?.width ?? 0, target?.height ?? 0), `${customerName}: checkbox target ${target?.width}x${target?.height}`)
+      .toBeGreaterThanOrEqual(TARGET_SIZE);
     for (const action of ["Verify", "Disable", "Delete"]) {
-      const box = await row.getByRole("button", { name: action, exact: true }).boundingBox();
+      const box = await row.getByRole("button", { name: `${action} ${customerName}`, exact: true }).boundingBox();
       expect(box, `${customerName}: ${action} is rendered`).not.toBeNull();
       expect.soft(Math.min(box?.width ?? 0, box?.height ?? 0), `${customerName}: ${action} target ${box?.width}x${box?.height}`)
         .toBeGreaterThanOrEqual(TARGET_SIZE);
     }
   }
+  const bulk = page.getByRole("button", { name: "Send verification to 0 selected", exact: true });
+  await expect(bulk).toBeDisabled();
+  await expect(page.getByText("0 of 2 accounts shown selected.")).toBeVisible();
+  // A press at the target's corner, away from the visible box, selects the row.
+  await rows.first().getByRole("checkbox").locator("xpath=ancestor::label[1]").click({ position: { x: 3, y: 3 } });
+  await expect(rows.first().getByRole("checkbox")).toBeChecked();
+  await expect(page.getByText("1 of 2 accounts shown selected.")).toBeVisible();
+  const send = await page.getByRole("button", { name: "Send verification to 1 selected", exact: true }).boundingBox();
+  expect.soft(send?.height ?? 0, `bulk action target height ${send?.height}`).toBeGreaterThanOrEqual(TARGET_SIZE);
   // The wider actions may make the table scroll inside its labelled region, never the page.
   const problems = await layoutProblems(page);
   expect(problems.overflow, JSON.stringify(problems)).toBeLessThanOrEqual(0);
   expect(problems.scrollers).toEqual([]);
 });
 
-test("subscriptions table: the Customers table's rules too: padded cells, headings apart and at 4.5:1, and a 44px Delete", async ({ page, isMobile }) => {
+test("subscriptions table: the Customers table's rules too: padded cells, headings apart and at 4.5:1, and a 44px Delete, Send and Refresh", async ({ page, isMobile }) => {
   await signInStaff(page, "ADMIN");
   await serveAdminData(page.context());
   await page.setViewportSize(isMobile ? { width: 360, height: 800 } : { width: 1280, height: 900 });
@@ -220,6 +233,11 @@ test("subscriptions table: the Customers table's rules too: padded cells, headin
     const box = await row.getByRole("button", { name: "Delete", exact: true }).boundingBox();
     expect(box, "Delete is rendered").not.toBeNull();
     expect.soft(Math.min(box?.width ?? 0, box?.height ?? 0), `Delete target ${box?.width}x${box?.height}`).toBeGreaterThanOrEqual(TARGET_SIZE);
+  }
+  for (const name of [/^Send to \d+ subscribers$/, /^Refresh$/]) {
+    const box = await page.getByRole("main").getByRole("button", { name }).boundingBox();
+    expect(box, `${name} is rendered`).not.toBeNull();
+    expect.soft(Math.min(box?.width ?? 0, box?.height ?? 0), `${name} target ${box?.width}x${box?.height}`).toBeGreaterThanOrEqual(TARGET_SIZE);
   }
   const problems = await layoutProblems(page);
   expect(problems.overflow, JSON.stringify(problems)).toBeLessThanOrEqual(0);

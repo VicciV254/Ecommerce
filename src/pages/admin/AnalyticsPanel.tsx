@@ -1,28 +1,49 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { adminAPI, type SalesReport } from "../../api/admin";
-import { describeApiError } from "../../api/errors";
+import { navigate, useRoute } from "../../router";
 import { useStorefront } from "../../store/StorefrontContext";
 import { activeVariants } from "../../store/catalogModel";
 import { formatKES } from "../../utils/format";
 import { useAdminCatalog } from "./AdminCatalogContext";
-import type { LoadResult } from "./DashboardPanel";
+import { parsePeriodParam, periodRoute, type ReportPeriod } from "./adminRoutes";
+import { FIGURES, parseSalesReport, salesExportName, salesExportTitle, type FigureKey } from "./overviewModel";
+import { FigureCard, PeriodChoice, RangeLine, usePeriodReport } from "./PeriodControls";
 import { downloadCsv, downloadExcel, downloadPdf } from "./reportExports";
 
 const REPORT_PREVIEW_LIMIT = 12;
+const DOWNLOAD_FORMATS = { csv: { label: "CSV", extension: "csv" }, excel: { label: "Excel", extension: "xlsx" }, pdf: { label: "PDF", extension: "pdf" } } as const;
+type DownloadFormat = keyof typeof DOWNLOAD_FORMATS;
+const isDownloadFormat = (value: string): value is DownloadFormat => Object.keys(DOWNLOAD_FORMATS).includes(value);
 
+const loadSales = async (period: ReportPeriod) => parseSalesReport((await adminAPI.analytics.getSales(period)).data);
+
+/** The dashboard's figures, read from the report under the same names and definitions. */
+function reportValue(key: FigureKey, report: SalesReport) {
+  switch (key) {
+    case "netSales": return formatKES(report.totalRevenue);
+    case "paidOrders": return String(report.paidOrders);
+    case "ordersPlaced": return String(report.totalOrders);
+    case "cancelledOrders": return String(report.cancelledOrders);
+    default: return formatKES(report.refundedValue);
+  }
+}
+
+/**
+ * The sales report for a period in Nairobi time (the address's `period`, this month by default), with the dashboard's
+ * figures and range line, its orders, and downloads named with the store and the dates.
+ */
 export function AnalyticsPanel() {
   const { brandName } = useStorefront();
   const catalog = useAdminCatalog();
-  const [period, setPeriod] = useState("month");
-  const [report, setReport] = useState<LoadResult<SalesReport>>({ status: "loading" });
-  const [downloadFormat, setDownloadFormat] = useState<"csv" | "excel" | "pdf">("csv");
-
+  const route = useRoute();
+  const { period, invalid } = parsePeriodParam(route);
+  // An unknown period reads as this month and is corrected in place; it is never sent.
   useEffect(() => {
-    setReport({ status: "loading" });
-    adminAPI.analytics.getSales({ period })
-      .then(({ data }) => setReport({ status: "ready", data }))
-      .catch((error: unknown) => setReport({ status: "error", message: describeApiError(error, "The sales report could not be loaded.") }));
-  }, [period]);
+    if (invalid) navigate(periodRoute("analytics", period), { replace: true });
+  }, [invalid, period]);
+  const report = usePeriodReport(period, loadSales, "The sales report could not be loaded.");
+  const [downloadFormat, setDownloadFormat] = useState<DownloadFormat>("csv");
+  const downloadId = useId();
 
   // Inventory value of on-hand units at current list prices, real records only (demo samples are not commercial stock).
   const departments = useMemo(() => {
@@ -37,7 +58,7 @@ export function AnalyticsPanel() {
   const inventoryValue = departments.reduce((sum, department) => sum + department.value, 0);
   const maxValue = Math.max(1, ...departments.map((department) => department.value));
 
-  const salesData = report.status === "ready" ? report.data : null;
+  const salesData = report.data;
   const rows = (salesData?.orders ?? []).map((order) => ({
     orderNumber: order.orderNumber,
     date: new Date(order.createdAt).toLocaleString("en-KE"),
@@ -51,67 +72,62 @@ export function AnalyticsPanel() {
     shippingCost: order.shippingCost,
     total: order.total,
   }));
+  const fileName = salesData ? salesExportName(brandName, salesData.range, DOWNLOAD_FORMATS[downloadFormat].extension) : "";
 
   const handleDownload = () => {
-    const filename = `apex-cart-financial-${period}`;
-    const title = `Financial Report - ${period.charAt(0).toUpperCase() + period.slice(1)}`;
-    if (downloadFormat === "csv") downloadCsv(`${filename}.csv`, rows);
-    else if (downloadFormat === "excel") downloadExcel(`${filename}.xlsx`, rows);
-    else downloadPdf(`${filename}.pdf`, rows, title, brandName);
+    if (!salesData) return;
+    const title = salesExportTitle(salesData.range);
+    if (downloadFormat === "csv") downloadCsv(fileName, rows);
+    else if (downloadFormat === "excel") downloadExcel(fileName, rows, title);
+    else downloadPdf(fileName, rows, title, brandName, salesData.generatedAt);
   };
 
-  const summary: [string, string][] = salesData
-    ? [
-      ["Net Revenue", formatKES(salesData.totalRevenue)],
-      ["Gross Orders", String(salesData.totalOrders)],
-      ["Cancelled", formatKES(salesData.cancelledValue)],
-      ["Returned", formatKES(salesData.returnedValue)],
-      ["Refunded", formatKES(salesData.refundedValue)],
-    ]
-    : [];
-
   return (
-    <div className="space-y-6">
-      <div className="rounded-lg bg-white p-5 shadow-sm">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h3 className="text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Financial report</h3>
-            <p className="mt-1 text-xs text-gray-600">Order revenue, cancellations, returns and refunds recorded by the API.</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <select aria-label="Report period" value={period} onChange={(event) => setPeriod(event.target.value)} className="rounded-sm border border-light-gray px-3 py-2 text-xs">
-              <option value="day">Today</option>
-              <option value="week">This week</option>
-              <option value="month">This month</option>
-              <option value="year">This year</option>
-            </select>
-            <select aria-label="Download format" value={downloadFormat} onChange={(event) => setDownloadFormat(event.target.value === "excel" ? "excel" : event.target.value === "pdf" ? "pdf" : "csv")} className="rounded-sm border border-light-gray px-3 py-2 text-xs">
-              <option value="csv">CSV</option>
-              <option value="excel">Excel</option>
-              <option value="pdf">PDF</option>
-            </select>
-            <button type="button" disabled={!rows.length} onClick={handleDownload} className="rounded-sm bg-brand-primary px-3 py-2 text-[10px] font-bold uppercase text-white hover:bg-brand-secondary hover:text-brand-primary disabled:opacity-50">
-              Download report
-            </button>
-          </div>
-        </div>
-        {report.status === "error" && <p role="alert" className="mt-4 text-sm font-semibold text-error">{report.message}</p>}
-        {report.status === "loading" && <p role="status" className="mt-4 text-sm text-gray-600">Loading report…</p>}
-        {salesData && (
-          <div className="mt-5 grid grid-cols-[repeat(auto-fit,minmax(min(100%,9rem),1fr))] gap-3">
-            {summary.map(([label, value]) => (
-              <div key={label} className="rounded-md bg-off-white p-4">
-                <p className="text-lg font-semibold tabular-nums text-navy-900">{value}</p>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-600">{label}</p>
-              </div>
-            ))}
-          </div>
-        )}
+    <div className="@container space-y-6">
+      <div className="space-y-4 rounded-lg bg-surface p-4 shadow-card sm:p-5">
+        <PeriodChoice module="analytics" current={period} />
+        <RangeLine report={report} what="The sales report" />
       </div>
+
+      <section aria-label="Figures for this period">
+        <ul className="grid grid-cols-1 gap-3 @min-[18rem]:grid-cols-2 @min-[36rem]:grid-cols-3 @min-[56rem]:grid-cols-5">
+          {FIGURES.map((figure) => (
+            <li key={figure.key} className="min-w-0">
+              <FigureCard label={figure.label} definition={figure.definition} value={salesData ? reportValue(figure.key, salesData) : null}
+                to={null} phase={report.phase} />
+            </li>
+          ))}
+        </ul>
+        {salesData && (
+          <p className="mt-3 text-sm text-muted [overflow-wrap:break-word]">
+            Value of cancelled orders: {formatKES(salesData.cancelledValue)} · Refunded for returned items: {formatKES(salesData.returnedValue)}
+          </p>
+        )}
+      </section>
+
+      <section aria-labelledby={downloadId} className="rounded-lg bg-surface p-4 shadow-card sm:p-5">
+        <h2 id={downloadId} className="type-h3 text-navy-900">Download</h2>
+        <p className="mt-1 text-sm text-muted">The orders in this report, as a file named with the store and its Nairobi dates.</p>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <select aria-label="Download format" value={downloadFormat} onChange={(event) => { if (isDownloadFormat(event.target.value)) setDownloadFormat(event.target.value); }}
+            className="min-h-[44px] rounded-sm border border-control bg-surface px-3 text-sm">
+            {Object.entries(DOWNLOAD_FORMATS).map(([value, format]) => <option key={value} value={value}>{format.label}</option>)}
+          </select>
+          <button type="button" disabled={!rows.length} onClick={handleDownload}
+            className="min-h-[44px] rounded-sm bg-navy-900 px-[16px] text-sm font-semibold text-white transition-colors duration-(--motion-feedback) hover:bg-gold-500 hover:text-navy-900 disabled:cursor-not-allowed disabled:opacity-50">
+            Download report
+          </button>
+        </div>
+        {salesData && (
+          <p className="mt-2 text-sm text-muted [overflow-wrap:anywhere]">
+            {rows.length ? <>File: <span className="font-mono text-navy-900">{fileName}</span></> : "No orders in this period to download."}
+          </p>
+        )}
+      </section>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="rounded-lg bg-white p-6 shadow-sm">
-          <h3 className="mb-1 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Inventory value by department</h3>
+          <h2 className="mb-1 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Inventory value by department</h2>
           <p className="mb-5 text-[11px] text-gray-600">Active SKUs at current list price; demo records are excluded.</p>
           {catalog.data ? (
             <>
@@ -138,7 +154,7 @@ export function AnalyticsPanel() {
         </div>
 
         <div className="rounded-lg bg-white p-6 shadow-sm">
-          <h3 className="mb-4 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Report orders</h3>
+          <h2 className="mb-4 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Report orders</h2>
           <div className="max-h-80 overflow-y-auto text-xs">
             {rows.slice(0, REPORT_PREVIEW_LIMIT).map((row) => (
               <div key={row.orderNumber} className="flex flex-wrap justify-between gap-x-3 border-b border-light-gray py-2">

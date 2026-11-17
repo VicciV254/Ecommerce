@@ -197,6 +197,33 @@ describe("admin catalog panels", () => {
     expect(admin.api.updateStock).not.toHaveBeenCalled();
   });
 
+  it("keeps the stock status and category in the address, changing them with a replace", () => {
+    window.history.replaceState(null, "", "#/admin/catalog/stock?status=OUT_OF_STOCK&category=cat-men");
+    const entries = window.history.length;
+    render(<StockManager canWrite={false} showToast={vi.fn()} />);
+    expect((screen.getByLabelText("Filter stock by status") as HTMLSelectElement).value).toBe("OUT_OF_STOCK");
+    expect((screen.getByLabelText("Filter stock by category") as HTMLSelectElement).value).toBe("cat-men");
+    expect(screen.getByText("No SKUs match these filters.")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Filter stock by status"), { target: { value: "IN_STOCK" } });
+    expect(window.location.hash).toBe("#/admin/catalog/stock?status=IN_STOCK&category=cat-men");
+    expect(screen.getByText("VAR-POLO")).toBeTruthy();
+    expect(screen.queryByText("VAR-DEMO-PHONE")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Filter stock by category"), { target: { value: "" } });
+    expect(window.location.hash).toBe("#/admin/catalog/stock?status=IN_STOCK");
+    expect(screen.getByText("VAR-DEMO-PHONE")).toBeTruthy();
+    expect(window.history.length).toBe(entries);
+  });
+
+  it("drops an unknown stock status or category from the address in place", async () => {
+    window.history.replaceState(null, "", "#/admin/catalog/stock?status=LOW&category=cat-missing");
+    const entries = window.history.length;
+    render(<StockManager canWrite={false} showToast={vi.fn()} />);
+    await waitFor(() => expect(window.location.hash).toBe("#/admin/catalog/stock"));
+    expect(window.history.length).toBe(entries);
+    expect(screen.getByText("VAR-POLO")).toBeTruthy();
+    expect((screen.getByLabelText("Filter stock by category") as HTMLSelectElement).value).toBe("");
+  });
+
   it("creates fixed coupons in cents and explains their once-per-basket scope", async () => {
     admin.api.createDiscount.mockResolvedValue({ data: {} });
     render(<DiscountManager canWrite showToast={vi.fn()} />);

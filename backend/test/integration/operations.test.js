@@ -315,7 +315,8 @@ test('refund states are truthful and only confirmation changes payment status an
   for (const inherited of ['constructor', 'toString']) {
     assert.equal((await refundAction(refund.id, inherited, 'REQUESTED')).data.code, 'REFUND_ACTION_UNKNOWN');
   }
-  const sales = async () => Math.round((await call('/admin/analytics/dashboard', { token: adminToken })).data.sales.total * 100);
+  // Net sales for orders placed this Nairobi year (the dashboard no longer reports an all-time total); these orders are new.
+  const sales = async () => Math.round((await call('/admin/analytics/dashboard?period=year', { token: adminToken })).data.figures.netSales * 100);
   const salesBefore = await sales();
   assert.equal((await refundAction(refund.id, 'approve', 'REQUESTED', { amount: 1161 })).data.code, 'REFUND_AMOUNT_INVALID');
   assert.equal((await refundAction(refund.id, 'approve', 'REQUESTED', { amount: 1000 })).data.code, 'REFUND_REASON_REQUIRED');

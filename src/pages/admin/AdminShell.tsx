@@ -21,6 +21,7 @@ import { StorefrontDraftProvider } from "./StorefrontDraft";
 import { StorefrontManager } from "./StorefrontManager";
 import { StorefrontPreview } from "./StorefrontPreview";
 import { UnsavedChangesProvider, useLeaveGuard } from "./unsavedChanges";
+import { UnreadAlertsRefresh, useUnreadAlerts } from "./unreadAlerts";
 
 const TOAST_MS = 2500;
 /** From this width the navigation is a persistent column, and an open drawer closes itself. */
@@ -117,6 +118,8 @@ function ShellFrame({ admin, onSignOut }: { admin: AdminSession; onSignOut: () =
   const now = new Date();
   const activeDiscounts = catalog?.data?.snapshot.discounts.filter((discount) => !discount.isDemo && isDiscountActive(discount, now)).length;
   const permitted = permittedModules(admin.role);
+  // This staff member's unread alerts beside Orders; an account that cannot open Orders asks for nothing.
+  const alerts = useUnreadAlerts(canRead(admin.role, "orders"));
   const navigation = (onNavigate?: () => void) => (
     <AdminNavigation
       permitted={permitted}
@@ -124,20 +127,23 @@ function ShellFrame({ admin, onSignOut }: { admin: AdminSession; onSignOut: () =
       previewCurrent={view.kind === "preview"}
       showPreview={canRead(admin.role, "storefront")}
       activeDiscounts={activeDiscounts}
+      unreadAlerts={alerts.count}
       onNavigate={onNavigate}
     />
   );
 
   const content = (
-    <ShellContent
-      key={label.key}
-      view={view}
-      title={label.title}
-      admin={admin}
-      activeDiscounts={activeDiscounts}
-      showToast={showToast}
-      onSignOut={signOut}
-    />
+    <UnreadAlertsRefresh.Provider value={alerts.refresh}>
+      <ShellContent
+        key={label.key}
+        view={view}
+        title={label.title}
+        admin={admin}
+        activeDiscounts={activeDiscounts}
+        showToast={showToast}
+        onSignOut={signOut}
+      />
+    </UnreadAlertsRefresh.Provider>
   );
   const storefrontGroup = view.kind === "preview" || (view.kind === "module" && view.module === "storefront");
 

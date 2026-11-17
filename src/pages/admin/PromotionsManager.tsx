@@ -113,7 +113,7 @@ export function PromotionsManager({ showToast }: { showToast: (message: string) 
           <p className="mt-1 text-xs text-gray-500">Manage email subscriptions and send promotional emails to subscribers.</p>
           <p className="mt-1 text-[11px] font-bold uppercase tracking-wider text-brand-accent">Showing {subscriptions.length} subscription(s)</p>
         </div>
-        <button onClick={loadSubscriptions} className="rounded-sm border border-brand-primary px-3 py-2 text-[10px] font-bold uppercase text-brand-primary hover:bg-brand-primary hover:text-white">Refresh</button>
+        <button type="button" onClick={loadSubscriptions} className="min-h-[44px] min-w-[44px] rounded-sm border border-brand-primary px-[14px] py-2 text-[11px] font-bold uppercase text-brand-primary hover:bg-brand-primary hover:text-white">Refresh</button>
       </div>
       <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
         <select aria-label="Filter subscriptions" value={activeFilter} onChange={(e) => setActiveFilter(e.target.value)} className="rounded-sm border border-light-gray px-3 py-2 text-xs">
@@ -162,7 +162,7 @@ export function PromotionsManager({ showToast }: { showToast: (message: string) 
           </div>
         </div>
         <div className="flex gap-2">
-          <button onClick={sendPromotionalEmail} disabled={sending || subscriptions.length === 0} className="rounded-sm bg-brand-primary px-4 py-2 text-[10px] font-bold uppercase text-white hover:bg-brand-secondary hover:text-brand-primary disabled:opacity-50">
+          <button type="button" onClick={sendPromotionalEmail} disabled={sending || subscriptions.length === 0} className="min-h-[44px] rounded-sm bg-brand-primary px-[16px] py-2 text-[11px] font-bold uppercase text-white hover:bg-brand-secondary hover:text-brand-primary disabled:opacity-50">
             {sending ? "Sending..." : `Send to ${subscriptions.length} subscribers`}
           </button>
         </div>

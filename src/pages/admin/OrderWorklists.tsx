@@ -28,6 +28,7 @@ import {
 } from "../../store/orderModel";
 import { formatDateTime, formatKES } from "../../utils/format";
 import { OrderActionDialog, RefundActionDialog, type ActionOutcome } from "./OperationDialogs";
+import type { RecordListFilters } from "./adminRoutes";
 import { StaffRefundCard } from "./RefundRecords";
 import type { WorkspaceFocus } from "./OrderWorkspace";
 import { Feedback, Field } from "./shared";
@@ -50,31 +51,37 @@ function describeListError(error: unknown, fallback: string) {
   return error instanceof OrderFormatError ? `${error.message} Try again shortly.` : describeApiError(error, fallback);
 }
 
+/** A page kept in the address instead of in the list: the current page, and how to move to another (with a replace). */
+export type PageControl = { page: number; onPage: (page: number) => void };
+
 /**
  * Loads one page whenever the request (a memoized `load`), page or reload token changes; superseded answers
- * are dropped. A page past the end (the list shrank) is replaced by the last page that exists.
+ * are dropped. A page past the end (the list shrank) is replaced by the last page that exists. The page is the
+ * list's own unless `control` keeps it in the address.
  */
-function usePage<T extends { pagination: Pagination }>(load: (page: number) => Promise<T>, reloadToken: number, fallback: string) {
-  const [page, setPage] = useState(1);
-  const [state, setState] = useState<LoadState<T>>({ status: "loading" });
+function usePage<T extends { pagination: Pagination }>(load: (page: number) => Promise<T>, reloadToken: number, fallback: string, control?: PageControl) {
+  const [ownPage, setOwnPage] = useState(1);
+  const page = control ? control.page : ownPage;
+  const setPage = control ? control.onPage : setOwnPage;
+  const [loaded, setLoaded] = useState<LoadState<T>>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let current = true;
     load(page)
-      .then((data) => {
-        if (!current) return;
-        const last = Math.max(1, data.pagination.pages);
-        if (page <= last) {
-          setState({ status: "ready", data });
-          return;
-        }
-        setState({ status: "loading" });
-        setPage(last);
-      })
-      .catch((error: unknown) => { if (current) setState({ status: "error", message: describeListError(error, fallback) }); });
+      .then((data) => { if (current) setLoaded({ status: "ready", data }); })
+      .catch((error: unknown) => { if (current) setLoaded({ status: "error", message: describeListError(error, fallback) }); });
     return () => { current = false; };
   }, [load, page, attempt, reloadToken, fallback]);
-  return { setPage, state, setState, retry: () => setAttempt((value) => value + 1) };
+  const last = loaded.status === "ready" ? Math.max(1, loaded.data.pagination.pages) : null;
+  const pastEnd = last !== null && page > last;
+  useEffect(() => {
+    if (pastEnd && last !== null) setPage(last);
+  }, [pastEnd, last, setPage]);
+  // A page past the end, whether still asked for or still the answer on screen after the move back, reads as loading
+  // until the last page arrives, never as an empty list.
+  const showsPastEnd = loaded.status === "ready" && loaded.data.pagination.page > Math.max(1, loaded.data.pagination.pages);
+  const state: LoadState<T> = pastEnd || showsPastEnd ? { status: "loading" } : loaded;
+  return { setPage, state, setState: setLoaded, retry: () => setAttempt((value) => value + 1) };
 }
 
 function countText(pagination: Pagination, noun: [string, string]) {
@@ -155,8 +162,8 @@ function OrderRow({ order, canWrite, onAction, onOpen }: {
   );
 }
 
-/** One server-filtered worklist of orders, with its full-result count and pages. */
-export function OrderQueue({ title, filters, emptyText, reloadToken, canWrite, onOpen, onChanged, showToast }: {
+/** One server-filtered worklist of orders, with its full-result count and pages (its own, or the address's). */
+export function OrderQueue({ title, filters, emptyText, reloadToken, canWrite, onOpen, onChanged, showToast, pageControl }: {
   title: string;
   filters: StaffOrderFilters;
   emptyText: string;
@@ -165,6 +172,7 @@ export function OrderQueue({ title, filters, emptyText, reloadToken, canWrite, o
   onOpen: OpenOrder;
   onChanged: () => void;
   showToast: (message: string) => void;
+  pageControl?: PageControl;
 }) {
   const titleId = useId();
   const [dialog, setDialog] = useState<{ order: StaffOrder; action: StaffAction } | null>(null);
@@ -174,7 +182,7 @@ export function OrderQueue({ title, filters, emptyText, reloadToken, canWrite, o
     async (current: number) => parseStaffOrderPage((await adminAPI.orders.getAll({ ...filters, page: current, limit: PAGE_SIZE })).data),
     [filters],
   );
-  const { setPage, state, retry } = usePage<StaffOrderPage>(load, reloadToken, "Orders could not be loaded.");
+  const { setPage, state, retry } = usePage<StaffOrderPage>(load, reloadToken, "Orders could not be loaded.", pageControl);
 
   const handleOutcome = (outcome: ActionOutcome) => {
     const order = dialog?.order;
@@ -217,15 +225,22 @@ export function OrderQueue({ title, filters, emptyText, reloadToken, canWrite, o
   );
 }
 
-/** Returns across orders, newest first; decisions and receipts are recorded in the order workspace. */
-export function ReturnsQueue({ reloadToken, onOpen }: { reloadToken: number; onOpen: OpenOrder }) {
-  const [status, setStatus] = useState<ReturnStatus | "">("");
+/** Returns across orders, newest first; decisions and receipts are recorded in the order workspace. Status and page are the address's. */
+export function ReturnsQueue({ reloadToken, onOpen, filters, onFilters }: {
+  reloadToken: number;
+  onOpen: OpenOrder;
+  filters: RecordListFilters<ReturnStatus>;
+  onFilters: (next: RecordListFilters<ReturnStatus>) => void;
+}) {
+  const { status } = filters;
   const titleId = useId();
   const load = useCallback(
     async (page: number) => parseReturnPage((await adminAPI.returns.getAll({ ...(status && { status }), page, limit: PAGE_SIZE })).data),
     [status],
   );
-  const { setPage, state, retry } = usePage<ReturnPage>(load, reloadToken, "Returns could not be loaded.");
+  const { setPage, state, retry } = usePage<ReturnPage>(load, reloadToken, "Returns could not be loaded.", {
+    page: filters.page, onPage: (page) => onFilters({ status, page }),
+  });
   const data = state.status === "ready" ? state.data : null;
   return (
     <section aria-labelledby={titleId} className={sectionClass}>
@@ -237,7 +252,7 @@ export function ReturnsQueue({ reloadToken, onOpen }: { reloadToken: number; onO
         <div className="w-full sm:w-64">
           <Field label="Return status">
             {(id) => (
-              <select id={id} value={status} onChange={(event) => { setStatus(isReturnStatus(event.target.value) ? event.target.value : ""); setPage(1); }} className={selectClass}>
+              <select id={id} value={status ?? ""} onChange={(event) => onFilters({ status: isReturnStatus(event.target.value) ? event.target.value : null, page: 1 })} className={selectClass}>
                 <option value="">All returns</option>
                 {RETURN_STATUSES.map((value) => <option key={value} value={value}>{STAFF_RETURN_STATUS[value]}</option>)}
               </select>
@@ -269,15 +284,17 @@ export function ReturnsQueue({ reloadToken, onOpen }: { reloadToken: number; onO
   );
 }
 
-/** Refunds across orders; permitted steps can be taken here or from the order workspace. */
-export function RefundsQueue({ reloadToken, canWrite, onOpen, onChanged, showToast }: {
+/** Refunds across orders; permitted steps can be taken here or from the order workspace. Status and page are the address's. */
+export function RefundsQueue({ reloadToken, canWrite, onOpen, onChanged, showToast, filters, onFilters }: {
   reloadToken: number;
   canWrite: boolean;
   onOpen: OpenOrder;
   onChanged: () => void;
   showToast: (message: string) => void;
+  filters: RecordListFilters<RefundStatus>;
+  onFilters: (next: RecordListFilters<RefundStatus>) => void;
 }) {
-  const [status, setStatus] = useState<RefundStatus | "">("");
+  const { status } = filters;
   const [dialog, setDialog] = useState<{ refund: ListedRefund; action: RefundAction } | null>(null);
   const [failure, setFailure] = useState("");
   const titleId = useId();
@@ -285,7 +302,9 @@ export function RefundsQueue({ reloadToken, canWrite, onOpen, onChanged, showToa
     async (page: number) => parseRefundPage((await adminAPI.refunds.getAll({ ...(status && { status }), page, limit: PAGE_SIZE })).data),
     [status],
   );
-  const { setPage, state, setState, retry } = usePage<RefundPage>(load, reloadToken, "Refunds could not be loaded.");
+  const { setPage, state, setState, retry } = usePage<RefundPage>(load, reloadToken, "Refunds could not be loaded.", {
+    page: filters.page, onPage: (page) => onFilters({ status, page }),
+  });
 
   const handleOutcome = (outcome: ActionOutcome & { refund?: StaffRefund }) => {
     const listed = dialog?.refund;
@@ -314,7 +333,7 @@ export function RefundsQueue({ reloadToken, canWrite, onOpen, onChanged, showToa
         <div className="w-full sm:w-64">
           <Field label="Refund status">
             {(id) => (
-              <select id={id} value={status} onChange={(event) => { setStatus(isRefundStatus(event.target.value) ? event.target.value : ""); setPage(1); }} className={selectClass}>
+              <select id={id} value={status ?? ""} onChange={(event) => onFilters({ status: isRefundStatus(event.target.value) ? event.target.value : null, page: 1 })} className={selectClass}>
                 <option value="">All refunds</option>
                 {REFUND_STATUSES.map((value) => <option key={value} value={value}>{STAFF_REFUND_STATUS[value]}</option>)}
               </select>

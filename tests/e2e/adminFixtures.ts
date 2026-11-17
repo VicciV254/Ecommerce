@@ -3,7 +3,8 @@ import type { AdminUser, StaffOrder, Subscription } from "../../src/api/admin";
 import type { Order } from "../../src/api/orders";
 import { fixturePendingOrder } from "../../src/test-support/checkoutFixtures";
 import { fixtureStaffOrder, fixtureStaffRefund, fixtureStaffReturn, noFulfilment } from "../../src/test-support/orderFixtures";
-import { browserQuote, expect, serveStaffOrders } from "./fixtures";
+import { NOTHING_WAITING, fixtureDashboard, fixtureSalesReport } from "../../src/test-support/overviewFixtures";
+import { adminStocks, browserQuote, expect, serveStaffOrders } from "./fixtures";
 
 /** Every admin place, with its H1. */
 export const ADMIN_PLACES = [
@@ -62,15 +63,48 @@ export async function serveAdminData(context: BrowserContext) {
   await context.route("**/api/admin/users?*", read({ users }));
   await context.route("**/api/admin/users", read({ users }));
   await context.route("**/api/subscriptions/admin/all*", read({ subscriptions }));
-  await context.route("**/api/admin/analytics/sales*", read({
-    period: "month", totalRevenue: 2488, totalOrders: 2, cancelledValue: 0, returnedValue: 1044, refundedValue: 0,
+  // The dashboard and the sales report for any period, reconciling with each other and with these records.
+  const period = (route: Parameters<Parameters<BrowserContext["route"]>[1]>[0]) => new URL(route.request().url()).searchParams.get("period") ?? "month";
+  await context.route("**/api/admin/analytics/sales*", (route) => route.request().method() === "GET"
+    ? route.fulfill({ json: salesReport(period(route), orders) })
+    : route.fallback());
+  await context.route("**/api/admin/analytics/dashboard*", (route) => route.request().method() === "GET"
+    ? route.fulfill({ json: dashboard(period(route), orders) })
+    : route.fallback());
+  return orders;
+}
+
+/** Both staff orders are paid and placed today; nothing is cancelled or refunded yet. */
+const PERIOD_FIGURES = { netSales: 2488, paidOrders: 2, ordersPlaced: 2, cancelledOrders: 0, refunds: { count: 0, amount: 0 } };
+
+function salesReport(period: string, orders: StaffOrder[]) {
+  return fixtureSalesReport(period, {
+    totalRevenue: PERIOD_FIGURES.netSales, paidOrders: PERIOD_FIGURES.paidOrders, totalOrders: PERIOD_FIGURES.ordersPlaced,
+    cancelledOrders: 0, cancelledValue: 0, returnedValue: 0, refundedValue: 0,
     orders: orders.map((order) => ({
       id: order.id, orderNumber: order.orderNumber, customer: `${customer.firstName} ${customer.lastName}`, email: customer.email,
       status: order.status, paymentStatus: order.paymentStatus, deliveryMethod: order.deliveryMethod,
       subtotal: order.subtotal, tax: order.tax, shippingCost: order.shippingCost, total: order.total, createdAt: order.createdAt,
     })),
-  }));
-  return orders;
+  });
+}
+
+/** Current counts as the lists count them: one order processing, one refund being sent, and the real SKUs low or out. */
+function dashboard(period: string, orders: StaffOrder[]) {
+  const realStock = (status: string) => adminStocks.filter((row) => !row.isDemo && row.status === status).length;
+  return fixtureDashboard(period, {
+    figures: PERIOD_FIGURES,
+    current: {
+      ...NOTHING_WAITING,
+      orders: { ...NOTHING_WAITING.orders, processing: orders.filter((order) => order.status === "PROCESSING").length },
+      refunds: { ...NOTHING_WAITING.refunds, PROCESSING: orders.flatMap((order) => order.refunds).filter((refund) => refund.status === "PROCESSING").length },
+      stock: { LOW_STOCK: realStock("LOW_STOCK"), OUT_OF_STOCK: realStock("OUT_OF_STOCK") },
+    },
+    recentOrders: orders.map((order) => ({
+      id: order.id, orderNumber: order.orderNumber, status: order.status, deliveryMethod: order.deliveryMethod, total: order.total,
+      user: { firstName: customer.firstName, lastName: customer.lastName },
+    })),
+  });
 }
 
 /** Waits for a place's H1 and for its loading statuses to finish. */

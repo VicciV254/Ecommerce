@@ -4,6 +4,8 @@ import type { AdminSession } from "../../api/staffSession";
 import { saveAdminSession } from "../../api/staffSession";
 import { StorefrontProvider } from "../../store/StorefrontContext";
 import { fixtureDiscounts, fixtureSnapshot, fixtureStorefront } from "../../test-support/catalogFixtures";
+import { fixtureAttention } from "../../test-support/orderFixtures";
+import { fixtureDashboard, fixtureSalesReport } from "../../test-support/overviewFixtures";
 import Admin from "../Admin";
 import { navigate } from "../../router";
 
@@ -15,7 +17,7 @@ const api = vi.hoisted(() => ({
     orders: { getAll: vi.fn(), get: vi.fn() },
     returns: { getAll: vi.fn() },
     refunds: { getAll: vi.fn() },
-    attention: { getAll: vi.fn() },
+    attention: { getAll: vi.fn(), markRead: vi.fn() },
     subscriptions: { getAll: vi.fn() },
   },
   catalog: { getStorefront: vi.fn() },
@@ -53,12 +55,8 @@ beforeEach(() => {
   api.catalog.getStorefront.mockResolvedValue({ data: fixtureStorefront() });
   api.catalogAdmin.getSnapshot.mockResolvedValue({ data: { ...fixtureSnapshot({ mode: "admin" }), discounts } });
   api.catalogAdmin.getStock.mockResolvedValue({ data: { stocks: [] } });
-  api.admin.analytics.getDashboard.mockResolvedValue({
-    data: { sales: { total: 0 }, orders: { total: 0, pending: 0, processing: 0, cancelled: 0, returned: 0 }, refunds: { total: 0 }, recentOrders: [] },
-  });
-  api.admin.analytics.getSales.mockResolvedValue({
-    data: { period: "month", totalRevenue: 0, totalOrders: 0, cancelledValue: 0, returnedValue: 0, refundedValue: 0, orders: [] },
-  });
+  api.admin.analytics.getDashboard.mockResolvedValue({ data: fixtureDashboard() });
+  api.admin.analytics.getSales.mockResolvedValue({ data: fixtureSalesReport() });
   api.admin.attention.getAll.mockResolvedValue({ data: { items: [] } });
   api.admin.orders.getAll.mockResolvedValue({ data: { orders: [], ...emptyPage } });
   api.admin.users.getAll.mockResolvedValue({ data: { users: [] } });
@@ -233,5 +231,87 @@ describe("navigation", () => {
       expect(h1()).toHaveLength(1);
     }
     await act(async () => undefined);
+  });
+});
+
+describe("unread alerts in the navigation", () => {
+  const alerts = (unread: number, read = 1) => ({
+    data: {
+      items: [
+        ...Array.from({ length: unread }, (_, index) => fixtureAttention({ key: `order-fulfil:order-${index}`, title: `Order APX-${index} is paid and awaiting preparation` })),
+        ...Array.from({ length: read }, (_, index) => fixtureAttention({ key: `order-fulfil:read-${index}`, read: true })),
+      ],
+    },
+  });
+  const ordersLink = (scope: HTMLElement) => within(scope).getByRole("link", { name: /^Orders(,|$)/ });
+
+  it("names Orders with this staff member's unread alerts, in the drawer and the persistent column", async () => {
+    api.admin.attention.getAll.mockResolvedValue(alerts(3));
+    signIn("VIEWER");
+    renderAdmin("/admin/catalog/stock");
+    expect(await within(nav()).findByRole("link", { name: "Orders, 3 unread alerts" }, WAIT)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+    const drawer = screen.getByRole("dialog", { name: "Admin navigation" });
+    expect(within(drawer).getByRole("link", { name: "Orders, 3 unread alerts" }).textContent).toBe("Orders3");
+  });
+
+  it("says one alert in the singular, and shows nothing when every alert is read", async () => {
+    api.admin.attention.getAll.mockResolvedValue(alerts(1));
+    signIn("ADMIN");
+    const view = renderAdmin("/admin/catalog/stock");
+    expect(await within(nav()).findByRole("link", { name: "Orders, 1 unread alert" }, WAIT)).toBeTruthy();
+    view.unmount();
+    api.admin.attention.getAll.mockResolvedValue(alerts(0, 2));
+    renderAdmin("/admin/catalog/stock");
+    await screen.findByRole("heading", { level: 1, name: "Stock" });
+    await waitFor(() => expect(api.admin.attention.getAll).toHaveBeenCalledTimes(2));
+    expect(ordersLink(nav()).textContent).toBe("Orders");
+  });
+
+  it("shows no count and no error when the count cannot be fetched", async () => {
+    api.admin.attention.getAll.mockRejectedValue(new Error("offline"));
+    signIn("ADMIN");
+    renderAdmin("/admin/catalog/stock");
+    await screen.findByRole("heading", { level: 1, name: "Stock" });
+    await waitFor(() => expect(api.admin.attention.getAll).toHaveBeenCalled());
+    await act(async () => undefined);
+    expect(ordersLink(nav()).textContent).toBe("Orders");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("counts again when the window regains focus, at most once a minute, and after items are marked read", async () => {
+    let now = Date.parse("2026-11-17T11:05:00Z");
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    api.admin.attention.getAll.mockResolvedValue(alerts(2));
+    signIn("ADMIN");
+    renderAdmin("/admin/catalog/stock");
+    await within(nav()).findByRole("link", { name: "Orders, 2 unread alerts" }, WAIT);
+    expect(api.admin.attention.getAll).toHaveBeenCalledTimes(1);
+    now += 30_000;
+    act(() => { window.dispatchEvent(new Event("focus")); });
+    expect(api.admin.attention.getAll).toHaveBeenCalledTimes(1);
+    now += 31_000;
+    api.admin.attention.getAll.mockResolvedValue(alerts(4));
+    act(() => { window.dispatchEvent(new Event("focus")); });
+    expect(await within(nav()).findByRole("link", { name: "Orders, 4 unread alerts" }, WAIT)).toBeTruthy();
+    expect(api.admin.attention.getAll).toHaveBeenCalledTimes(2);
+
+    // Marking an item read in the Orders module updates the count; the item itself stays listed.
+    act(() => navigate("/admin/orders/orders"));
+    const item = (await screen.findAllByRole("button", { name: /^Mark read\s*Order APX-0 / }, WAIT))[0];
+    api.admin.attention.markRead.mockResolvedValue({ data: { read: 1 } });
+    api.admin.attention.getAll.mockResolvedValue(alerts(3, 2));
+    const before = api.admin.attention.getAll.mock.calls.length;
+    fireEvent.click(item);
+    expect(await within(nav()).findByRole("link", { name: "Orders, 3 unread alerts" }, WAIT)).toBeTruthy();
+    expect(api.admin.attention.markRead).toHaveBeenCalledWith(["order-fulfil:order-0"]);
+    expect(api.admin.attention.getAll.mock.calls.length).toBe(before + 1);
+  });
+
+  it("asks for no count for an account without admin access", async () => {
+    signIn("AUDITOR");
+    renderAdmin("/admin/overview/dashboard");
+    await screen.findByRole("heading", { level: 1, name: "No admin access" });
+    expect(api.admin.attention.getAll).not.toHaveBeenCalled();
   });
 });
