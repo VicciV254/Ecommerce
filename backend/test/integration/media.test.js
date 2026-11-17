@@ -8,6 +8,8 @@ import { mailer } from '../../src/services/notificationService.js';
 
 const secret = 'test-only-media-secret';
 let base, close, staffToken, viewerToken, customerToken, user, category, product, other, coverUpload;
+/** P8.2: a staff edit sends back the token its editor loaded; this is the record's current one. */
+const current = async (model, id) => ({ expectedUpdatedAt: (await prisma[model].findUnique({ where: { id } })).updatedAt.toISOString() });
 
 before(async () => {
   mock.method(mailer, 'send', async () => ({ provider: 'test', messageId: 'test-message' }));
@@ -127,7 +129,7 @@ test('uploaded files stay fixed, variant images stay within their product and re
   const [red, blue] = product.variants;
   const assigned = await call(`/products/${product.id}`, { method: 'PUT', body: { images: [
     { id: cover.id, url: cover.url, width: cover.width, height: cover.height }, { id: detail.id, variantId: blue.id },
-  ] } });
+  ], ...await current('product', product.id) } });
   assert.equal(assigned.status, 200);
   assert.deepEqual(assigned.data.images.map((image) => [image.url, image.variantId]), [[cover.url, null], [detail.url, blue.id]]);
   assert.equal((await call(`/products/${product.id}`, { token: null })).data.images[1].variantId, blue.id);
@@ -142,7 +144,7 @@ test('uploaded files stay fixed, variant images stay within their product and re
     [{ id: cover.id, width: 1200 }, { id: detail.id }],
     [{ id: cover.id }, { id: detail.id, variantId: other.variants[0].id }],
   ]) {
-    const response = await call(`/products/${product.id}`, { method: 'PUT', body: { name: 'Must not be retained', images } });
+    const response = await call(`/products/${product.id}`, { method: 'PUT', body: { name: 'Must not be retained', images, ...await current('product', product.id) } });
     assert.equal(response.status, 400);
     assert.equal(response.data.code, 'MEDIA_NOT_ALLOWED');
   }
@@ -161,7 +163,7 @@ test('uploaded files stay fixed, variant images stay within their product and re
   assert.deepEqual(await snapshots(), { [red.id]: cover.url, [blue.id]: detail.url });
 
   const replacement = await upload('PRODUCT', 1763300000, 'jpg');
-  const replaced = await call(`/products/${product.id}`, { method: 'PUT', body: { images: [{ ...replacement, isMain: true }, { id: detail.id }] } });
+  const replaced = await call(`/products/${product.id}`, { method: 'PUT', body: { images: [{ ...replacement, isMain: true }, { id: detail.id }], ...await current('product', product.id) } });
   assert.equal(replaced.status, 200);
   assert.deepEqual(replaced.data.images.map((image) => [image.url, image.isMain]), [[delivery(replacement), true], [detail.url, false]]);
   assert.ok((await prisma.productImage.findUnique({ where: { id: cover.id } })).deletedAt);
@@ -195,16 +197,16 @@ test('retained sample images keep stored attribution unless cleared together wit
   const [image] = created.data.images;
   const stored = async () => prisma.productImage.findUnique({ where: { id: image.id } });
 
-  const altOnly = await call(`/products/${created.data.id}`, { method: 'PUT', body: { images: [{ id: image.id, isPlaceholder: true, alt: 'Updated alt' }] } });
+  const altOnly = await call(`/products/${created.data.id}`, { method: 'PUT', body: { images: [{ id: image.id, isPlaceholder: true, alt: 'Updated alt' }], ...await current('product', created.data.id) } });
   assert.equal(altOnly.status, 200);
   assert.deepEqual((({ alt, sourceUrl, license, credit, isPlaceholder }) => ({ alt, sourceUrl, license, credit, isPlaceholder }))(await stored()),
     { alt: 'Updated alt', ...attribution, isPlaceholder: true });
 
-  const stripped = await call(`/products/${created.data.id}`, { method: 'PUT', body: { images: [{ id: image.id, license: null }] } });
+  const stripped = await call(`/products/${created.data.id}`, { method: 'PUT', body: { images: [{ id: image.id, license: null }], ...await current('product', created.data.id) } });
   assert.equal(stripped.status, 400);
   assert.equal((await stored()).license, attribution.license);
 
-  const cleared = await call(`/products/${created.data.id}`, { method: 'PUT', body: { images: [{ id: image.id, isPlaceholder: false, sourceUrl: null, license: null, credit: null }] } });
+  const cleared = await call(`/products/${created.data.id}`, { method: 'PUT', body: { images: [{ id: image.id, isPlaceholder: false, sourceUrl: null, license: null, credit: null }], ...await current('product', created.data.id) } });
   assert.equal(cleared.status, 200);
   assert.deepEqual([(await stored()).isPlaceholder, (await stored()).license], [false, null]);
 });

@@ -1,10 +1,13 @@
 import { useMemo } from "react";
 import type { CatalogProduct } from "../../api/catalog";
 import { ModalDialog } from "../../components/Modal";
+import { Link } from "../../router";
 import { formatKES } from "../../utils/format";
 import { useAdminCatalog } from "./AdminCatalogContext";
+import { productPreviewRoute } from "./adminRoutes";
+import { visibilityLabel } from "./catalogReadiness";
 import { ProductImagesSection, initialGallery } from "./ProductImages";
-import { TableRegion } from "./shared";
+import { TableRegion, smallButtonClass } from "./shared";
 import { useImageUploads } from "./useImageUploads";
 
 const sectionTitle = "text-[11px] font-bold uppercase tracking-wider text-brand-primary";
@@ -44,11 +47,15 @@ export function ProductDetails({ product, onClose }: { product: CatalogProduct; 
         <div className="flex items-center justify-between gap-3 border-b border-light-gray px-4 py-3">
           <div className="min-w-0">
             <h2 className="font-display text-lg text-brand-primary [overflow-wrap:anywhere]">{product.name}</h2>
+            <p className="text-xs font-semibold text-navy-800">{visibilityLabel(product.isActive)}</p>
             {product.isDemo && <p className="text-[11px] font-semibold text-ocean-blue">Demo record: sample data, not a real listing.</p>}
           </div>
-          <button type="button" aria-label="Close product details" onClick={onClose} className="flex size-[44px] shrink-0 items-center justify-center rounded-full hover:bg-warm-beige">
-            <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <Link to={productPreviewRoute(product.id)} className={`inline-flex min-h-[44px] items-center ${smallButtonClass}`}>Preview</Link>
+            <button type="button" aria-label="Close product details" onClick={onClose} className="flex size-[44px] shrink-0 items-center justify-center rounded-full hover:bg-warm-beige">
+              <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
         </div>
 
         <div className="focus-scroll-room min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-5">
@@ -64,7 +71,7 @@ export function ProductDetails({ product, onClose }: { product: CatalogProduct; 
               ["Designer", designer?.name ?? "None"],
               ["Tags", product.tags.join(", ") || "None"],
               ["Collection", product.collection ?? "None"],
-              ["Visible to shoppers", product.isActive ? "Yes" : "No (hidden)"],
+              ["Visibility", visibilityLabel(product.isActive)],
               ["Featured", product.isFeatured ? "Yes" : "No"],
             ]} />
           </section>

@@ -143,6 +143,19 @@ export type CatalogSnapshot = {
   returnPolicy: CatalogReturnPolicy;
 };
 
+/** A staff record's version: the `updatedAt` an editor loaded, sent back with its save (an older one is refused). */
+type Versioned = { updatedAt: string };
+export type AdminCatalogProduct = CatalogProduct & Versioned;
+export type AdminCatalogCategory = CatalogCategory & Versioned;
+/** `GET /admin/catalog`: every product and category, hidden ones included, each with its version. */
+export type AdminCatalogSnapshot = Omit<CatalogSnapshot, "mode" | "products" | "categories"> & {
+  mode: "admin";
+  products: AdminCatalogProduct[];
+  categories: AdminCatalogCategory[];
+};
+/** A staff edit: the changes plus the version the editor loaded (`expectedUpdatedAt`). */
+export type VersionedEdit<T> = Partial<T> & { expectedUpdatedAt: string };
+
 /** `quantity` is the on-hand count; the server rejects values below the reserved units. */
 export type StockInput = { quantity: number; maxStock?: number; minThreshold?: number };
 /** Cloudinary's response to a signed upload, in the shape the media API verifies. */
@@ -208,11 +221,11 @@ export type ProductInput = {
   variants?: VariantInput[];
   images?: MediaInput[];
 };
+/** Category order changes only through `reorderCategories`; a new category goes after its last sibling. */
 export type CategoryInput = {
   name: string;
   slug?: string;
   parentId?: string | null;
-  order?: number;
   headerImage?: string | null;
   attributeKeys?: string[];
   isActive?: boolean;
@@ -317,16 +330,24 @@ export const catalogAPI = {
 
 /** Staff catalog operations; each request carries explicit staff credentials. */
 export const catalogAdminAPI = {
-  getSnapshot: async () => api.get<CatalogSnapshot>("/admin/catalog", staffRequest()),
+  getSnapshot: async () => api.get<AdminCatalogSnapshot>("/admin/catalog", staffRequest()),
 
-  createProduct: async (input: ProductInput) => api.post<CatalogProduct>("/products", input, staffRequest()),
-  updateProduct: async (id: string, input: Partial<ProductInput>) =>
-    api.put<CatalogProduct>(path("/products", id), input, staffRequest()),
+  createProduct: async (input: ProductInput) => api.post<AdminCatalogProduct>("/products", input, staffRequest()),
+  /** 409 `PRODUCT_CHANGED` when the product changed after `expectedUpdatedAt`; nothing is written then. */
+  updateProduct: async (id: string, input: VersionedEdit<ProductInput>) =>
+    api.put<AdminCatalogProduct>(path("/products", id), input, staffRequest()),
   deleteProduct: async (id: string) => api.delete<{ success: true }>(path("/products", id), staffRequest()),
 
-  createCategory: async (input: CategoryInput) => api.post<CatalogCategory>("/categories", input, staffRequest()),
-  updateCategory: async (id: string, input: Partial<CategoryInput>) =>
-    api.put<CatalogCategory>(path("/categories", id), input, staffRequest()),
+  createCategory: async (input: CategoryInput) => api.post<AdminCatalogCategory>("/categories", input, staffRequest()),
+  /** 409 `CATEGORY_CHANGED` when the category changed after `expectedUpdatedAt`; nothing is written then. */
+  updateCategory: async (id: string, input: VersionedEdit<CategoryInput>) =>
+    api.put<AdminCatalogCategory>(path("/categories", id), input, staffRequest()),
+  /**
+   * Every child of `parentId` (null for departments) in its new order; 409 `CATEGORY_SIBLINGS_CHANGED` when that is
+   * not exactly the current set of children.
+   */
+  reorderCategories: async (parentId: string | null, orderedIds: string[]) =>
+    api.post<{ categories: AdminCatalogCategory[] }>("/categories/reorder", { parentId, orderedIds }, staffRequest()),
   deleteCategory: async (id: string) => api.delete<{ success: true }>(path("/categories", id), staffRequest()),
 
   createDesigner: async (input: DesignerInput) => api.post<CatalogDesigner>("/designers", input, staffRequest()),

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AdminSession } from "../../api/staffSession";
 import { saveAdminSession } from "../../api/staffSession";
 import { StorefrontProvider } from "../../store/StorefrontContext";
-import { fixtureDiscounts, fixtureSnapshot, fixtureStorefront } from "../../test-support/catalogFixtures";
+import { fixtureAdminSnapshot, fixtureDiscounts, fixtureStorefront } from "../../test-support/catalogFixtures";
 import { fixtureAttention } from "../../test-support/orderFixtures";
 import { fixtureDashboard, fixtureSalesReport } from "../../test-support/overviewFixtures";
 import Admin from "../Admin";
@@ -53,7 +53,7 @@ beforeEach(() => {
   // jsdom has no media queries: phone-width layout throughout (the drawer, not the column).
   window.matchMedia = vi.fn().mockReturnValue({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() });
   api.catalog.getStorefront.mockResolvedValue({ data: fixtureStorefront() });
-  api.catalogAdmin.getSnapshot.mockResolvedValue({ data: { ...fixtureSnapshot({ mode: "admin" }), discounts } });
+  api.catalogAdmin.getSnapshot.mockResolvedValue({ data: { ...fixtureAdminSnapshot(), discounts } });
   api.catalogAdmin.getStock.mockResolvedValue({ data: { stocks: [] } });
   api.admin.analytics.getDashboard.mockResolvedValue({ data: fixtureDashboard() });
   api.admin.analytics.getSales.mockResolvedValue({ data: fixtureSalesReport() });

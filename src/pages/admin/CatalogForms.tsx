@@ -1,66 +1,82 @@
 import { useState } from "react";
-import { catalogAdminAPI, type CatalogCategory, type CatalogDesigner, type CategoryInput, type DesignerInput } from "../../api/catalog";
-import { describeApiError } from "../../api/errors";
+import {
+  catalogAdminAPI,
+  type AdminCatalogCategory,
+  type CatalogCategory,
+  type CatalogDesigner,
+  type CategoryInput,
+  type DesignerInput,
+} from "../../api/catalog";
+import { apiErrorCode, describeApiError } from "../../api/errors";
 import { ConfirmModal } from "../../components/Modal";
 import { useAdminCatalog } from "./AdminCatalogContext";
-import { Feedback, Field, categoryOptions, descendantIds, inputClass, isAcceptedImageUrl } from "./shared";
+import { Feedback, Field, categoryOptions, descendantIds, inputClass, isAcceptedImageUrl, smallButtonClass } from "./shared";
 import { useUnsavedChanges } from "./unsavedChanges";
 
-const MAX_CATEGORY_ORDER = 10_000;
 const DESIGNER_HANDLE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+/** Refusals that reloading the category answers: someone else saved it, or another save raced this one. */
+const CATEGORY_RELOAD_CODES = new Set(["CATEGORY_CHANGED", "CATALOG_CHANGED"]);
 
 function splitList(value: string) {
   return [...new Set(value.split(",").map((item) => item.trim()).filter(Boolean))];
 }
 
-/** Create or edit one category. The slug is never rewritten just because the name changes. */
+/**
+ * Create or edit one category. The slug is never rewritten just because the name changes. Order is set with the tree's
+ * Up and Down buttons, and a new category goes after its last sibling. A save is made against the version the form
+ * opened with; if someone else saved the category since, the server refuses it and the form offers a reload.
+ */
 export function CategoryForm({
-  category, defaultParentId, keeps, onClose, onSaved,
+  category, defaultParentId, keeps, onClose, onSaved, onReload,
 }: {
-  category: CatalogCategory | null;
+  category: AdminCatalogCategory | null;
   defaultParentId: string | null;
   /** Routes that keep the form open, when it sits inside another editor (by default, the page it was opened on). */
   keeps?: (route: string) => boolean;
   onClose: () => void;
   onSaved: (saved: CatalogCategory) => void;
+  /** Reopens the form from the catalog as it is now (after a conflict). */
+  onReload?: () => void;
 }) {
   const { categories } = useAdminCatalog();
   const [name, setName] = useState(category?.name ?? "");
   const [parentId, setParentId] = useState(category ? category.parentId ?? "" : defaultParentId ?? "");
-  const [order, setOrder] = useState(String(category?.order ?? 0));
   const [image, setImage] = useState(category?.image ?? "");
   const [keys, setKeys] = useState((category?.attributeKeys ?? []).join(", "));
   const [isActive, setIsActive] = useState(category?.isActive ?? true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const formState = JSON.stringify([name, parentId, order, image, keys, isActive]);
+  const [changedElsewhere, setChangedElsewhere] = useState(false);
+  const [reloading, setReloading] = useState(false);
+  const formState = JSON.stringify([name, parentId, image, keys, isActive]);
   const [loadedState] = useState(formState);
   const { confirmLeave } = useUnsavedChanges(formState !== loadedState, "Category form", keeps);
 
   const excluded = category ? new Set([category.id, ...descendantIds(categories, category.id)]) : new Set<string>();
   const parents = categoryOptions(categories).filter((option) => !excluded.has(option.id));
-  const orderValue = Number(order);
   const imageValid = !image.trim() || isAcceptedImageUrl(image.trim());
-  const valid = name.trim().length >= 2 && Number.isInteger(orderValue) && orderValue >= 0 && orderValue <= MAX_CATEGORY_ORDER && imageValid;
+  const valid = name.trim().length >= 2 && imageValid;
 
   const save = async () => {
     setSaving(true);
     setError("");
+    setChangedElsewhere(false);
     const input: CategoryInput = {
       name: name.trim(),
       parentId: parentId || null,
-      order: orderValue,
       headerImage: image.trim() || null,
       attributeKeys: splitList(keys),
       isActive,
     };
     try {
+      // `category` is the record as this form opened it (the parent reopens the form for a newer one).
       const { data } = category
-        ? await catalogAdminAPI.updateCategory(category.id, input)
+        ? await catalogAdminAPI.updateCategory(category.id, { ...input, expectedUpdatedAt: category.updatedAt })
         : await catalogAdminAPI.createCategory(input);
       onSaved(data);
     } catch (reason) {
       setError(describeApiError(reason, "The category could not be saved."));
+      setChangedElsewhere(CATEGORY_RELOAD_CODES.has(apiErrorCode(reason) ?? ""));
     } finally {
       setSaving(false);
     }
@@ -88,15 +104,10 @@ export function CategoryForm({
             </select>
           )}
         </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Display order">
-            {(id) => <input id={id} type="number" min={0} max={MAX_CATEGORY_ORDER} value={order} onChange={(event) => setOrder(event.target.value)} className={inputClass} />}
-          </Field>
-          <label className="mt-6 flex items-center gap-2 text-xs font-semibold text-brand-primary">
-            <input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} className="h-4 w-4 accent-brand-secondary" />
-            Visible to shoppers
-          </label>
-        </div>
+        <label className="flex min-h-[44px] items-center gap-2 text-xs font-semibold text-brand-primary">
+          <input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} className="h-4 w-4 accent-brand-secondary" />
+          Visible to shoppers
+        </label>
         <Field label="Header image URL" hint={imageValid ? "HTTPS address or a /images/ path." : "Use an HTTPS address or a /images/ path."}>
           {(id) => <input id={id} value={image} onChange={(event) => setImage(event.target.value)} placeholder="https://…" className={inputClass} aria-invalid={!imageValid} />}
         </Field>
@@ -105,6 +116,19 @@ export function CategoryForm({
         </Field>
         {category && <p className="text-[11px] text-gray-600">Slug: <code>{category.slug}</code> (kept when the name changes)</p>}
         <Feedback message={error} tone="error" />
+        {changedElsewhere && onReload && (
+          <button
+            type="button"
+            disabled={reloading}
+            onClick={() => confirmLeave(() => {
+              setReloading(true);
+              onReload();
+            })}
+            className={`min-h-[44px] ${smallButtonClass}`}
+          >
+            {reloading ? "Reloading…" : "Reload category"}
+          </button>
+        )}
       </div>
     </ConfirmModal>
   );

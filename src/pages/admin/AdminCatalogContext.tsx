@@ -1,18 +1,18 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { catalogAdminAPI, type CatalogSnapshot, type CatalogStock } from "../../api/catalog";
+import { catalogAdminAPI, type AdminCatalogCategory, type AdminCatalogSnapshot, type CatalogStock } from "../../api/catalog";
 import { apiStatus } from "../../api/errors";
 import { StaffSessionRequiredError } from "../../api/staffSession";
 import { describeCatalogError } from "../../store/CatalogContext";
-import { buildCategoryTree, parseCatalogSnapshot, CatalogFormatError, type CategoryTree } from "../../store/catalogModel";
+import { buildCategoryTree, parseAdminCatalogSnapshot, CatalogFormatError, type CategoryTree } from "../../store/catalogModel";
 import { isRecord } from "../../utils/storage";
 
-type AdminCatalogData = { snapshot: CatalogSnapshot; stocks: CatalogStock[] };
+type AdminCatalogData = { snapshot: AdminCatalogSnapshot; stocks: CatalogStock[] };
 
 type AdminCatalogValue = {
   status: "loading" | "ready" | "error";
   /** Last loaded staff snapshot; kept visible if a later refresh fails. */
   data: AdminCatalogData | null;
-  categories: CategoryTree;
+  categories: CategoryTree<AdminCatalogCategory>;
   error: string | null;
   /** The staff credentials were rejected; signing in again is the only fix. */
   sessionExpired: boolean;
@@ -50,7 +50,7 @@ export function AdminCatalogProvider({ children }: { children: ReactNode }) {
     let current = true;
     Promise.all([catalogAdminAPI.getSnapshot(), catalogAdminAPI.getStock()])
       .then(([snapshot, stock]) => {
-        const next = { snapshot: parseCatalogSnapshot(snapshot.data, ["admin"]), stocks: parseStocks(stock.data) };
+        const next = { snapshot: parseAdminCatalogSnapshot(snapshot.data), stocks: parseStocks(stock.data) };
         if (!current) return;
         setData(next);
         setError(null);

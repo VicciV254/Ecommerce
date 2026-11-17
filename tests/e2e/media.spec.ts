@@ -1,6 +1,6 @@
 import type { BrowserContext, Locator, Page, Request } from "@playwright/test";
-import type { CatalogProduct, CatalogSnapshot, MediaInput, UploadIntent } from "../../src/api/catalog";
-import { demoPhone, fixtureImage, linenShirt, poloShirt } from "../../src/test-support/catalogFixtures";
+import type { AdminCatalogProduct, CatalogProduct, CatalogSnapshot, MediaInput, UploadIntent } from "../../src/api/catalog";
+import { demoPhone, fixtureImage, linenShirt, poloShirt, staffRecord } from "../../src/test-support/catalogFixtures";
 import { shopperStateKey } from "../../src/utils/storage";
 import {
   ORIGIN,
@@ -391,7 +391,7 @@ function formParts(request: Request): [string, string][] {
 test("staff upload with progress, cancel and a freshly signed retry, then save the upload without an address", async ({ page, context, isMobile }) => {
   await signInStaff(page);
   const requested = await serveImageHosts(context);
-  const product: CatalogProduct = { ...linenShirt, images: [linenCover, linenShirt.images[1]] };
+  const product: AdminCatalogProduct = { ...staffRecord(linenShirt), images: [linenCover, linenShirt.images[1]] };
   await context.route("**/api/admin/catalog", (route) => route.fulfill({
     json: { ...adminSnapshot, products: adminSnapshot.products.map((item) => (item.id === product.id ? product : item)) },
   }));

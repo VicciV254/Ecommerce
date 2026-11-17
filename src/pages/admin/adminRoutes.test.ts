@@ -3,18 +3,22 @@ import {
   ADMIN_GROUPS,
   ADMIN_MODULE_IDS,
   ADMIN_PREVIEW_ROUTE,
+  ADMIN_PRODUCT_PREVIEW_ROUTE,
   NO_ORDER_FILTERS,
+  NO_PRODUCT_FILTERS,
   adminModuleRoute,
   ordersRoute,
   parseAdminPlace,
   parseOrderFilters,
   parseOrdersParams,
   parsePeriodParam,
+  parseProductListParams,
   parseProductParam,
   parseRefundFilters,
   parseReturnFilters,
   parseStockParams,
   periodRoute,
+  productPreviewRoute,
   productsRoute,
   routePath,
   stockRoute,
@@ -35,6 +39,8 @@ describe("admin places", () => {
     ["/admin/catalog/stock", { kind: "module", module: "stock" }],
     ["/admin/storefront/editor", { kind: "module", module: "storefront" }],
     ["/admin/storefront/preview", { kind: "preview" }],
+    ["/admin/catalog/preview?product=prod-linen-shirt", { kind: "product-preview" }],
+    ["/admin/catalog/preview", { kind: "product-preview" }],
     ["/admin/customers/customers", { kind: "module", module: "customers" }],
     ["/admin/customers/discounts", { kind: "module", module: "discounts" }],
     ["/admin/customers/promotions", { kind: "module", module: "promotions" }],
@@ -51,6 +57,8 @@ describe("admin places", () => {
     "/admin/Orders/orders",
     "/admin/orders/orders/extra",
     "/admin/storefront/preview/x",
+    "/admin/catalog/preview/prod-1",
+    "/admin/storefront/product-preview",
     "/admin/%6Frders/orders",
     "/admin/constructor/toString",
     "/admin/__proto__/products",
@@ -65,6 +73,7 @@ describe("admin places", () => {
       expect(parseAdminPlace(adminModuleRoute(module))).toEqual({ kind: "module", module });
     }
     expect(parseAdminPlace(ADMIN_PREVIEW_ROUTE)).toEqual({ kind: "preview" });
+    expect(parseAdminPlace(ADMIN_PRODUCT_PREVIEW_ROUTE)).toEqual({ kind: "product-preview" });
   });
 
   it("lists every module once, in five groups, with no settings or activity group", () => {
@@ -139,6 +148,52 @@ describe("products parameter", () => {
     expect(productsRoute("new")).toBe("/admin/catalog/products?product=new");
     expect(productsRoute("prod-1")).toBe("/admin/catalog/products?product=prod-1");
     expect(productsRoute("a/b")).toBe("/admin/catalog/products");
+  });
+
+  it("previews only a well-formed saved product id, and reads it back from the preview address", () => {
+    expect(productPreviewRoute("prod-linen-shirt")).toBe("/admin/catalog/preview?product=prod-linen-shirt");
+    expect(parseProductParam(productPreviewRoute("prod-linen-shirt"))).toEqual({ id: "prod-linen-shirt", malformed: false });
+    for (const id of ["new", "a/b", "", "<img>"]) expect(productPreviewRoute(id)).toBe("/admin/catalog/products");
+  });
+});
+
+describe("products list filters in the address", () => {
+  it("reads nothing as no filter", () => {
+    expect(parseProductListParams("/admin/catalog/products")).toEqual({ filters: NO_PRODUCT_FILTERS, invalid: false });
+    expect(parseProductListParams("/admin/catalog/products?product=prod-1")).toEqual({ filters: NO_PRODUCT_FILTERS, invalid: false });
+  });
+
+  it("reads every status and readiness value and a well-formed category id", () => {
+    for (const status of ["visible", "hidden", "demo", "sample-images"] as const) {
+      expect(parseProductListParams(`/admin/catalog/products?status=${status}`).filters.status).toBe(status);
+    }
+    for (const readiness of ["ready", "needs-images", "out-of-stock", "category-hidden"] as const) {
+      expect(parseProductListParams(`/admin/catalog/products?readiness=${readiness}`).filters.readiness).toBe(readiness);
+    }
+    expect(parseProductListParams("/admin/catalog/products?status=hidden&readiness=ready&category=cat-shirts&product=prod-1"))
+      .toEqual({ filters: { status: "hidden", readiness: "ready", category: "cat-shirts" }, invalid: false });
+  });
+
+  it("drops and flags an unknown status or readiness and a malformed category, keeping the others", () => {
+    const kept = { status: "hidden", readiness: "ready", category: "cat-1" } as const;
+    for (const [name, value] of [
+      ["status", "all"], ["status", "Hidden"], ["status", ""], ["readiness", "no-active-option"], ["readiness", ""],
+      ["category", "a%2Fb"], ["category", ""],
+    ] as const) {
+      const query = Object.entries({ ...kept, [name]: value }).map(([key, item]) => `${key}=${item}`).join("&");
+      expect(parseProductListParams(`/admin/catalog/products?${query}`), query)
+        .toEqual({ filters: { ...kept, [name]: null }, invalid: true });
+    }
+  });
+
+  it("writes the filters in one canonical order before the open product, and never a malformed value", () => {
+    const filters = { status: "hidden", readiness: "needs-images", category: "cat-shirts" } as const;
+    expect(productsRoute(null, filters)).toBe("/admin/catalog/products?status=hidden&readiness=needs-images&category=cat-shirts");
+    expect(productsRoute("prod-1", filters))
+      .toBe("/admin/catalog/products?status=hidden&readiness=needs-images&category=cat-shirts&product=prod-1");
+    expect(parseProductListParams(productsRoute("prod-1", filters))).toEqual({ filters, invalid: false });
+    expect(productsRoute(null, { status: null, readiness: null, category: "a/b" })).toBe("/admin/catalog/products");
+    expect(productsRoute("new", { category: "cat-1" })).toBe("/admin/catalog/products?category=cat-1&product=new");
   });
 });
 

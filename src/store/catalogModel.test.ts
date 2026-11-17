@@ -7,13 +7,16 @@ import {
   isDiscountActive,
   isMoney,
   optionAvailable,
+  parseAdminCatalogSnapshot,
   parseCatalogSnapshot,
   productPriceView,
   variantOptions,
   variantPriceView,
 } from "./catalogModel";
 import {
+  FIXTURE_VERSION,
   demoPhone,
+  fixtureAdminSnapshot,
   fixtureCategory,
   fixtureDiscounts,
   fixtureProduct,
@@ -196,5 +199,28 @@ describe("category tree", () => {
     ]);
     expect(tree.path("a").map((category) => category.id)).toEqual(["b", "a"]);
     expect(tree.path("orphan").map((category) => category.id)).toEqual(["orphan"]);
+  });
+});
+
+describe("staff catalog snapshot boundary", () => {
+  it("keeps each product's and category's version, as issued by the API", () => {
+    const staff = fixtureAdminSnapshot();
+    const versions = { ...staff, products: staff.products.map((product, index) => ({ ...product, updatedAt: `2026-11-17T08:00:0${index}.000Z` })) };
+    const parsed = parseAdminCatalogSnapshot(versions);
+    expect(parsed.mode).toBe("admin");
+    expect(parsed.products.map((product) => product.updatedAt)).toEqual(versions.products.map((product) => product.updatedAt));
+    expect(parsed.categories.every((category) => category.updatedAt === FIXTURE_VERSION)).toBe(true);
+  });
+
+  it("refuses a staff snapshot whose records lack a well-formed version, so no editor saves without one", () => {
+    const staff = fixtureAdminSnapshot();
+    const [first, ...rest] = staff.products;
+    const { updatedAt: _dropped, ...unversioned } = first;
+    expect(() => parseAdminCatalogSnapshot({ ...staff, products: [unversioned, ...rest] })).toThrow(/products version/);
+    for (const updatedAt of ["2026-11-17T08:00:00Z", "2026-11-17T11:00:00.000+03:00", "yesterday", 1_763_366_400_000, null]) {
+      expect(() => parseAdminCatalogSnapshot({ ...staff, categories: [{ ...staff.categories[0], updatedAt }, ...staff.categories.slice(1)] }), String(updatedAt))
+        .toThrow(/categories version/);
+    }
+    expect(() => parseAdminCatalogSnapshot(fixtureSnapshot({ mode: "demo" }))).toThrow(/unexpected demo mode/);
   });
 });

@@ -3,7 +3,7 @@ import { AxiosError, AxiosHeaders } from "axios";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CatalogProduct, MediaInput, UploadIntent } from "../../api/catalog";
 import { buildCategoryTree } from "../../store/catalogModel";
-import { demoPhone, fixtureImage, fixtureSnapshot, imagelessShirt, linenShirt, poloShirt } from "../../test-support/catalogFixtures";
+import { demoPhone, fixtureImage, fixtureSnapshot, imagelessShirt, linenShirt, poloShirt, staffRecord } from "../../test-support/catalogFixtures";
 import { FakeXhr, cloudinaryReply, fixtureUploadIntent, imageFile, installFakeXhr } from "../../test-support/uploadFixtures";
 import { CatalogManager } from "./CatalogManager";
 import { ProductEditor } from "./ProductEditor";
@@ -58,7 +58,8 @@ function apiError(status: number, data: unknown) {
 
 function renderEditor(product: CatalogProduct | null = editable, canWrite = true) {
   const onSaved = vi.fn();
-  render(<ProductEditor product={product} canWrite={canWrite} onClose={vi.fn()} onSaved={onSaved} />);
+  // The staff catalog lists every product with its version (P8.2).
+  render(<ProductEditor product={product && staffRecord(product)} canWrite={canWrite} onClose={vi.fn()} onSaved={onSaved} />);
   return { onSaved };
 }
 
@@ -110,6 +111,8 @@ function deferred<T>() {
 }
 
 beforeEach(() => {
+  // The products list keeps its filters in the address (P8.2), so each test starts on the unfiltered list.
+  window.history.replaceState(null, "", "#/admin/catalog/products");
   installFakeXhr();
   intents = [];
   mocks.snapshot = fixtureSnapshot({ mode: "admin" });

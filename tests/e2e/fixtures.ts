@@ -1,10 +1,11 @@
 import { expect, test as base, type BrowserContext, type Locator, type Page, type Route } from "@playwright/test";
 import type { User } from "../../src/api/auth";
 import type { StaffOrder } from "../../src/api/admin";
-import type { CatalogProduct, CatalogSnapshot, CatalogStock, StorefrontDraft } from "../../src/api/catalog";
+import type { AdminCatalogSnapshot, CatalogProduct, CatalogSnapshot, CatalogStock, StorefrontDraft } from "../../src/api/catalog";
 import type { PaymentOverview } from "../../src/api/mpesa";
 import type { CustomerOrder, Order, Quote } from "../../src/api/orders";
 import {
+  fixtureAdminSnapshot,
   fixtureProduct,
   fixtureSnapshot,
   fixtureStorefront,
@@ -109,7 +110,7 @@ export const hiddenProduct: CatalogProduct = fixtureProduct({
   id: "prod-hidden-draft", name: "Hidden Draft Jacket", isActive: false,
   variants: [fixtureVariant({ id: "var-hidden", stock: 0 })],
 });
-export const adminSnapshot: CatalogSnapshot = { ...publicSnapshot, mode: "admin", products: [...publicSnapshot.products, hiddenProduct] };
+export const adminSnapshot: AdminCatalogSnapshot = fixtureAdminSnapshot({ products: [...publicSnapshot.products, hiddenProduct] });
 
 export const adminStocks: CatalogStock[] = adminSnapshot.products.flatMap((product) => product.variants.map((variant) => ({
   id: `stock-${variant.id}`, variantId: variant.id, sku: variant.sku, attributes: variant.attributes,

@@ -46,7 +46,7 @@ vi.mock("../../store/CatalogContext", () => ({ useCatalog: () => ({ mode: "live"
 vi.mock("../../contexts/AuthContext", () => ({ useAuth: () => ({ user: null }) }));
 
 /** Controls that would change something; a read-only screen renders none of them. Case-insensitive, so a relabel cannot hide one. */
-const WRITE_ACTIONS = /^(Add|Add product|Save|Save product|Save draft|Save category|Save designer|Restock to max|Subtract|Create discount|Stop discount|Delete( .+)?|Edit|\+ ?Sub|\+ Department|\+ Designer|Hide|Show|Publish|Discard changes|Reload draft|Send verification to (selected|\d+ selected)|(Verify|Disable|Enable)( .+)?|Upload images|\+ Image URL|Remove.*|\+ .*)$/i;
+const WRITE_ACTIONS = /^(Add|Add product|Save|Save product|Save draft|Save category|Save designer|Restock to max|Subtract|Create discount|Stop discount|Delete( .+)?|Edit|\+ ?Sub|\+ Department|\+ Designer|Hide|Show|↑ Up|↓ Down|Publish|Discard changes|Reload draft|Send verification to (selected|\d+ selected)|(Verify|Disable|Enable)( .+)?|Upload images|\+ Image URL|Remove.*|\+ .*)$/i;
 
 function expectReadOnly(scope: HTMLElement = document.body) {
   expect(within(scope).queryAllByRole("button").map((button) => button.textContent?.trim()).filter((name) => WRITE_ACTIONS.test(name ?? ""))).toEqual([]);

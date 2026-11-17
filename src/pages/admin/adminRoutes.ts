@@ -7,8 +7,8 @@ import { isRefundStatus, isReturnStatus } from "../../store/orderModel";
 import { isCalendarDate } from "../../utils/nairobiDate";
 
 /**
- * The admin's address space: `#/admin/<group>/<module>` for each module, plus the storefront draft preview.
- * Modules are the existing destinations; groups only arrange them in the navigation.
+ * The admin's address space: `#/admin/<group>/<module>` for each module, plus the storefront draft preview and the
+ * product preview. Modules are the existing destinations; groups only arrange them in the navigation.
  */
 export type AdminGroupId = "overview" | "orders" | "catalog" | "storefront" | "customers";
 export type AdminModuleId =
@@ -32,6 +32,8 @@ type AdminModule = {
 
 export const ADMIN_HOME = "/admin";
 export const ADMIN_PREVIEW_ROUTE = "/admin/storefront/preview";
+/** One saved product on shoppers' own product page, with buying off: `?product=<id>`. */
+export const ADMIN_PRODUCT_PREVIEW_ROUTE = "/admin/catalog/preview";
 
 const MODULES: readonly AdminModule[] = [
   { id: "dashboard", group: "overview", slug: "dashboard", label: "Dashboard", width: "full",
@@ -75,11 +77,12 @@ export function adminGroupLabel(id: AdminGroupId) {
   return ADMIN_GROUPS.find((group) => group.id === id)!.label;
 }
 
-/** Where an admin address leads: the bare entry, a module, the storefront draft preview, or nothing that exists. */
+/** Where an admin address leads: the bare entry, a module, a preview, or nothing that exists. */
 export type AdminPlace =
   | { kind: "home" }
   | { kind: "module"; module: AdminModuleId }
   | { kind: "preview" }
+  | { kind: "product-preview" }
   | { kind: "not-found" };
 
 /** Reads an `#/admin/...` route. Segments must match exactly; anything else is "not found", never a guess. */
@@ -90,6 +93,7 @@ export function parseAdminPlace(route: string): AdminPlace {
   if (parts.length !== 3) return { kind: "not-found" };
   const [, group, slug] = parts;
   if (`/admin/${group}/${slug}` === ADMIN_PREVIEW_ROUTE) return { kind: "preview" };
+  if (`/admin/${group}/${slug}` === ADMIN_PRODUCT_PREVIEW_ROUTE) return { kind: "product-preview" };
   const found = MODULES.find((module) => module.group === group && module.slug === slug);
   return found ? { kind: "module", module: found.id } : { kind: "not-found" };
 }
@@ -329,8 +333,49 @@ export function parseProductParam(route: string): RecordParam {
   return recordParam(parseRoute(route).params.get("product"));
 }
 
-export function productsRoute(product: string | null = null) {
-  return product !== null && ORDER_ID.test(product)
-    ? `${adminModuleRoute("products")}?${new URLSearchParams({ product }).toString()}`
-    : adminModuleRoute("products");
+/** The products list's status filter values. */
+export const PRODUCT_STATUSES = ["visible", "hidden", "demo", "sample-images"] as const;
+export type ProductStatusFilter = (typeof PRODUCT_STATUSES)[number];
+/** The readiness filter values: ready to publish, or one open check (see `catalogReadiness.ts`). */
+export const PRODUCT_READINESS = ["ready", "needs-images", "out-of-stock", "category-hidden"] as const;
+export type ProductReadinessFilter = (typeof PRODUCT_READINESS)[number];
+const isProductStatus = (value: string): value is ProductStatusFilter => PRODUCT_STATUSES.some((status) => status === value);
+const isProductReadiness = (value: string): value is ProductReadinessFilter => PRODUCT_READINESS.some((item) => item === value);
+
+/** The products list's filters: status, readiness, and a category (with its subcategories) by id. */
+export type ProductListFilters = {
+  status: ProductStatusFilter | null;
+  readiness: ProductReadinessFilter | null;
+  category: string | null;
+};
+export const NO_PRODUCT_FILTERS: ProductListFilters = { status: null, readiness: null, category: null };
+
+/** The products list's filters; an unknown status or readiness, or a malformed category id, is dropped and flagged. */
+export function parseProductListParams(route: string): { filters: ProductListFilters; invalid: boolean } {
+  const { params } = parseRoute(route);
+  const status = readParam(params, "status", isProductStatus);
+  const readiness = readParam(params, "readiness", isProductReadiness);
+  const category = readParam(params, "category", (value): value is string => isRecordId(value));
+  return {
+    filters: { status: status.value, readiness: readiness.value, category: category.value },
+    invalid: status.invalid || readiness.invalid || category.invalid,
+  };
+}
+
+/** The products list with its filters, then the open product (`new` for "Add product"); only well-formed values. */
+export function productsRoute(product: string | null = null, filters: Partial<ProductListFilters> = {}) {
+  const params = new URLSearchParams();
+  if (filters.status && isProductStatus(filters.status)) params.set("status", filters.status);
+  if (filters.readiness && isProductReadiness(filters.readiness)) params.set("readiness", filters.readiness);
+  if (filters.category && isRecordId(filters.category)) params.set("category", filters.category);
+  if (product !== null && ORDER_ID.test(product)) params.set("product", product);
+  const query = params.toString();
+  return `${adminModuleRoute("products")}${query ? `?${query}` : ""}`;
+}
+
+/** The preview of a saved product; anything but a well-formed product id leads to the products list instead. */
+export function productPreviewRoute(product: string) {
+  return ORDER_ID.test(product) && product !== NEW_PRODUCT
+    ? `${ADMIN_PRODUCT_PREVIEW_ROUTE}?${new URLSearchParams({ product }).toString()}`
+    : productsRoute();
 }

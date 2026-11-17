@@ -31,8 +31,8 @@ export const MODULE_ACCESS: Readonly<Record<AdminModuleId, Access>> = {
   orders: { read: EVERY_ROLE, write: WRITERS },
   returns: { read: EVERY_ROLE, write: WRITERS },
   refunds: { read: EVERY_ROLE, write: WRITERS },
-  // index.js:54 staff catalog (any staff); productRoutes.js:27-29, categoryRoutes.js:19-21, designerRoutes.js:19-21
-  // and index.js:55-56 (media) write for SUPER_ADMIN and ADMIN only.
+  // index.js:54 staff catalog (any staff); productRoutes.js:27-29, categoryRoutes.js:20-23 (:21 is the reorder),
+  // designerRoutes.js:19-21 and index.js:55-56 (media) write for SUPER_ADMIN and ADMIN only.
   products: { read: EVERY_ROLE, write: WRITERS },
   // stockRoutes.js:17-20 read for all three; :21-23 (update, bulk, restock) write for SUPER_ADMIN and ADMIN.
   stock: { read: EVERY_ROLE, write: WRITERS },
@@ -90,6 +90,8 @@ export function landingRoute(role: string, route: string): string | null {
       return canRead(role, place.module) ? null : adminModuleRoute(first);
     case "preview":
       return canRead(role, "storefront") ? null : adminModuleRoute(first);
+    case "product-preview":
+      return canRead(role, "products") ? null : adminModuleRoute(first);
     default:
       return null;
   }

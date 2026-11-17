@@ -5,6 +5,7 @@ import {
   createCategory,
   updateCategory,
   deleteCategory,
+  reorderCategories,
 } from '../controllers/categoryController.js';
 import { optionalAuth } from '../middleware/auth.js';
 import { authenticateAdmin, authorize } from '../middleware/adminAuth.js';
@@ -17,6 +18,7 @@ router.get('/:id', optionalAuth, getCategoryById);
 
 // Admin routes
 router.post('/', authenticateAdmin, authorize('SUPER_ADMIN', 'ADMIN'), createCategory);
+router.post('/reorder', authenticateAdmin, authorize('SUPER_ADMIN', 'ADMIN'), reorderCategories);
 router.put('/:id', authenticateAdmin, authorize('SUPER_ADMIN', 'ADMIN'), updateCategory);
 router.delete('/:id', authenticateAdmin, authorize('SUPER_ADMIN', 'ADMIN'), deleteCategory);
 

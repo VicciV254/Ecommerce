@@ -172,19 +172,24 @@ export function DemoCatalogNotice() {
 }
 
 /* ---------- Breadcrumb ---------- */
-export function Breadcrumb({ items }: { items: { label: string; to?: string }[] }) {
+/** `linked={false}` shows the same trail as text (a staff preview never links shoppers' pages). */
+export function Breadcrumb({ items, linked = true }: { items: { label: string; to?: string }[]; linked?: boolean }) {
   return (
     <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5 text-xs tracking-wide text-muted">
-      <Link to="/" className="transition-colors hover:text-link hover:underline">
-        Home
-      </Link>
+      {linked ? (
+        <Link to="/" className="transition-colors hover:text-link hover:underline">
+          Home
+        </Link>
+      ) : <span>Home</span>}
       {items.map((item, index) => (
         <span key={`${item.label}-${index}`} className="flex items-center gap-1.5">
           <span aria-hidden="true">/</span>
           {item.to ? (
-            <Link to={item.to} className="transition-colors hover:text-link hover:underline">
-              {item.label}
-            </Link>
+            linked ? (
+              <Link to={item.to} className="transition-colors hover:text-link hover:underline">
+                {item.label}
+              </Link>
+            ) : <span>{item.label}</span>
           ) : (
             <span aria-current="page" className="font-medium text-navy-900">{item.label}</span>
           )}

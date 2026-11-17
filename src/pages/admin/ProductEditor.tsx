@@ -1,19 +1,22 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useId, useMemo, useRef, useState } from "react";
 import {
   catalogAdminAPI,
+  type AdminCatalogProduct,
   type CatalogCategory,
   type CatalogDesigner,
-  type CatalogProduct,
   type ProductInput,
   type VariantInput,
 } from "../../api/catalog";
-import { describeApiError } from "../../api/errors";
+import { apiErrorCode, describeApiError } from "../../api/errors";
 import { ModalDialog } from "../../components/Modal";
+import { Link } from "../../router";
 import { useAdminCatalog } from "./AdminCatalogContext";
-import { NEW_PRODUCT, adminModuleRoute, parseProductParam, routePath } from "./adminRoutes";
+import { NEW_PRODUCT, adminModuleRoute, parseProductParam, productPreviewRoute, routePath } from "./adminRoutes";
 import { CategoryForm, DesignerForm } from "./CatalogForms";
+import { productReadiness, visibilityLabel } from "./catalogReadiness";
 import { ProductDetails } from "./ProductDetails";
 import { ProductImagesSection, buildImages, imageProblems, initialGallery, placeUpload, uploadedImageRow, type ImageRow } from "./ProductImages";
+import { PublishChecklist } from "./PublishChecklist";
 import {
   Feedback,
   Field,
@@ -36,6 +39,10 @@ const MIN_DESCRIPTION = 10;
 const MAX_SPECS = 32;
 const MAX_SPEC_NAME = 60;
 const MAX_SPEC_VALUE = 500;
+/** Room left above a section heading brought to the top of the editor body (the body's own padding). */
+const SECTION_TOP_GAP_PX = 20;
+/** Refusals that reloading the product answers: someone else saved it, or another save raced this one. */
+const RELOAD_CODES = new Set(["PRODUCT_CHANGED", "CATALOG_CHANGED"]);
 
 type VariantRow = {
   rowKey: string;
@@ -54,7 +61,7 @@ type SpecRow = { rowKey: string; name: string; value: string };
 let rowCounter = 0;
 const nextKey = () => `row-${(rowCounter += 1)}`;
 
-function initialVariants(product: CatalogProduct | null): { keys: string[]; rows: VariantRow[] } {
+function initialVariants(product: AdminCatalogProduct | null): { keys: string[]; rows: VariantRow[] } {
   if (!product) return { keys: [], rows: [] };
   const keys: string[] = [];
   for (const variant of product.variants) {
@@ -75,12 +82,16 @@ function splitTags(value: string) {
 }
 
 type EditorProps = {
-  product: CatalogProduct | null;
+  product: AdminCatalogProduct | null;
   /** Roles that cannot write get the read-only product details instead of the form. */
   canWrite: boolean;
   onClose: () => void;
   onSaved: (message: string) => void;
   onDelete?: () => void;
+  /** Reopens the editor from the catalog as it is now, after someone else saved the product. */
+  onReload?: () => void;
+  /** Closes the editor and shows this category in the category tree. */
+  onShowCategory?: (categoryId: string) => void;
 };
 
 /** The product dialog: the editing form for roles that may write, read-only details for the rest. */
@@ -89,7 +100,7 @@ export function ProductEditor(props: EditorProps) {
   return <ProductForm {...props} />;
 }
 
-function ProductForm({ product, canWrite, onClose, onSaved, onDelete }: EditorProps) {
+function ProductForm({ product, canWrite, onClose, onSaved, onDelete, onReload, onShowCategory }: EditorProps) {
   const { data, categories, reload } = useAdminCatalog();
   const designers = data?.snapshot.designers ?? [];
   const options = useMemo(() => categoryOptions(categories), [categories]);
@@ -118,7 +129,14 @@ function ProductForm({ product, canWrite, onClose, onSaved, onDelete }: EditorPr
   const [newOption, setNewOption] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  /** The version this editor opened. A catalog reload behind it must not refresh it, or a save could overwrite newer edits. */
+  const [loadedVersion] = useState(product?.updatedAt ?? "");
+  const [changedElsewhere, setChangedElsewhere] = useState(false);
+  const [reloading, setReloading] = useState(false);
   const [creating, setCreating] = useState<"category" | "designer" | null>(null);
+  const body = useRef<HTMLDivElement>(null);
+  const variantsHeading = useRef<HTMLHeadingElement>(null);
+  const visibilityHintId = useId();
   // Unsaved when any value differs from what was loaded, an image changed, an upload is under way or an option name is typed.
   const formState = JSON.stringify({
     name, description, price, compareAt, categoryId, designerId, tags, collection, isActive, isFeatured, optionKeys, newOption,
@@ -208,6 +226,29 @@ function ProductForm({ product, canWrite, onClose, onSaved, onDelete }: EditorPr
   if (uploads.busy) problems.push("Wait for image uploads to finish, or cancel them, before saving.");
   const uniqueProblems = [...new Set(problems)];
 
+  // The checklist follows the form as it is now. A new product with no variant rows is saved with one default SKU and no stock.
+  const readiness = productReadiness({
+    isActive,
+    isDemo: product?.isDemo ?? false,
+    categoryId,
+    images: images.map((row) => ({ isPlaceholder: row.isPlaceholder })),
+    variants: !product && !variants.length
+      ? [{ isActive: true, stock: 0 }]
+      : variants.map((row) => ({
+        isActive: row.isActive,
+        stock: row.id
+          ? product?.variants.find((variant) => variant.id === row.id)?.stock ?? 0
+          : Math.max(0, Number(row.initialStock) || 0),
+      })),
+  }, categories);
+  // Scrolls only the editor body: `scrollIntoView` would also scroll the dialog around it and hide the header with Save.
+  const goTo = (heading: HTMLElement | null | undefined) => {
+    const scroller = body.current;
+    if (!heading || !scroller) return;
+    scroller.scrollTop += heading.getBoundingClientRect().top - scroller.getBoundingClientRect().top - SECTION_TOP_GAP_PX;
+    heading.focus({ preventScroll: true });
+  };
+
   const buildVariants = (): VariantInput[] => variants.map((row) => {
     const attributes = Object.fromEntries(optionKeys.flatMap((key) => {
       const value = row.values[key]?.trim();
@@ -234,6 +275,7 @@ function ProductForm({ product, canWrite, onClose, onSaved, onDelete }: EditorPr
     }
     setSaving(true);
     setError("");
+    setChangedElsewhere(false);
     const fields: ProductInput = {
       name: name.trim(),
       description: description.trim(),
@@ -253,6 +295,7 @@ function ProductForm({ product, canWrite, onClose, onSaved, onDelete }: EditorPr
           ...fields,
           ...(variantsDirty ? { variants: buildVariants() } : {}),
           ...(imagesDirty ? { images: buildImages(images, mainImage) } : {}),
+          expectedUpdatedAt: loadedVersion,
         });
       } else {
         await catalogAdminAPI.createProduct({
@@ -265,6 +308,8 @@ function ProductForm({ product, canWrite, onClose, onSaved, onDelete }: EditorPr
       onSaved(product ? `Saved "${fields.name}"` : `Created "${fields.name}"`);
     } catch (reason) {
       setError(describeApiError(reason, "The product could not be saved."));
+      // A new product has no older version to reload.
+      setChangedElsewhere(Boolean(product) && RELOAD_CODES.has(apiErrorCode(reason) ?? ""));
     } finally {
       setSaving(false);
     }
@@ -276,12 +321,16 @@ function ProductForm({ product, canWrite, onClose, onSaved, onDelete }: EditorPr
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-light-gray px-4 py-3">
           <div className="min-w-0">
             <h2 className="truncate font-display text-lg text-brand-primary">{product ? product.name : "Add product"}</h2>
+            {product && <p className="text-xs font-semibold text-navy-800">{visibilityLabel(product.isActive)}</p>}
             {product?.isDemo && <p className="text-[11px] font-semibold text-ocean-blue">Demo record: it stays a demo listing however it is edited.</p>}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button type="button" onClick={() => void save()} disabled={saving} className={primaryButtonClass}>
+            <button type="button" onClick={() => void save()} disabled={saving} className={`min-h-[44px] ${primaryButtonClass}`}>
               {saving ? "Saving…" : "Save product"}
             </button>
+            {product && (
+              <Link to={productPreviewRoute(product.id)} className={`inline-flex min-h-[44px] items-center ${smallButtonClass}`}>Preview</Link>
+            )}
             {onDelete && <button type="button" onClick={() => confirmLeave(onDelete)} className={dangerButtonClass}>Delete</button>}
             <button type="button" aria-label="Close product editor" onClick={onClose} className="flex size-[44px] shrink-0 items-center justify-center rounded-full hover:bg-warm-beige">
               <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
@@ -289,11 +338,38 @@ function ProductForm({ product, canWrite, onClose, onSaved, onDelete }: EditorPr
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-5">
+        <div ref={body} className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-5">
           <Feedback message={error} tone="error" />
+          {changedElsewhere && onReload && (
+            <button
+              type="button"
+              disabled={reloading}
+              onClick={() => confirmLeave(() => {
+                release();
+                setReloading(true);
+                onReload();
+              })}
+              className={`min-h-[44px] ${smallButtonClass}`}
+            >
+              {reloading ? "Reloading…" : "Reload product"}
+            </button>
+          )}
 
-          <section className="grid gap-4 lg:grid-cols-2">
-            <div className="space-y-3">
+          {/* Phones and tablets: the checklist first. From 1024px it sits beside the details column, above the specifications. */}
+          <section className="grid gap-4 lg:grid-cols-2 lg:grid-rows-[auto_1fr]">
+            <PublishChecklist
+              className="lg:col-start-2 lg:row-start-1"
+              readiness={readiness}
+              isNew={!product}
+              stockCategory={product ? { id: product.categoryId, name: categories.byId.get(product.categoryId)?.name ?? product.categoryName } : null}
+              onGoToImages={() => goTo(body.current?.querySelector<HTMLElement>('[data-editor-section="images"]'))}
+              onGoToVariants={() => goTo(variantsHeading.current)}
+              onShowCategory={onShowCategory && ((id) => confirmLeave(() => {
+                release();
+                onShowCategory(id);
+              }))}
+            />
+            <div className="min-w-0 space-y-3 lg:col-start-1 lg:row-span-2 lg:row-start-1">
               <h3 className="text-[11px] font-bold uppercase tracking-wider text-brand-primary">Details</h3>
               <Field label="Name">{(id) => <input id={id} value={name} onChange={(event) => setName(event.target.value)} className={inputClass} />}</Field>
               <Field label="Description">{(id) => <textarea id={id} rows={5} value={description} onChange={(event) => setDescription(event.target.value)} className={inputClass} />}</Field>
@@ -331,7 +407,7 @@ function ProductForm({ product, canWrite, onClose, onSaved, onDelete }: EditorPr
               </div>
               <div className="flex flex-wrap gap-5">
                 <label className="flex items-center gap-2 text-xs font-semibold text-brand-primary">
-                  <input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} className="h-4 w-4 accent-brand-secondary" />
+                  <input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} aria-describedby={visibilityHintId} className="h-4 w-4 accent-brand-secondary" />
                   Visible to shoppers
                 </label>
                 <label className="flex items-center gap-2 text-xs font-semibold text-brand-primary">
@@ -339,10 +415,12 @@ function ProductForm({ product, canWrite, onClose, onSaved, onDelete }: EditorPr
                   Featured
                 </label>
               </div>
-              {!isActive && <p className="text-[11px] text-gray-600">Hidden products are saved but not shown in the store.</p>}
+              <p id={visibilityHintId} className="text-[11px] text-gray-600">
+                Off, the product is a hidden draft that only staff can see{product ? " (Preview shows it as shoppers would)" : ""}. Turn this on and save to publish it.
+              </p>
             </div>
 
-            <div className="space-y-3">
+            <div className="min-w-0 space-y-3 lg:col-start-2 lg:row-start-2">
               <h3 className="text-[11px] font-bold uppercase tracking-wider text-brand-primary">Specifications</h3>
               {specs.map((spec, index) => (
                 <div key={spec.rowKey} className="grid grid-cols-[1fr_1.4fr_auto] gap-2">
@@ -364,7 +442,7 @@ function ProductForm({ product, canWrite, onClose, onSaved, onDelete }: EditorPr
           </section>
 
           <section className="space-y-3">
-            <h3 className="text-[11px] font-bold uppercase tracking-wider text-brand-primary">Variants (sellable SKUs)</h3>
+            <h3 ref={variantsHeading} tabIndex={-1} className="text-[11px] font-bold uppercase tracking-wider text-brand-primary">Variants (sellable SKUs)</h3>
             <p className="text-[11px] text-gray-600">
               {product
                 ? "On-hand stock for existing SKUs is managed on the Stock tab; reserved units are held for unpaid orders. Removing a row deactivates that SKU."

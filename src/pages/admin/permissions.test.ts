@@ -25,7 +25,7 @@ describe("permission map", () => {
     orders: { read: [["orderRoutes.js", 28], ["mpesaRoutes.js", 8]], write: [["orderRoutes.js", 29], ["mpesaRoutes.js", 9], ["admin.js", 34]] },
     returns: { read: [["orderRoutes.js", 28]], write: [["orderRoutes.js", 29]] },
     refunds: { read: [["orderRoutes.js", 28]], write: [["orderRoutes.js", 29]] },
-    products: { read: [["index.js", 54]], write: [["productRoutes.js", 27], ["productRoutes.js", 28], ["productRoutes.js", 29], ["categoryRoutes.js", 19], ["designerRoutes.js", 19], ["index.js", 55], ["index.js", 56]] },
+    products: { read: [["index.js", 54]], write: [["productRoutes.js", 27], ["productRoutes.js", 28], ["productRoutes.js", 29], ["categoryRoutes.js", 20], ["categoryRoutes.js", 21], ["categoryRoutes.js", 22], ["categoryRoutes.js", 23], ["designerRoutes.js", 19], ["index.js", 55], ["index.js", 56]] },
     stock: { read: [["stockRoutes.js", 17]], write: [["stockRoutes.js", 21], ["stockRoutes.js", 22], ["stockRoutes.js", 23]] },
     storefront: { read: [["settingsRoutes.js", 7]], write: [["settingsRoutes.js", 8], ["settingsRoutes.js", 9]] },
     customers: { read: [["admin.js", 26]], write: [["admin.js", 27], ["admin.js", 28], ["admin.js", 29], ["admin.js", 30]] },
@@ -95,6 +95,9 @@ describe("sign-in landing", () => {
     expect(landingRoute("ADMIN", "/admin/orders/orders?view=all&order=order-1")).toBeNull();
     expect(landingRoute("VIEWER", "/admin/catalog/products?product=prod-1")).toBeNull();
     expect(landingRoute("VIEWER", "/admin/storefront/preview")).toBeNull();
+    // Every staff role can open the product preview (P8.2 §3).
+    expect(landingRoute("VIEWER", "/admin/catalog/preview?product=prod-1")).toBeNull();
+    expect(landingRoute("ADMIN", "/admin/catalog/preview?product=prod-1")).toBeNull();
   });
 
   it("lands a viewer who asked for a module it may not open on its first permitted module", () => {

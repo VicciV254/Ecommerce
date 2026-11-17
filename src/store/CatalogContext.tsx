@@ -63,6 +63,22 @@ function useCatalogValue(state: LoadState, reload: () => void): CatalogValue {
   }), [state, snapshot, productsById, categories, reload]);
 }
 
+const NO_RELOAD = () => undefined;
+
+/**
+ * Serves an already loaded snapshot as the catalog to everything inside, in place of the shoppers' one: the staff
+ * product preview renders shoppers' product page from the staff catalog, hidden records included.
+ */
+export function CatalogSnapshotProvider({ snapshot, reload = NO_RELOAD, children }: {
+  snapshot: CatalogSnapshot;
+  reload?: () => void;
+  children: ReactNode;
+}) {
+  const state = useMemo<LoadState>(() => ({ status: "ready", snapshot }), [snapshot]);
+  const value = useCatalogValue(state, reload);
+  return <CatalogContext.Provider value={value}>{children}</CatalogContext.Provider>;
+}
+
 export function CatalogProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);

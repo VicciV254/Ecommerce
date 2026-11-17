@@ -3,7 +3,7 @@ import { serveAdminData, waitForPlace } from "./adminFixtures";
 import { expect, signInStaff, test } from "./fixtures";
 
 /** Buttons that would change something; none may render for a view-only role. Case-insensitive, so a relabel cannot hide one. */
-const WRITE_ACTIONS = /^(Add|Add product|Save|Save product|Save draft|Restock to max|Subtract|Create discount|Stop discount|Delete( .+)?|Edit|\+ ?Sub|\+ Department|\+ Designer|Hide|Show|Publish|Discard changes|Reload draft|Send verification to (selected|\d+ selected)|(Verify|Disable|Enable)( .+)?|Send to \d+ subscribers|\+ Image URL|\+ Variant|\+ Specification|Add option|Dispatch|Cancel order|Start processing|Mark ready.*|Confirm (delivery|pickup)|Retry email|Check with M-Pesa|Record M-Pesa reference.*|Approve.*|Reject.*)$/i;
+const WRITE_ACTIONS = /^(Add|Add product|Save|Save product|Save draft|Restock to max|Subtract|Create discount|Stop discount|Delete( .+)?|Edit|\+ ?Sub|\+ Department|\+ Designer|Hide|Show|↑ Up|↓ Down|Publish|Discard changes|Reload draft|Send verification to (selected|\d+ selected)|(Verify|Disable|Enable)( .+)?|Send to \d+ subscribers|\+ Image URL|\+ Variant|\+ Specification|Add option|Dispatch|Cancel order|Start processing|Mark ready.*|Confirm (delivery|pickup)|Retry email|Check with M-Pesa|Record M-Pesa reference.*|Approve.*|Reject.*)$/i;
 
 async function expectNothingEditable(scope: Locator, allowedFields: string[], label: string) {
   const names = await scope.getByRole("button").evaluateAll((buttons) =>
@@ -67,7 +67,7 @@ test.describe("view-only role", () => {
 
     await visit(page, "/admin/catalog/products", "Products");
     await expect(main.getByText("View only: your role can see products, categories and designers but cannot change them.")).toBeVisible();
-    await expectNothingEditable(main, ["Search products", "Filter products by category", "Filter products by status"], "Products");
+    await expectNothingEditable(main, ["Search products", "Filter products by category", "Filter products by status", "Filter products by readiness"], "Products");
     await main.getByRole("button", { name: "View Linen Short-Sleeve Shirt" }).click();
     const details = page.getByRole("dialog", { name: "Product details" });
     await expect(details.getByText("View only: your role can see this product but cannot change it.")).toBeVisible();

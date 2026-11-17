@@ -17,8 +17,9 @@ const cardAction =
  * Display prices are the server's per-SKU projection, shown once without client arithmetic. A product with one SKU is
  * added directly (the mini-cart opens); one with several opens Quick View to choose, never a default.
  * `imageSizes` replaces the card preset's `sizes` in a grid with other columns (the listing beside its filters).
+ * `previewRoute` (the staff product preview) makes the card lead there and offer no buying or wishlist.
  */
-export function ProductCard({ product, imageSizes }: { product: CatalogProduct; imageSizes?: string }) {
+export function ProductCard({ product, imageSizes, previewRoute }: { product: CatalogProduct; imageSizes?: string; previewRoute?: string }) {
   const { toggleWish, state } = useStore();
   const addLine = useAddToCart();
   const miniCart = useMiniCart();
@@ -28,7 +29,7 @@ export function ProductCard({ product, imageSizes }: { product: CatalogProduct; 
   const stock = productStock(product);
   const level = stockLevel(stock.quantity, stock.lowThreshold);
   const wished = state.wishlist.includes(product.id);
-  const productRoute = `/product/${encodeURIComponent(product.id)}`;
+  const productRoute = previewRoute ?? `/product/${encodeURIComponent(product.id)}`;
 
   const addSingleVariant = () => {
     const outcome = addLine(product, variants[0], 1);
@@ -81,19 +82,21 @@ export function ProductCard({ product, imageSizes }: { product: CatalogProduct; 
         </div>
       </Link>
 
-      <button
-        type="button"
-        onClick={() => toggleWish(product.id)}
-        aria-label={wished ? `Remove ${product.name} from wishlist` : `Save ${product.name} to wishlist`}
-        aria-pressed={wished}
-        className={`absolute right-2 top-12 z-10 flex size-[44px] items-center justify-center rounded-full bg-white shadow-md transition-all duration-200 hover:scale-110 ${
-          wished ? "text-error" : "text-gray-500 hover:text-error"
-        }`}
-      >
-        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={wished ? "currentColor" : "none"} stroke="currentColor" strokeWidth={2} className="h-4 w-4">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
-        </svg>
-      </button>
+      {!previewRoute && (
+        <button
+          type="button"
+          onClick={() => toggleWish(product.id)}
+          aria-label={wished ? `Remove ${product.name} from wishlist` : `Save ${product.name} to wishlist`}
+          aria-pressed={wished}
+          className={`absolute right-2 top-12 z-10 flex size-[44px] items-center justify-center rounded-full bg-white shadow-md transition-all duration-200 hover:scale-110 ${
+            wished ? "text-error" : "text-gray-500 hover:text-error"
+          }`}
+        >
+          <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={wished ? "currentColor" : "none"} stroke="currentColor" strokeWidth={2} className="h-4 w-4">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+          </svg>
+        </button>
+      )}
 
       <div className="flex flex-1 flex-col p-4">
         <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-brand-accent">{product.categoryName}</p>
@@ -120,7 +123,7 @@ export function ProductCard({ product, imageSizes }: { product: CatalogProduct; 
           </div>
         )}
         <div className="mt-2"><StockBadge level={level} /></div>
-        <div className="mt-auto">{action}</div>
+        {!previewRoute && <div className="mt-auto">{action}</div>}
       </div>
       {/* Outside the card's own elements, so hovering the dialog never restyles the card behind it. */}
       {quickView && createPortal(<QuickView product={product} onClose={() => setQuickView(false)} />, document.body)}

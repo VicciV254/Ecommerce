@@ -241,10 +241,13 @@ test('staff stock edits cannot steal held inventory and release preserves a late
   const invalidStock = await call(`/admin/stock/${f.variant.id}`, { method: 'PUT', token: staffToken, body: { quantity: 2 } });
   assert.equal(invalidStock.status, 409);
   assert.equal(invalidStock.data.code, 'STOCK_RESERVED');
+  // P8.2: a product save carries the token its editor loaded; this one is current, so the 409 is the stock rule's.
+  const expectedUpdatedAt = (await prisma.product.findUnique({ where: { id: f.product.id } })).updatedAt.toISOString();
   const invalidProduct = await call(`/products/${f.product.id}`, {
-    method: 'PUT', token: staffToken, body: { variants: [{ id: f.variant.id, stock: { quantity: 2 } }] },
+    method: 'PUT', token: staffToken, body: { variants: [{ id: f.variant.id, stock: { quantity: 2 } }], expectedUpdatedAt },
   });
   assert.equal(invalidProduct.status, 409);
+  assert.equal(invalidProduct.data.code, 'STOCK_RESERVED');
   assert.equal((await prisma.productVariant.findUnique({ where: { id: f.sibling.id } })).isActive, true);
   const adjusted = await call(`/admin/stock/${f.variant.id}`, { method: 'PUT', token: staffToken, body: { quantity: 4 } });
   assert.equal(adjusted.status, 200);

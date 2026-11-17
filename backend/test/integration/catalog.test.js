@@ -20,6 +20,8 @@ const rows = buildDemoCatalog();
 const firstDemo = rows.products[0];
 const firstRoot = rows.categories.find((item) => !item.parentId);
 const copy = (value) => JSON.parse(JSON.stringify(value));
+/** P8.2: a staff edit sends back the token its editor loaded; this is the record's current one. */
+const current = async (model, id) => ({ expectedUpdatedAt: (await prisma[model].findUnique({ where: { id } })).updatedAt.toISOString() });
 
 before(async () => {
   mock.method(mailer, 'send', async () => ({ provider: 'test', messageId: 'test-message' }));
@@ -132,7 +134,7 @@ test('staff CRUD persists canonical products with real variant identity and no d
   assert.equal(realProduct.stock, 5);
   assert.deepEqual(realProduct.variants.map((variant) => variant.price), [1000, 1250]);
   assert.equal((await call(`/products/${realProduct.id}`, { token: null })).data.name, input.name);
-  const renamed = await call(`/products/${realProduct.id}`, { method: 'PUT', body: { name: 'Merchant product revised' } });
+  const renamed = await call(`/products/${realProduct.id}`, { method: 'PUT', body: { name: 'Merchant product revised', expectedUpdatedAt: realProduct.updatedAt } });
   assert.equal(renamed.data.slug, realProduct.slug);
   assert.deepEqual(renamed.data.variants.map((variant) => variant.id), realProduct.variants.map((variant) => variant.id));
   const defaultProduct = await call('/products', { method: 'POST', body: {
@@ -142,18 +144,20 @@ test('staff CRUD persists canonical products with real variant identity and no d
   singleProduct = defaultProduct.data;
   assert.equal(singleProduct.variants.length, 1);
   assert.equal(singleProduct.variants[0].stock, 0);
-  assert.equal((await call(`/products/${realProduct.id}`, { method: 'PUT', body: { isDemo: true } })).status, 400);
+  assert.equal((await call(`/products/${realProduct.id}`, { method: 'PUT', body: { isDemo: true, ...await current('product', realProduct.id) } })).status, 400);
   const before = await prisma.product.count();
   const conflict = await call('/products', { method: 'POST', body: { ...input, name: 'Conflicting SKU product' } });
   assert.equal(conflict.status, 409);
   assert.equal(await prisma.product.count(), before);
   const ambiguous = await call(`/products/${realProduct.id}`, { method: 'PUT', body: {
     variants: [{ id: realProduct.variants[0].id, attributes: {} }, { id: realProduct.variants[1].id, attributes: {} }],
+    ...await current('product', realProduct.id),
   } });
   assert.equal(ambiguous.status, 400);
   const foreignImage = await prisma.productImage.findFirst({ where: { productId: firstDemo.id } });
   const forbiddenImage = await call(`/products/${realProduct.id}`, { method: 'PUT', body: {
     name: 'Must not be retained', images: [{ id: foreignImage.id, url: 'https://example.test/foreign.jpg' }],
+    ...await current('product', realProduct.id),
   } });
   assert.equal(forbiddenImage.status, 400);
   assert.equal((await prisma.product.findUnique({ where: { id: realProduct.id } })).name, 'Merchant product revised');
@@ -161,19 +165,19 @@ test('staff CRUD persists canonical products with real variant identity and no d
 
 test('category cycles, inherited visibility and stock validation cannot corrupt catalog state', async () => {
   const firstLeaf = await prisma.category.findUnique({ where: { id: firstDemo.categoryId } });
-  const cycle = await call(`/categories/${firstRoot.id}`, { method: 'PUT', body: { parentId: firstLeaf.id } });
+  const cycle = await call(`/categories/${firstRoot.id}`, { method: 'PUT', body: { parentId: firstLeaf.id, ...await current('category', firstRoot.id) } });
   assert.equal(cycle.status, 400);
   assert.equal((await prisma.category.findUnique({ where: { id: firstRoot.id } })).parentId, null);
   assert.equal((await call(`/categories/${firstRoot.id}`, { method: 'DELETE' })).status, 409);
-  assert.equal((await call(`/categories/${firstRoot.id}`, { method: 'PUT', body: { isActive: false } })).status, 200);
+  assert.equal((await call(`/categories/${firstRoot.id}`, { method: 'PUT', body: { isActive: false, ...await current('category', firstRoot.id) } })).status, 200);
   assert.equal((await call(`/products/${firstDemo.id}`, { token: null })).status, 404);
   assert.ok((await call('/catalog', { token: null })).data.products.every((product) => !product.categoryPath.includes(firstRoot.id)));
-  assert.equal((await call(`/categories/${firstRoot.id}`, { method: 'PUT', body: { isActive: true } })).status, 200);
+  assert.equal((await call(`/categories/${firstRoot.id}`, { method: 'PUT', body: { isActive: true, ...await current('category', firstRoot.id) } })).status, 200);
   const a = (await call('/categories', { method: 'POST', body: { name: 'Cycle test A', parentId: firstRoot.id } })).data;
   const b = (await call('/categories', { method: 'POST', body: { name: 'Cycle test B', parentId: firstRoot.id } })).data;
   const concurrent = await Promise.all([
-    call(`/categories/${a.id}`, { method: 'PUT', body: { parentId: b.id } }),
-    call(`/categories/${b.id}`, { method: 'PUT', body: { parentId: a.id } }),
+    call(`/categories/${a.id}`, { method: 'PUT', body: { parentId: b.id, expectedUpdatedAt: a.updatedAt } }),
+    call(`/categories/${b.id}`, { method: 'PUT', body: { parentId: a.id, expectedUpdatedAt: b.updatedAt } }),
   ]);
   assert.equal(concurrent.filter((result) => result.status === 200).length, 1);
   assert.ok(concurrent.some((result) => [400, 409].includes(result.status)));
@@ -284,7 +288,9 @@ test('drafts, responsive media and publication references are versioned and proj
   assert.equal(published.data.media.length, 2);
   assert.deepEqual(published.data.settings.campaigns[0].cta, settings.campaigns[0].cta);
   assert.equal((await call(`/products/${firstDemo.id}`, { method: 'DELETE' })).status, 409);
-  assert.equal((await call(`/categories/${firstRoot.id}`, { method: 'PUT', body: { isActive: false } })).status, 409);
+  const hidePublished = await call(`/categories/${firstRoot.id}`, { method: 'PUT', body: { isActive: false, ...await current('category', firstRoot.id) } });
+  assert.equal(hidePublished.status, 409);
+  assert.match(hidePublished.data.error, /published storefront/);
   settings.campaigns[0].mobileMediaId = null;
   settings.campaigns.push({ ...settings.campaigns[0], id: 'inactive-campaign', title: 'Never expose this inactive campaign' });
   settings.sections.push({ id: 'inactive', type: 'campaign', title: 'Inactive', enabled: false, productIds: [], categoryIds: [], campaignId: 'inactive-campaign' });
@@ -303,10 +309,11 @@ test('reinitialization preserves customized media, deleted fixtures, new records
   const photo = (await prisma.productImage.findFirst({ where: { productId: firstDemo.id } }));
   const demoVariant = await prisma.productVariant.findFirst({ where: { productId: firstDemo.id } });
   assert.equal((await call(`/admin/stock/${demoVariant.id}`, { method: 'PUT', body: { quantity: 7 } })).status, 200);
-  assert.equal((await call(`/categories/${firstDemo.categoryId}`, { method: 'PUT', body: { name: 'Customized category', slug: 'customized-category' } })).status, 200);
+  assert.equal((await call(`/categories/${firstDemo.categoryId}`, { method: 'PUT', body: { name: 'Customized category', slug: 'customized-category', ...await current('category', firstDemo.categoryId) } })).status, 200);
   assert.equal((await call(`/products/${firstDemo.id}`, { method: 'PUT', body: {
     name: 'Customized demo item', price: 1777,
     images: [{ id: photo.id, url: 'https://example.test/customized.jpg', isPlaceholder: false, sourceUrl: null, license: null }],
+    ...await current('product', firstDemo.id),
   } })).status, 200);
   const retired = rows.products[1];
   assert.equal((await call(`/products/${retired.id}`, { method: 'DELETE' })).status, 200);

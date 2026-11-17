@@ -4,8 +4,10 @@ import taxonomy from '../../src/data/taxonomy.json' with { type: 'json' };
 import defaults from '../../src/data/storefront-defaults.json' with { type: 'json' };
 import { buildDemoCatalog } from '../../src/data/demoCatalog.js';
 import { departmentPhotos, galleryPhotos } from '../../src/data/placeholderMedia.js';
-import { categoryContext, demoCatalogEnabled } from '../../src/services/catalogService.js';
-import { storefrontSchema, catalogProductSchema } from '../../src/utils/catalogValidation.js';
+import { categoryContext, demoCatalogEnabled, nextVersion } from '../../src/services/catalogService.js';
+import {
+  storefrontSchema, catalogProductSchema, categoryReorderSchema, readVersionToken, splitVersionedEdit,
+} from '../../src/utils/catalogValidation.js';
 import { assertDemoInitialization } from '../../src/config/databaseSafety.js';
 
 test('taxonomy has the exact approved breadth, unique identities and valid parent paths', () => {
@@ -106,4 +108,35 @@ test('demo initialization validates both local targets and requires consent only
   assert.throws(() => assertDemoInitialization({ ...env, NODE_ENV: 'production', ALLOW_DEMO_INITIALIZATION: 'true' }), /NODE_ENV/);
   assert.throws(() => assertDemoInitialization({ ...env, DATABASE_URL: 'postgresql://test:test@example.com/apex_test' }, true), /loopback/);
   assert.throws(() => assertDemoInitialization({ ...env, DIRECT_URL: 'postgresql://test:test@127.0.0.1:1/apex_test_other' }, true), /same local database/);
+});
+
+test('a staff edit token is exactly an issued updatedAt; offsets, other precisions and impossible dates are malformed', () => {
+  const issued = new Date('2026-11-17T10:00:00.123Z');
+  assert.deepEqual(readVersionToken(issued.toISOString()), issued);
+  for (const value of [
+    undefined, null, 1_763_373_600_123, '', 'yesterday', '2026-11-17T10:00:00Z', '2026-11-17T10:00:00.1234Z',
+    '2026-11-17T13:00:00.123+03:00', '2026-02-30T10:00:00.000Z', '2026-13-01T00:00:00.000Z', ' 2026-11-17T10:00:00.123Z',
+  ]) {
+    assert.equal(readVersionToken(value), null, JSON.stringify(value));
+  }
+  assert.deepEqual(splitVersionedEdit({ name: 'Renamed', expectedUpdatedAt: issued.toISOString() }), { expected: issued, changes: { name: 'Renamed' } });
+  assert.deepEqual(splitVersionedEdit({ name: 'Renamed' }), { expected: null, changes: { name: 'Renamed' } });
+  for (const body of [null, ['expectedUpdatedAt'], 'expectedUpdatedAt']) assert.deepEqual(splitVersionedEdit(body), { expected: null, changes: {} });
+});
+
+test('a staff edit always moves the token forward, even within one millisecond or behind a faster clock', (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-11-17T10:00:00.000Z') });
+  assert.equal(nextVersion(new Date('2026-11-17T09:00:00.000Z')).toISOString(), '2026-11-17T10:00:00.000Z');
+  assert.equal(nextVersion(new Date('2026-11-17T10:00:00.000Z')).toISOString(), '2026-11-17T10:00:00.001Z');
+  assert.equal(nextVersion(new Date('2026-11-17T10:05:00.000Z')).toISOString(), '2026-11-17T10:05:00.001Z');
+});
+
+test('a reorder names one parent (or none) and its children; the server checks the set itself', () => {
+  assert.equal(categoryReorderSchema.safeParse({ parentId: null, orderedIds: ['a', 'b'] }).success, true);
+  // Duplicates are not a format error: the controller refuses any list that is not exactly the current children (409).
+  assert.equal(categoryReorderSchema.safeParse({ parentId: 'p', orderedIds: ['a', 'a'] }).success, true);
+  for (const body of [{ orderedIds: ['a'] }, { parentId: 'p' }, { parentId: 'p', orderedIds: [] }, { parentId: 'p', orderedIds: [''] },
+    { parentId: 'p', orderedIds: ['a'], order: 1 }, { parentId: 3, orderedIds: ['a'] }]) {
+    assert.equal(categoryReorderSchema.safeParse(body).success, false, JSON.stringify(body));
+  }
 });

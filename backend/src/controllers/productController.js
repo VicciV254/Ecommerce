@@ -1,13 +1,17 @@
 import { randomUUID } from 'node:crypto';
 import prisma from '../config/database.js';
 import { generateSlug } from '../utils/helpers.js';
-import { catalogProductSchema, catalogProductPatchSchema, productQuerySchema, mediaSchema } from '../utils/catalogValidation.js';
+import {
+  catalogProductSchema, catalogProductPatchSchema, productQuerySchema, mediaSchema, splitVersionedEdit,
+} from '../utils/catalogValidation.js';
 import {
   assertNoPublishedReferences, availableStock, catalogSnapshot, demoCatalogEnabled, httpError, loadCategories, loadCatalogContext,
-  mediaDto, productDto, productInclude, productWhere, serializable, stockStatus,
+  mediaDto, nextVersion, productDto, productInclude, productWhere, serializable, stockStatus,
 } from '../services/catalogService.js';
 import { expireReservations } from '../services/inventoryService.js';
 import { verifiedCloudinaryMedia } from '../services/cloudinaryService.js';
+
+const PRODUCT_CHANGED = 'Someone else changed this product after you opened it. Reload it to see their changes, then make yours again.';
 
 export const getCatalog = async (_req, res, next) => {
   try {
@@ -237,19 +241,26 @@ export const createProduct = async (req, res, next) => {
       await writeVariants(db, product.id, variants, req.admin.id);
       // Variants created in this request have no client-known IDs yet, so new images cannot target one.
       await writeImages(db, product, images ?? []);
-      return productDto(await db.product.findUnique({ where: { id: product.id }, include: productInclude(true) }), context);
+      return productDto(await db.product.findUnique({ where: { id: product.id }, include: productInclude(true) }), context, true);
     });
     res.status(201).json(result);
   } catch (error) { next(error); }
 };
 
+/**
+ * Saves a staff edit made against the version the editor loaded (`expectedUpdatedAt`). A save against an older version
+ * is refused before anything is written, so one editor never silently restores fields another has just changed.
+ */
 export const updateProduct = async (req, res, next) => {
   try {
+    const { expected, changes } = splitVersionedEdit(req.body);
+    if (!expected) throw httpError(400, 'Reload this product and try again.', 'VERSION_REQUIRED');
     await expireReservations();
-    const input = catalogProductPatchSchema.parse(req.body);
+    const input = catalogProductPatchSchema.parse(changes);
     const result = await serializable(async (db) => {
       const existing = await db.product.findFirst({ where: { id: req.params.id, deletedAt: null }, include: productInclude(true) });
       if (!existing) throw httpError(404, 'Product not found');
+      if (existing.updatedAt.getTime() !== expected.getTime()) throw httpError(409, PRODUCT_CHANGED, 'PRODUCT_CHANGED');
       const context = await loadCatalogContext(db);
       await validateProductRelations(db, input, existing, context);
       const { variants: variantInputs, images, ...fields } = input;
@@ -258,10 +269,11 @@ export const updateProduct = async (req, res, next) => {
       if ((input.isActive ?? existing.isActive) && !(variants ?? existing.variants.map((data) => ({ data }))).some((item) => item.data.isActive)) {
         throw httpError(400, 'An active product requires an active variant');
       }
-      const product = await db.product.update({ where: { id: existing.id }, data: fields });
+      // Set explicitly: an edit of only variants or images changes no product column, and must still move the token.
+      const product = await db.product.update({ where: { id: existing.id }, data: { ...fields, updatedAt: nextVersion(existing.updatedAt) } });
       if (variants) await writeVariants(db, existing.id, variants, req.admin.id);
       if (images) await writeImages(db, product, images, existing.images, new Set(existing.variants.map((variant) => variant.id)));
-      return productDto(await db.product.findUnique({ where: { id: existing.id }, include: productInclude(true) }), context);
+      return productDto(await db.product.findUnique({ where: { id: existing.id }, include: productInclude(true) }), context, true);
     });
     res.json(result);
   } catch (error) { next(error); }

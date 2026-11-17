@@ -17,10 +17,16 @@ export const demoCatalogEnabled = () => process.env.NODE_ENV !== 'production' &&
 export function serializable(operation) {
   return prisma.$transaction(operation, { isolationLevel: 'Serializable', maxWait: 5000, timeout: 20_000 })
     .catch((error) => {
-      if (error.code === 'P2034') throw httpError(409, 'The catalog changed concurrently. Reload and retry your change.');
+      if (error.code === 'P2034') throw httpError(409, 'The catalog changed concurrently. Reload and retry your change.', 'CATALOG_CHANGED');
       throw error;
     });
 }
+
+/**
+ * The `updatedAt` a staff edit writes: now, but always after the version it replaces, so the token moves even within
+ * one millisecond or when this server's clock is behind the one that wrote the previous version.
+ */
+export const nextVersion = (previous) => new Date(Math.max(Date.now(), previous.getTime() + 1));
 
 export function categoryContext(categories, invalidStatus = 503) {
   const byId = new Map(categories.map((item) => [item.id, item]));
@@ -90,7 +96,8 @@ export function mediaDto(image) {
   };
 }
 
-export function productDto(product, context) {
+/** Staff DTOs (`admin`) also carry `updatedAt`, the token an editor sends back as `expectedUpdatedAt`. */
+export function productDto(product, context, admin = false) {
   const path = context.paths.get(product.categoryId);
   if (!path) throw httpError(503, 'Product category data is incomplete');
   const variants = product.variants.map((variant) => {
@@ -117,6 +124,7 @@ export function productDto(product, context) {
     stock: available.reduce((sum, variant) => sum + variant.stock, 0),
     maxStock: available.reduce((sum, variant) => sum + variant.maxStock, 0),
     rating: product.rating, reviewsCount: product.reviewsCount,
+    ...(admin && { updatedAt: product.updatedAt.toISOString() }),
   };
 }
 
@@ -128,6 +136,7 @@ export function categoryDtos(context, products, admin = false) {
       order: category.order, image: category.headerImage, attributeKeys: category.attributeKeys,
       isActive: category.isActive, returnRule: category.returnRule ?? null,
       productCount: products.filter((product) => product.categoryPath.includes(category.id)).length,
+      ...(admin && { updatedAt: category.updatedAt.toISOString() }),
     }));
 }
 
@@ -161,7 +170,7 @@ export async function catalogSnapshot(db, admin = false) {
   ]);
   const discounts = context.discounts.filter((discount) => admin ||
     (discount.isActive && !discount.couponCode && (demoCatalogEnabled() || !discount.isDemo)));
-  const products = rows.map((product) => productDto(product, context));
+  const products = rows.map((product) => productDto(product, context, admin));
   return {
     version: 2, mode: admin ? 'admin' : demoCatalogEnabled() ? 'demo' : 'live',
     products, categories: categoryDtos(context, products, admin),

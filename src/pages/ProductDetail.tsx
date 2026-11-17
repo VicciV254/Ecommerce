@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type RefObject } from "react";
 import { catalogAPI, type CatalogProduct, type CatalogProductDetail, type CatalogReview } from "../api/catalog";
 import { apiStatus, describeApiError } from "../api/errors";
 import { useMiniCart } from "../components/MiniCart";
@@ -37,11 +37,22 @@ export const PRODUCT_GALLERY: GalleryLayout = {
   thumbnails: "grid grid-cols-4 gap-2",
 };
 
-type DetailState =
+export type DetailState =
   | { status: "loading" }
   | { status: "ready"; product: CatalogProductDetail }
   | { status: "not-found" }
   | { status: "error"; message: string };
+
+/**
+ * The staff preview (admin): the same page with buying and the wishlist off, links kept inside the preview, and the
+ * product name under the preview banner's H1.
+ */
+export type ProductPreview = {
+  /** Where a related product's card leads: that product's own preview. */
+  productRoute: (id: string) => string;
+};
+/** A heading ref that is never attached: the preview's banner takes the entry focus instead. */
+const NO_ENTRY_FOCUS: RefObject<HTMLElement | null> = { current: null };
 
 function isReview(value: unknown): value is CatalogReview {
   return isRecord(value) && typeof value.id === "string" && typeof value.rating === "number" &&
@@ -116,10 +127,11 @@ function ProductContent({ id }: { id: string }) {
 const actionButton =
   "inline-flex min-h-[48px] flex-1 items-center justify-center rounded-sm px-5 text-sm font-bold uppercase tracking-[0.12em] transition-colors duration-(--motion-feedback) sm:basis-[10rem]";
 
-function ProductView({ product, detail, retry }: {
+export function ProductView({ product, detail, retry, preview }: {
   product: CatalogProduct | CatalogProductDetail;
   detail: DetailState;
   retry: () => void;
+  preview?: ProductPreview;
 }) {
   const catalog = useCatalog();
   const { toggleWish, state: store } = useStore();
@@ -132,7 +144,8 @@ function ProductView({ product, detail, retry }: {
   const factsId = useId();
   /** The last add's report, kept only while the choice and quantity it was made with are unchanged. */
   const [report, setReport] = useState<{ key: string; text: string } | null>(null);
-  useEntryFocus(heading);
+  useEntryFocus(preview ? NO_ENTRY_FOCUS : heading);
+  const NameHeading = preview ? "h2" : "h1";
 
   const reportKey = `${selection.choiceKey}|${selection.quantity}`;
   const wished = store.wishlist.includes(product.id);
@@ -157,6 +170,7 @@ function ProductView({ product, detail, retry }: {
   return (
     <Container className="py-6 md:py-8">
       <Breadcrumb
+        linked={!preview}
         items={[
           { label: "Shop", to: "/shop" },
           ...categoryPath.map((category) => ({ label: category.name, to: `/shop?cat=${encodeURIComponent(category.slug)}` })),
@@ -174,7 +188,7 @@ function ProductView({ product, detail, retry }: {
       {/* Phones: facts, then the gallery, then the purchase controls. From 768px the gallery sits left of both. */}
       <div className="mt-4 grid items-start gap-6 md:grid-cols-2 md:grid-rows-[auto_1fr] md:gap-x-8 lg:gap-x-10">
         <div className="min-w-0 md:col-start-2 md:row-start-1">
-          <h1 ref={heading} tabIndex={-1} className="type-h1 break-words text-navy-900">{product.name}</h1>
+          <NameHeading ref={heading} tabIndex={-1} className="type-h1 break-words text-navy-900">{product.name}</NameHeading>
           {product.isDemo && (
             <p className="mt-2 flex flex-wrap items-center gap-2 text-sm text-ocean-blue-dark">
               <DemoBadge />
@@ -199,30 +213,34 @@ function ProductView({ product, detail, retry }: {
           <OptionChoices selection={selection} onChoose={choose} />
           <QuantityStepper value={selection.quantity} max={selection.maxQuantity} disabled={!selection.canAdd} onChange={setQuantity} />
           <div className="space-y-3">
-            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-              <button
-                ref={action}
-                type="button"
-                disabled={!incomplete && !selection.canAdd}
-                aria-describedby={statusId}
-                onClick={incomplete ? chooseOptions : doAdd}
-                className={`${actionButton} ${
-                  incomplete || selection.canAdd
-                    ? "bg-navy-900 text-white hover:bg-gold-500 hover:text-navy-900"
-                    : "cursor-not-allowed bg-surface-soft text-muted"
-                }`}
-              >
-                {incomplete ? "Choose options" : "Add to cart"}
-              </button>
-              <button
-                type="button"
-                aria-pressed={wished}
-                onClick={() => toggleWish(product.id)}
-                className={`${actionButton} border ${wished ? "border-error/40 bg-error-tint text-error" : "border-control text-navy-900 hover:border-navy-900"}`}
-              >
-                {wished ? "♥ In wishlist" : "♡ Save to wishlist"}
-              </button>
-            </div>
+            {preview ? (
+              <p className="rounded-sm border border-divider bg-surface-soft px-4 py-3 text-sm font-semibold text-navy-900">Buying is off in this preview.</p>
+            ) : (
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                <button
+                  ref={action}
+                  type="button"
+                  disabled={!incomplete && !selection.canAdd}
+                  aria-describedby={statusId}
+                  onClick={incomplete ? chooseOptions : doAdd}
+                  className={`${actionButton} ${
+                    incomplete || selection.canAdd
+                      ? "bg-navy-900 text-white hover:bg-gold-500 hover:text-navy-900"
+                      : "cursor-not-allowed bg-surface-soft text-muted"
+                  }`}
+                >
+                  {incomplete ? "Choose options" : "Add to cart"}
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={wished}
+                  onClick={() => toggleWish(product.id)}
+                  className={`${actionButton} border ${wished ? "border-error/40 bg-error-tint text-error" : "border-control text-navy-900 hover:border-navy-900"}`}
+                >
+                  {wished ? "♥ In wishlist" : "♡ Save to wishlist"}
+                </button>
+              </div>
+            )}
             <PurchaseStatus id={statusId} message={status} tone={report?.key === reportKey ? "info" : "warning"} />
             <p className="text-sm text-muted">{VAT_AT_CHECKOUT}</p>
           </div>
@@ -274,7 +292,7 @@ function ProductView({ product, detail, retry }: {
           </ul>
         ) : (
           <p className="mt-3 text-muted">
-            {detail.status === "ready" ? "No reviews yet." : "Reviews are shown once the latest product details load."}
+            {preview ? "Reviews aren't part of this preview." : detail.status === "ready" ? "No reviews yet." : "Reviews are shown once the latest product details load."}
           </p>
         )}
       </section>
@@ -283,12 +301,12 @@ function ProductView({ product, detail, retry }: {
         <section aria-labelledby="related-title" className="mt-12">
           <h2 id="related-title" className="type-h2 mb-5 text-navy-900">More in {product.categoryName}</h2>
           <div className="product-grid">
-            {related.map((item) => <ProductCard key={item.id} product={item} />)}
+            {related.map((item) => <ProductCard key={item.id} product={item} previewRoute={preview?.productRoute(item.id)} />)}
           </div>
         </section>
       )}
 
-      {(hasChoices || selection.canAdd) && (
+      {!preview && (hasChoices || selection.canAdd) && (
         <PurchaseBar inlineAction={action} price={selection.price} canAdd={selection.canAdd} onAdd={doAdd} onChooseOptions={chooseOptions} />
       )}
     </Container>

@@ -108,12 +108,35 @@ export const catalogCategorySchema = z.object({
   name: text(120).min(2),
   slug: slugSchema.optional(),
   parentId: idSchema.nullable().optional(),
-  order: z.number().int().min(0).max(10_000).optional(),
   headerImage: imageUrlSchema.nullable().optional(),
   attributeKeys: z.array(text(60).min(1)).max(32).refine(unique, 'Specification keys must be unique').optional(),
   isActive: z.boolean().optional(),
 }).strict();
 export const catalogCategoryPatchSchema = catalogCategorySchema.partial();
+
+/** More siblings than one parent can hold in this catalog; a longer list is malformed. */
+const MAX_REORDERED_SIBLINGS = 1000;
+/** Category order changes only here: every sibling of `parentId` (null for departments), in their new order. */
+export const categoryReorderSchema = z.object({
+  parentId: idSchema.nullable(),
+  orderedIds: z.array(idSchema).min(1).max(MAX_REORDERED_SIBLINGS),
+}).strict();
+
+/**
+ * A staff edit's concurrency token: exactly the `updatedAt` the editor loaded (the server issues `Date#toISOString()`),
+ * as a Date, or null when it is missing or malformed. Offsets, other precisions and impossible dates are malformed.
+ */
+export function readVersionToken(value) {
+  if (typeof value !== 'string') return null;
+  const time = Date.parse(value);
+  return Number.isNaN(time) || new Date(time).toISOString() !== value ? null : new Date(time);
+}
+
+/** Splits an edit request into its token (null when missing or malformed) and the changes to validate. */
+export function splitVersionedEdit(body) {
+  const { expectedUpdatedAt, ...changes } = body !== null && typeof body === 'object' && !Array.isArray(body) ? body : {};
+  return { expected: readVersionToken(expectedUpdatedAt), changes };
+}
 
 export const catalogDesignerSchema = z.object({
   designerId: slugSchema,

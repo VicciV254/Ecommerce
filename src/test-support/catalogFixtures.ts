@@ -3,6 +3,7 @@
  * test data; nothing here is imported by the application bundle.
  */
 import type {
+  AdminCatalogSnapshot,
   CatalogCategory,
   CatalogDesigner,
   CatalogDiscount,
@@ -156,6 +157,20 @@ export function fixtureSnapshot(overrides: Partial<CatalogSnapshot> = {}): Catal
     categories: fixtureCategories, designers: fixtureDesigners, discounts: fixtureDiscounts, returnPolicy: fixtureReturnPolicy,
     ...overrides,
   };
+}
+
+/** The version staff fixtures are listed with; real versions are the API's `updatedAt`. */
+export const FIXTURE_VERSION = "2026-11-17T07:00:00.000Z";
+
+/** A shopper fixture as the staff catalog lists it: with a version (its own, when it already has one). */
+export function staffRecord<T extends CatalogProduct | CatalogCategory>(record: T): T & { updatedAt: string } {
+  return { updatedAt: FIXTURE_VERSION, ...record };
+}
+
+/** The staff snapshot (`/admin/catalog`): `fixtureSnapshot` with every product and category versioned. */
+export function fixtureAdminSnapshot(overrides: Partial<Omit<CatalogSnapshot, "mode">> = {}): AdminCatalogSnapshot {
+  const snapshot = fixtureSnapshot(overrides);
+  return { ...snapshot, mode: "admin", products: snapshot.products.map(staffRecord), categories: snapshot.categories.map(staffRecord) };
 }
 
 export const campaignMedia: MediaAsset[] = [

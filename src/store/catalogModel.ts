@@ -1,4 +1,5 @@
 import type {
+  AdminCatalogSnapshot,
   CatalogCategory,
   CatalogDesigner,
   CatalogDiscount,
@@ -149,6 +150,32 @@ export function parseCatalogSnapshot(data: unknown, modes: readonly CatalogSnaps
   return { version: 2, mode, products: products.map(withProductMediaDefaults), categories, designers, discounts, returnPolicy };
 }
 
+/** A version as the API issues it (`Date#toISOString()`); the server compares the one sent back exactly. */
+const isVersion = (value: unknown): value is string =>
+  isString(value) && !Number.isNaN(Date.parse(value)) && new Date(value).toISOString() === value;
+
+/** Adds each raw record's version to its validated counterpart (same order), or throws. */
+function withVersions<T>(items: readonly T[], raw: unknown, detail: string): (T & { updatedAt: string })[] {
+  if (!Array.isArray(raw) || raw.length !== items.length) throw new CatalogFormatError(detail);
+  return items.map((item, index) => {
+    const source: unknown = raw[index];
+    if (!isRecord(source) || !isVersion(source.updatedAt)) throw new CatalogFormatError(`${detail} version`);
+    return { ...item, updatedAt: source.updatedAt };
+  });
+}
+
+/** Validates the staff snapshot (`/admin/catalog`): every record also carries the version an editor saves against. */
+export function parseAdminCatalogSnapshot(data: unknown): AdminCatalogSnapshot {
+  const snapshot = parseCatalogSnapshot(data, ["admin"]);
+  const raw = isRecord(data) ? data : {};
+  return {
+    ...snapshot,
+    mode: "admin",
+    products: withVersions(snapshot.products, raw.products, "products"),
+    categories: withVersions(snapshot.categories, raw.categories, "categories"),
+  };
+}
+
 /* ------------------------------------------------------------------ */
 /* Variants                                                            */
 /* ------------------------------------------------------------------ */
@@ -280,22 +307,23 @@ export function primaryImage(product: Pick<CatalogProduct, "images">): MediaAsse
 /* Category hierarchy                                                  */
 /* ------------------------------------------------------------------ */
 
-export type CategoryTree = {
-  byId: ReadonlyMap<string, CatalogCategory>;
-  bySlug: ReadonlyMap<string, CatalogCategory>;
-  roots: CatalogCategory[];
-  children: (parentId: string) => CatalogCategory[];
+/** Categories by id and slug, and in display order (`order`, then name) under each parent. */
+export type CategoryTree<C extends CatalogCategory = CatalogCategory> = {
+  byId: ReadonlyMap<string, C>;
+  bySlug: ReadonlyMap<string, C>;
+  roots: C[];
+  children: (parentId: string) => C[];
   /** Root-to-category chain; stops at a missing parent or a cycle instead of looping. */
-  path: (id: string) => CatalogCategory[];
+  path: (id: string) => C[];
 };
 
 const byOrder = (a: CatalogCategory, b: CatalogCategory) => a.order - b.order || a.name.localeCompare(b.name);
 
-export function buildCategoryTree(categories: readonly CatalogCategory[]): CategoryTree {
+export function buildCategoryTree<C extends CatalogCategory>(categories: readonly C[]): CategoryTree<C> {
   const byId = new Map(categories.map((category) => [category.id, category]));
   const bySlug = new Map(categories.map((category) => [category.slug, category]));
-  const childMap = new Map<string, CatalogCategory[]>();
-  const roots: CatalogCategory[] = [];
+  const childMap = new Map<string, C[]>();
+  const roots: C[] = [];
   for (const category of categories) {
     if (category.parentId === null) roots.push(category);
     else childMap.set(category.parentId, [...(childMap.get(category.parentId) ?? []), category]);
@@ -308,7 +336,7 @@ export function buildCategoryTree(categories: readonly CatalogCategory[]): Categ
     roots,
     children: (parentId) => childMap.get(parentId) ?? [],
     path: (id) => {
-      const chain: CatalogCategory[] = [];
+      const chain: C[] = [];
       const seen = new Set<string>();
       let current = byId.get(id);
       while (current && !seen.has(current.id)) {

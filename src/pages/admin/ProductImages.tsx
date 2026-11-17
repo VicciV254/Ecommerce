@@ -380,7 +380,7 @@ export function ProductImagesSection({
         focusedRow.current = row ? { element: event.target, list: row.dataset.rowList ?? "", index: Number(row.dataset.rowIndex) } : null;
       }}
     >
-      <h3 ref={heading} id={headingId} tabIndex={-1} className="text-[11px] font-bold uppercase tracking-wider text-brand-primary">Images</h3>
+      <h3 ref={heading} id={headingId} tabIndex={-1} data-editor-section="images" className="text-[11px] font-bold uppercase tracking-wider text-brand-primary">Images</h3>
       {!canWrite && <p className="text-[11px] text-gray-600">View only: your role can see these images but cannot change them.</p>}
       {canWrite && (
         <div className="space-y-3 rounded-md border border-dashed border-light-gray p-3">

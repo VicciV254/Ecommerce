@@ -9,12 +9,14 @@ import { AdminNavigation } from "./AdminNavigation";
 import { AdminTopBar } from "./AdminTopBar";
 import { adminGroupLabel, adminModule, adminModuleRoute, parseAdminPlace, type AdminModuleId } from "./adminRoutes";
 import { AnalyticsPanel } from "./AnalyticsPanel";
+import { CarriedNoticeProvider } from "./carriedNotice";
 import { CatalogManager } from "./CatalogManager";
 import { CustomersManager } from "./CustomersManager";
 import { DashboardPanel } from "./DashboardPanel";
 import { DiscountManager } from "./DiscountManager";
 import { OrdersManager } from "./OrdersManager";
 import { canRead, canWrite, firstPermittedModule, isStaffRole, permittedModules, roleLabel } from "./permissions";
+import { ProductPreview } from "./ProductPreview";
 import { PromotionsManager } from "./PromotionsManager";
 import { StockManager } from "./StockManager";
 import { StorefrontDraftProvider } from "./StorefrontDraft";
@@ -33,6 +35,7 @@ const CATALOG_MODULES: readonly AdminModuleId[] = ["products", "stock", "discoun
 type View =
   | { kind: "module"; module: AdminModuleId }
   | { kind: "preview" }
+  | { kind: "product-preview" }
   | { kind: "not-found" }
   | { kind: "not-permitted"; label: string }
   | { kind: "no-access" };
@@ -46,6 +49,7 @@ function resolveView(route: string, role: string): View {
     case "home": return { kind: "module", module: first };
     case "module": return canRead(role, place.module) ? place : { kind: "not-permitted", label: adminModule(place.module).label };
     case "preview": return canRead(role, "storefront") ? place : { kind: "not-permitted", label: "Draft preview" };
+    case "product-preview": return canRead(role, "products") ? place : { kind: "not-permitted", label: "Product preview" };
     default: return { kind: "not-found" };
   }
 }
@@ -59,6 +63,9 @@ function describeView(view: View, route: string) {
     }
     case "preview":
       return { key: "preview", title: "Draft preview", location: "Storefront › Draft preview" };
+    // Each product's preview is its own arrival, so its banner heading takes focus.
+    case "product-preview":
+      return { key: `product-preview:${route}`, title: "Product preview", location: `${adminGroupLabel("catalog")} › Product preview` };
     case "not-found":
       return { key: `not-found:${route}`, title: "Page not found", location: "Page not found" };
     case "not-permitted":
@@ -75,10 +82,12 @@ function describeView(view: View, route: string) {
 export function AdminShell({ admin, onSignOut }: { admin: AdminSession; onSignOut: () => void }) {
   return (
     <UnsavedChangesProvider>
-      {/* An unrecognised role reads nothing, so its shell never loads staff data. */}
-      {isStaffRole(admin.role)
-        ? <AdminCatalogProvider><ShellFrame admin={admin} onSignOut={onSignOut} /></AdminCatalogProvider>
-        : <ShellFrame admin={admin} onSignOut={onSignOut} />}
+      <CarriedNoticeProvider>
+        {/* An unrecognised role reads nothing, so its shell never loads staff data. */}
+        {isStaffRole(admin.role)
+          ? <AdminCatalogProvider><ShellFrame admin={admin} onSignOut={onSignOut} /></AdminCatalogProvider>
+          : <ShellFrame admin={admin} onSignOut={onSignOut} />}
+      </CarriedNoticeProvider>
     </UnsavedChangesProvider>
   );
 }
@@ -123,7 +132,7 @@ function ShellFrame({ admin, onSignOut }: { admin: AdminSession; onSignOut: () =
   const navigation = (onNavigate?: () => void) => (
     <AdminNavigation
       permitted={permitted}
-      current={view.kind === "module" ? view.module : null}
+      current={view.kind === "module" ? view.module : view.kind === "product-preview" ? "products" : null}
       previewCurrent={view.kind === "preview"}
       showPreview={canRead(admin.role, "storefront")}
       activeDiscounts={activeDiscounts}
@@ -217,6 +226,7 @@ function ShellContent({ view, title, admin, activeDiscounts, showToast, onSignOu
   const heading = useRef<HTMLHeadingElement>(null);
   useEntryFocus(heading);
   if (view.kind === "preview") return <StorefrontPreview heading={heading} />;
+  if (view.kind === "product-preview") return <ProductPreview heading={heading} />;
 
   const module = view.kind === "module" ? adminModule(view.module) : null;
   let description: ReactNode;
