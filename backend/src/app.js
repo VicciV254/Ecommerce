@@ -3,6 +3,7 @@ import express from 'express';
 import routes from './routes/index.js';
 import { moneyJsonReplacer } from './utils/money.js';
 import callbackRoutes from './routes/mpesaCallbackRoutes.js';
+import { requestBodyErrorHandler } from './middleware/errorHandler.js';
 
 const app = express();
 app.set('json replacer', moneyJsonReplacer);
@@ -11,6 +12,7 @@ app.set('json replacer', moneyJsonReplacer);
 app.use('/api/mpesa/callback', callbackRoutes);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(requestBodyErrorHandler);
 
 // API routes
 app.use('/api', routes);

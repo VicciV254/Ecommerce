@@ -43,3 +43,20 @@ export const errorHandler = (err, req, res, next) => {
 export const notFound = (req, res) => {
   res.status(404).json({ error: 'Route not found' });
 };
+
+/** Fixed answers for a body the parsers refuse, by status; the parser's own message can quote the body. */
+const BODY_REFUSALS = new Map([
+  [400, 'The request body could not be read. Send it as valid JSON.'],
+  [413, 'The request body is too large.'],
+  [415, "The request body's encoding is not supported."],
+]);
+
+/**
+ * For the body parsers on the app (`app.js`), which run ahead of the API router and so before `errorHandler`: a body
+ * they refuse gets a JSON answer instead of Express's HTML error page. Any other error passes on unchanged.
+ */
+export const requestBodyErrorHandler = (err, req, res, next) => {
+  const message = typeof err.type === 'string' ? BODY_REFUSALS.get(err.status) : undefined;
+  if (!message) return next(err);
+  res.status(err.status).json({ error: message, code: 'REQUEST_BODY_INVALID' });
+};
