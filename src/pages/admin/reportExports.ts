@@ -5,12 +5,25 @@ import { formatNairobiClock, formatNairobiDate } from '../../utils/nairobiDate';
 
 /* Sales report downloads, built in the browser from the report the API returned; names and titles carry its dates. */
 
+/** Spreadsheet apps run a cell that starts with one of these as a formula. */
+const FORMULA_START = /^[=+\-@\t\r]/;
+
+/**
+ * One quoted CSV cell. Text that would start a formula (customer names and emails are typed by shoppers) gets a leading
+ * apostrophe so it opens as text; amounts stay numbers.
+ */
+function csvCell(value: unknown) {
+  const text = String(value ?? "");
+  const cell = typeof value !== "number" && FORMULA_START.test(text) ? `'${text}` : text;
+  return `"${cell.replace(/"/g, '""')}"`;
+}
+
 export function downloadCsv(filename: string, rows: Record<string, unknown>[]) {
   if (!rows.length) return;
   const headers = Object.keys(rows[0]);
   const csv = [
     headers.join(","),
-    ...rows.map((row) => headers.map((header) => `"${String(row[header] ?? "").replace(/"/g, '""')}"`).join(",")),
+    ...rows.map((row) => headers.map((header) => csvCell(row[header])).join(",")),
   ].join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
