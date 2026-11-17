@@ -185,6 +185,12 @@ products, users, orders and existing staff credentials. See
   so unpublished artwork remains previewable after reload. Campaigns share
   copy and CTA across screens; without separate mobile artwork, phones use
   the desktop asset with the campaign's mobile focal point.
+- Every publication is kept in a publication history with its time and
+  publisher. Super admins and admins can restore an earlier version into the
+  draft (never straight to shoppers); a version that breaks the current rules
+  or uses a deleted product, category or image is refused. Section headings
+  cannot claim a ranking or popularity the store does not measure, such as
+  "best sellers" or "trending".
 - Use the shared `Link` for hash routes. It forwards anchor attributes and
   refs, respects a caller's `preventDefault`, and leaves modified clicks,
   alternate targets and downloads to the browser.
@@ -282,3 +288,5 @@ Access the admin dashboard at `/#/admin` (staff-only). Features include:
 - Discount management
 - Order management
 - Customization options
+- Staff activity: sign-ins and staff changes, newest first, for super admins
+  and admins

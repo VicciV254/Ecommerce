@@ -5,6 +5,8 @@ import {
   ADMIN_PREVIEW_ROUTE,
   ADMIN_PRODUCT_PREVIEW_ROUTE,
   NO_ORDER_FILTERS,
+  activityRoute,
+  parseActivityParams,
   NO_PRODUCT_FILTERS,
   adminModuleRoute,
   ordersRoute,
@@ -44,6 +46,8 @@ describe("admin places", () => {
     ["/admin/customers/customers", { kind: "module", module: "customers" }],
     ["/admin/customers/discounts", { kind: "module", module: "discounts" }],
     ["/admin/customers/promotions", { kind: "module", module: "promotions" }],
+    ["/admin/settings/activity", { kind: "module", module: "activity" }],
+    ["/admin/settings/activity?type=catalog&page=2", { kind: "module", module: "activity" }],
     ["/admin/orders/orders/", { kind: "module", module: "orders" }],
   ])("reads %s", (route, place) => {
     expect(parseAdminPlace(route)).toEqual(place);
@@ -51,7 +55,8 @@ describe("admin places", () => {
 
   it.each([
     "/admin/overview",
-    "/admin/settings/activity",
+    "/admin/settings/no-such-page",
+    "/admin/customers/activity",
     "/admin/orders/dashboard",
     "/admin/catalog/orders",
     "/admin/Orders/orders",
@@ -76,12 +81,15 @@ describe("admin places", () => {
     expect(parseAdminPlace(ADMIN_PRODUCT_PREVIEW_ROUTE)).toEqual({ kind: "product-preview" });
   });
 
-  it("lists every module once, in five groups, with no settings or activity group", () => {
+  it("lists every module once, in six groups, with Settings and activity last", () => {
     const listed = ADMIN_GROUPS.flatMap((group) => group.modules.map((module) => module.id));
     expect(listed).toEqual([...ADMIN_MODULE_IDS]);
     expect(new Set(listed).size).toBe(listed.length);
     expect(ADMIN_GROUPS.map((group) => group.label)).toEqual([
-      "Overview", "Orders and returns", "Catalog and inventory", "Storefront", "Customers and promotions",
+      "Overview", "Orders and returns", "Catalog and inventory", "Storefront", "Customers and promotions", "Settings and activity",
+    ]);
+    expect(ADMIN_GROUPS.at(-1)?.modules.map((module) => [module.id, module.slug, module.label, module.width])).toEqual([
+      ["activity", "activity", "Staff activity", "full"],
     ]);
   });
 
@@ -308,5 +316,33 @@ describe("stock filters in the address", () => {
     expect(stockRoute({ status: "OUT_OF_STOCK" })).toBe("/admin/catalog/stock?status=OUT_OF_STOCK");
     expect(stockRoute({ status: "LOW_STOCK", category: "cat-shirts" })).toBe("/admin/catalog/stock?status=LOW_STOCK&category=cat-shirts");
     expect(stockRoute({ category: "a/b" })).toBe("/admin/catalog/stock");
+  });
+});
+
+describe("staff activity filter and page in the address", () => {
+  it("reads all activity on page 1 by default, and a known type and page as given", () => {
+    expect(parseActivityParams("/admin/settings/activity")).toEqual({ filters: { type: "all", page: 1 }, invalid: false });
+    expect(parseActivityParams("/admin/settings/activity?type=customers&page=3")).toEqual({ filters: { type: "customers", page: 3 }, invalid: false });
+  });
+
+  it.each([
+    ["type=bogus", { type: "all", page: 1 }],
+    ["type=Catalog&page=2", { type: "all", page: 2 }],
+    ["type=signins&page=0", { type: "signins", page: 1 }],
+    ["page=02", { type: "all", page: 1 }],
+    ["page=10001", { type: "all", page: 1 }],
+    ["type=", { type: "all", page: 1 }],
+  ])("drops and flags %s", (query, filters) => {
+    expect(parseActivityParams(`/admin/settings/activity?${query}`)).toEqual({ filters, invalid: true });
+  });
+
+  it("writes only what differs from the defaults, and only well-formed values", () => {
+    expect(activityRoute()).toBe("/admin/settings/activity");
+    expect(activityRoute({ type: "all", page: 1 })).toBe("/admin/settings/activity");
+    expect(activityRoute({ type: "catalog", page: 2 })).toBe("/admin/settings/activity?type=catalog&page=2");
+    expect(activityRoute({ page: 0 })).toBe("/admin/settings/activity");
+    for (const route of [activityRoute({ type: "promotions", page: 7 }), activityRoute({ type: "signins" })]) {
+      expect(activityRoute(parseActivityParams(route).filters)).toBe(route);
+    }
   });
 });

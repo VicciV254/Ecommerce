@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from "react";
+import { useId, type ReactNode, type Ref } from "react";
 import type { CatalogCategory } from "../../api/catalog";
 import type { CategoryTree } from "../../store/catalogModel";
 
@@ -22,12 +22,19 @@ export function Field({ label, hint, children }: { label: string; hint?: string;
   );
 }
 
-export function Panel({ title, description, actions, children }: { title: string; description?: string; actions?: ReactNode; children: ReactNode }) {
+/** `headingRef` makes the title a focus target (`tabIndex={-1}`), for moving focus to a panel after an action. */
+export function Panel({ title, description, actions, headingRef, children }: {
+  title: string;
+  description?: string;
+  actions?: ReactNode;
+  headingRef?: Ref<HTMLHeadingElement>;
+  children: ReactNode;
+}) {
   return (
     <section className="rounded-lg bg-white p-5 shadow-sm sm:p-6">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">{title}</h3>
+          <h3 ref={headingRef} tabIndex={headingRef ? -1 : undefined} className="text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">{title}</h3>
           {description && <p className="mt-1 max-w-2xl text-xs text-gray-600">{description}</p>}
         </div>
         {actions}

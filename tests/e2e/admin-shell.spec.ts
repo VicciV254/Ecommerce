@@ -148,7 +148,7 @@ test.describe("routed modules", () => {
   });
 
   test("an unknown address shows Page not found in the shell, with ways back", async ({ page }) => {
-    await page.goto("/#/admin/settings/activity");
+    await page.goto("/#/admin/settings/no-such-page");
     await waitForPlace(page, "Page not found");
     await expect(page).toHaveTitle(title("Page not found"));
     await page.getByRole("main").getByRole("link", { name: "Products" }).click();

@@ -229,8 +229,27 @@ export type PromotionalSendResult = {
   results?: { success: boolean; code?: string }[];
 };
 
+/** One staff activity entry. `details` is a display name or a count, never contact details or message text. */
+export type ActivityEntry = {
+  id: string;
+  /** When it happened (ISO instant). */
+  at: string;
+  action: string;
+  targetType: string | null;
+  targetId: string | null;
+  details: string;
+  staff: { username: string; role: string };
+};
+/** `GET /admin/activity?type=&page=`: newest first, 25 a page; validated by `parseActivityPage` before use. */
+export type ActivityPage = { entries: ActivityEntry[]; pagination: Pagination };
+
 export const adminAPI = {
   login: (data: { email: string; password: string }) => api.post<AdminLoginResponse>("/admin/login", data),
+
+  /** Staff activity, for SUPER_ADMIN and ADMIN only. */
+  activity: {
+    getAll: async (params: { type: string; page: number }) => api.get<unknown>("/admin/activity", staffRequest(params)),
+  },
 
   analytics: {
     getDashboard: async (period: string) => api.get<unknown>("/admin/analytics/dashboard", staffRequest({ period })),

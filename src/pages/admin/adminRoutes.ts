@@ -10,13 +10,14 @@ import { isCalendarDate } from "../../utils/nairobiDate";
  * The admin's address space: `#/admin/<group>/<module>` for each module, plus the storefront draft preview and the
  * product preview. Modules are the existing destinations; groups only arrange them in the navigation.
  */
-export type AdminGroupId = "overview" | "orders" | "catalog" | "storefront" | "customers";
+export type AdminGroupId = "overview" | "orders" | "catalog" | "storefront" | "customers" | "settings";
 export type AdminModuleId =
   | "dashboard" | "analytics"
   | "orders" | "returns" | "refunds"
   | "products" | "stock"
   | "storefront"
-  | "customers" | "discounts" | "promotions";
+  | "customers" | "discounts" | "promotions"
+  | "activity";
 export type OrdersModuleId = Extract<AdminModuleId, "orders" | "returns" | "refunds">;
 
 type AdminModule = {
@@ -58,11 +59,13 @@ const MODULES: readonly AdminModule[] = [
     description: "Automatic and coupon discounts, and when they apply." },
   { id: "promotions", group: "customers", slug: "promotions", label: "Email promotions", width: "form",
     description: "Newsletter subscribers and promotional emails." },
+  { id: "activity", group: "settings", slug: "activity", label: "Staff activity", width: "full",
+    description: "Sign-ins and changes made by staff, newest first. Times are Nairobi time." },
 ];
 
 export const ADMIN_GROUPS: readonly { id: AdminGroupId; label: string; modules: readonly AdminModule[] }[] = (
   [["overview", "Overview"], ["orders", "Orders and returns"], ["catalog", "Catalog and inventory"],
-    ["storefront", "Storefront"], ["customers", "Customers and promotions"]] as const
+    ["storefront", "Storefront"], ["customers", "Customers and promotions"], ["settings", "Settings and activity"]] as const
 ).map(([id, label]) => ({ id, label, modules: MODULES.filter((module) => module.group === id) }));
 
 /** Every module in navigation order. */
@@ -322,6 +325,41 @@ export function stockRoute({ status = null, category = null }: Partial<StockFilt
   if (category && isRecordId(category)) params.set("category", category);
   const query = params.toString();
   return `${adminModuleRoute("stock")}${query ? `?${query}` : ""}`;
+}
+
+/* Staff activity */
+
+/** The Staff activity page's "Show" filter. */
+export const ACTIVITY_TYPES = [
+  { id: "all", label: "All activity" },
+  { id: "signins", label: "Sign-ins" },
+  { id: "storefront", label: "Storefront" },
+  { id: "catalog", label: "Catalog" },
+  { id: "discounts", label: "Discounts" },
+  { id: "customers", label: "Customer accounts" },
+  { id: "promotions", label: "Promotions" },
+] as const;
+export type ActivityType = (typeof ACTIVITY_TYPES)[number]["id"];
+const DEFAULT_ACTIVITY_TYPE: ActivityType = "all";
+export const isActivityType = (value: string): value is ActivityType => ACTIVITY_TYPES.some((type) => type.id === value);
+
+export type ActivityFilters = { type: ActivityType; page: number };
+
+/** The activity filter and page; an unknown type or a malformed page is dropped and flagged, for a replace. */
+export function parseActivityParams(route: string): { filters: ActivityFilters; invalid: boolean } {
+  const { params } = parseRoute(route);
+  const type = readParam(params, "type", isActivityType);
+  const page = readPage(params);
+  return { filters: { type: type.value ?? DEFAULT_ACTIVITY_TYPE, page: page.page }, invalid: type.invalid || page.invalid };
+}
+
+/** The Staff activity page for a filter and page; the defaults (all activity, page 1) are left out. */
+export function activityRoute({ type = DEFAULT_ACTIVITY_TYPE, page = 1 }: Partial<ActivityFilters> = {}) {
+  const params = new URLSearchParams();
+  if (type !== DEFAULT_ACTIVITY_TYPE && isActivityType(type)) params.set("type", type);
+  if (page > 1 && isPage(String(page))) params.set("page", String(page));
+  const query = params.toString();
+  return `${adminModuleRoute("activity")}${query ? `?${query}` : ""}`;
 }
 
 /* Products */

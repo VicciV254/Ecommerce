@@ -1,6 +1,6 @@
 import { isRecord } from "../utils/storage";
 import api from "./client";
-import type { DeliveryFeeRefund, ReturnRule } from "./orders";
+import type { DeliveryFeeRefund, Pagination, ReturnRule } from "./orders";
 import { staffRequest } from "./staffSession";
 
 export type MediaAsset = {
@@ -283,12 +283,25 @@ export type StorefrontDraft = {
   version: number;
   publishedVersion: number;
   publishedAt: string | null;
+  /** Username of the staff member who published `publishedVersion`; null when none was recorded. */
+  publishedBy: string | null;
   settings: StorefrontSettings;
   /** Media referenced by the draft that still exists, including unpublished standalone assets. */
   media: MediaAsset[];
   /** Referenced media IDs that no longer exist; kept in settings so staff can repair them. */
   unavailableMediaIds: string[];
 };
+
+/** One publication in the storefront's history (never its document). `live` marks the version shoppers see. */
+export type StorefrontRevision = {
+  version: number;
+  publishedAt: string;
+  /** Null when nobody recorded the publisher. */
+  publishedBy: string | null;
+  live: boolean;
+};
+/** `GET /settings/storefront/revisions?page=`: newest first, 20 a page; validated by `parseRevisionPage`. */
+export type StorefrontRevisionPage = { revisions: StorefrontRevision[]; pagination: Pagination };
 
 /** A real review record; only returned by the product detail endpoint. */
 export type CatalogReview = {
@@ -370,10 +383,23 @@ export const catalogAdminAPI = {
   registerMedia: async (input: Omit<MediaInput, "id">) => api.post<MediaAsset>("/media", input, staffRequest()),
 
   getStorefrontDraft: async () => api.get<StorefrontDraft>("/settings/storefront/draft", staffRequest()),
+  /** 409 `STOREFRONT_CHANGED` (or `CATALOG_CHANGED` for a write that raced it) when the draft changed after `version`. */
   saveStorefrontDraft: async (version: number, settings: StorefrontSettings) =>
     api.put<StorefrontDraft>("/settings/storefront/draft", { version, settings }, staffRequest()),
+  /** 409 `STOREFRONT_CHANGED` or `CATALOG_CHANGED` as for saves; nothing is published then. */
   publishStorefront: async (version: number) =>
     api.post<PublishedStorefront>("/settings/storefront/publish", { version }, staffRequest()),
+  /** Any staff member may read the history; the answer is checked by `parseRevisionPage`. */
+  getStorefrontRevisions: async (page: number) =>
+    api.get<unknown>("/settings/storefront/revisions", staffRequest({ page })),
+  /**
+   * Copies published version `revision` into the draft; `draftVersion` is the draft version the editor holds. Answers
+   * with the new draft. Refusals change nothing: 409 `STOREFRONT_CHANGED` or `CATALOG_CHANGED` (the draft changed;
+   * reload), 404 `REVISION_NOT_FOUND`, 409 `REVISION_INVALID` (it breaks the current rules) and 409
+   * `REVISION_UNAVAILABLE` (it uses a deleted product, category or image), each with a message to show as it is.
+   */
+  restoreStorefrontRevision: async (revision: number, draftVersion: number) =>
+    api.post<StorefrontDraft>(`/settings/storefront/revisions/${revision}/restore`, { version: draftVersion }, staffRequest()),
 };
 
 export type MediaPurpose = "PRODUCT" | "STOREFRONT";

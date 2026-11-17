@@ -1,6 +1,10 @@
 import bcrypt from 'bcryptjs';
 import prisma from '../config/database.js';
 import { generateToken, generateRefreshToken } from '../config/auth.js';
+import { ACTIVITY, ACTIVITY_FILTERS, activityQuerySchema, recordActivity, recordAfterSending } from '../services/activityService.js';
+
+/** Staff activity entries per page. */
+const ACTIVITY_PER_PAGE = 25;
 
 export const adminLogin = async (req, res, next) => {
   try {
@@ -80,40 +84,37 @@ export const getAdminMe = async (req, res, next) => {
   }
 };
 
+/**
+ * Staff activity for SUPER_ADMIN and ADMIN, newest first, 25 a page, optionally one `type` of action. It never returns
+ * IP addresses, user agents or emails.
+ */
 export const getActivityLogs = async (req, res, next) => {
   try {
-    const { page, limit } = req.query;
-    const pageNum = parseInt(page) || 1;
-    const limitNum = parseInt(limit) || 50;
-    const skip = (pageNum - 1) * limitNum;
-    
-    const [logs, total] = await Promise.all([
-      prisma.activityLog.findMany({
-        skip,
-        take: limitNum,
-        include: {
-          admin: {
-            select: {
-              id: true,
-              username: true,
-              email: true,
-            },
+    const { type, page } = activityQuerySchema.parse(req.query);
+    const actions = ACTIVITY_FILTERS[type];
+    const where = actions ? { action: { in: actions } } : {};
+    const result = await prisma.$transaction(async (db) => {
+      const [total, rows] = await Promise.all([
+        db.activityLog.count({ where }),
+        db.activityLog.findMany({
+          where, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          skip: (page - 1) * ACTIVITY_PER_PAGE, take: ACTIVITY_PER_PAGE,
+          select: {
+            id: true, createdAt: true, action: true, targetType: true, targetId: true, details: true,
+            admin: { select: { username: true, role: true } },
           },
-        },
-        orderBy: { createdAt: 'desc' },
-      }),
-      prisma.activityLog.count(),
-    ]);
-    
-    res.json({
-      logs,
-      pagination: {
-        page: pageNum,
-        limit: limitNum,
-        total,
-        pages: Math.ceil(total / limitNum),
-      },
-    });
+        }),
+      ]);
+      return {
+        entries: rows.map((row) => ({
+          id: row.id, at: row.createdAt.toISOString(), action: row.action,
+          targetType: row.targetType, targetId: row.targetId, details: row.details,
+          staff: { username: row.admin.username, role: row.admin.role },
+        })),
+        pagination: { page, limit: ACTIVITY_PER_PAGE, pages: Math.ceil(total / ACTIVITY_PER_PAGE), total },
+      };
+    }, { isolationLevel: 'RepeatableRead' });
+    res.json(result);
   } catch (error) {
     next(error);
   }
@@ -181,12 +182,24 @@ async function sendUserVerification(user) {
   return { userId: updated.id, email: updated.email, sent };
 }
 
+/** Records the verification emails actually sent, once the sends finish; nothing when none was sent. */
+async function recordVerificationSends(adminId, results) {
+  const sent = results.filter((result) => result.sent);
+  if (!sent.length) return;
+  await recordAfterSending(adminId, {
+    action: ACTIVITY.CUSTOMER_VERIFICATION_SENT, targetType: 'customer',
+    targetId: sent.length === 1 ? sent[0].userId : null,
+    details: `${sent.length} ${sent.length === 1 ? 'customer' : 'customers'}`,
+  });
+}
+
 export const sendVerificationToUser = async (req, res, next) => {
   try {
     const user = await prisma.user.findUnique({ where: { id: req.params.id } });
     if (!user) return res.status(404).json({ error: 'User not found' });
     if (user.isDisabled) return res.status(400).json({ error: 'Cannot verify a disabled account' });
     const result = await sendUserVerification(user);
+    await recordVerificationSends(req.admin.id, [result]);
     res.json(result);
   } catch (error) {
     next(error);
@@ -202,6 +215,7 @@ export const sendVerificationToUsers = async (req, res, next) => {
     for (const user of users) {
       results.push(await sendUserVerification(user));
     }
+    await recordVerificationSends(req.admin.id, results);
     res.json({ results });
   } catch (error) {
     next(error);
@@ -210,10 +224,17 @@ export const sendVerificationToUsers = async (req, res, next) => {
 
 export const setUserDisabled = async (req, res, next) => {
   try {
-    const user = await prisma.user.update({
-      where: { id: req.params.id },
-      data: { isDisabled: Boolean(req.body.disabled) },
-      select: { id: true, email: true, firstName: true, lastName: true, emailVerified: true, isDisabled: true, createdAt: true },
+    const disabled = Boolean(req.body.disabled);
+    const user = await prisma.$transaction(async (db) => {
+      const updated = await db.user.update({
+        where: { id: req.params.id },
+        data: { isDisabled: disabled },
+        select: { id: true, email: true, firstName: true, lastName: true, emailVerified: true, isDisabled: true, createdAt: true },
+      });
+      await recordActivity(db, req.admin.id, {
+        action: disabled ? ACTIVITY.CUSTOMER_DISABLED : ACTIVITY.CUSTOMER_ENABLED, targetType: 'customer', targetId: updated.id,
+      });
+      return updated;
     });
     res.json(user);
   } catch (error) {
@@ -223,17 +244,20 @@ export const setUserDisabled = async (req, res, next) => {
 
 export const deleteUser = async (req, res, next) => {
   try {
-    const orders = await prisma.order.count({ where: { userId: req.params.id } });
-    if (orders > 0) {
-      return res.status(400).json({ error: 'Users with orders cannot be deleted. Disable the account instead to preserve order history.' });
-    }
-    const cart = await prisma.cart.findUnique({ where: { userId: req.params.id } }).catch(() => null);
-    if (cart) await prisma.cartItem.deleteMany({ where: { cartId: cart.id } });
-    await prisma.cart.deleteMany({ where: { userId: req.params.id } });
-    await prisma.wishlist.deleteMany({ where: { userId: req.params.id } });
-    await prisma.address.deleteMany({ where: { userId: req.params.id } });
-    await prisma.passwordReset.deleteMany({ where: { userId: req.params.id } });
-    await prisma.user.delete({ where: { id: req.params.id } });
+    const refused = await prisma.$transaction(async (db) => {
+      const orders = await db.order.count({ where: { userId: req.params.id } });
+      if (orders > 0) return 'Users with orders cannot be deleted. Disable the account instead to preserve order history.';
+      const cart = await db.cart.findUnique({ where: { userId: req.params.id } });
+      if (cart) await db.cartItem.deleteMany({ where: { cartId: cart.id } });
+      await db.cart.deleteMany({ where: { userId: req.params.id } });
+      await db.wishlist.deleteMany({ where: { userId: req.params.id } });
+      await db.address.deleteMany({ where: { userId: req.params.id } });
+      await db.passwordReset.deleteMany({ where: { userId: req.params.id } });
+      await db.user.delete({ where: { id: req.params.id } });
+      await recordActivity(db, req.admin.id, { action: ACTIVITY.CUSTOMER_DELETED, targetType: 'customer', targetId: req.params.id });
+      return null;
+    });
+    if (refused) return res.status(400).json({ error: refused });
     res.json({ message: 'User deleted' });
   } catch (error) {
     next(error);

@@ -1,5 +1,6 @@
 import prisma from '../config/database.js';
 import { brandedEmail, sendMail } from '../services/mailService.js';
+import { ACTIVITY, recordActivity, recordAfterSending } from '../services/activityService.js';
 
 const PROMOTIONAL_FOOTER_NOTE = 'You are receiving this email because you subscribed to Apex Cart emails.';
 
@@ -116,6 +117,13 @@ export const sendPromotionalEmail = async (req, res, next) => {
 
     const successful = results.filter(r => r.success).length;
     const failed = results.filter(r => !r.success).length;
+    // The count actually sent, never the subject: staff type it freely and it may hold personal details.
+    if (successful > 0) {
+      await recordAfterSending(req.admin.id, {
+        action: ACTIVITY.PROMOTION_SENT, targetType: 'promotion',
+        details: `${successful} ${successful === 1 ? 'subscriber' : 'subscribers'}`,
+      });
+    }
 
     res.json({
       message: `Promotional email sent to ${successful} subscribers`,
@@ -133,8 +141,9 @@ export const deleteSubscription = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    await prisma.subscription.delete({
-      where: { id },
+    await prisma.$transaction(async (db) => {
+      await db.subscription.delete({ where: { id } });
+      await recordActivity(db, req.admin.id, { action: ACTIVITY.SUBSCRIBER_REMOVED, targetType: 'subscriber', targetId: id });
     });
 
     res.json({ message: 'Subscription deleted' });

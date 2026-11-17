@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useId, useState } from "react";
 import {
   adminAPI,
   type ListedRefund,
@@ -11,13 +11,11 @@ import {
   type StaffOrderPage,
   type StaffRefund,
 } from "../../api/admin";
-import { describeApiError } from "../../api/errors";
 import type { Pagination, RefundStatus, ReturnStatus } from "../../api/orders";
 import { OrderStatusBadge } from "../../components/OrderRecords";
 import { DELIVERY_LABELS } from "../../store/checkoutModel";
 import { RETURN_REASON_LABELS, STAFF_ACTION_LABELS, STAFF_REFUND_STATUS, STAFF_RETURN_STATUS, paymentLabel } from "../../store/orderCopy";
 import {
-  OrderFormatError,
   REFUND_STATUSES,
   RETURN_STATUSES,
   isRefundStatus,
@@ -32,6 +30,7 @@ import type { RecordListFilters } from "./adminRoutes";
 import { StaffRefundCard } from "./RefundRecords";
 import type { WorkspaceFocus } from "./OrderWorkspace";
 import { Feedback, Field } from "./shared";
+import { usePage, type LoadState, type PageControl } from "./usePage";
 
 const PAGE_SIZE = 20;
 
@@ -39,50 +38,12 @@ const PAGE_SIZE = 20;
 export type OpenTarget = { orderId: string; focus: WorkspaceFocus };
 type OpenOrder = (target: OpenTarget, from: HTMLElement) => void;
 
-type LoadState<T> = { status: "loading" } | { status: "ready"; data: T } | { status: "error"; message: string };
 
 const openClass = "min-h-11 rounded-sm border border-light-gray px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-charcoal hover:border-brand-primary hover:text-brand-primary";
 const stepClass = "min-h-11 rounded-sm bg-brand-primary px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-white hover:bg-brand-secondary hover:text-brand-primary";
 const cancelClass = "min-h-11 rounded-sm border border-error/50 px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-error hover:bg-error hover:text-white";
 const selectClass = "min-h-11 w-full rounded-sm border border-light-gray bg-off-white px-3 py-2 text-sm";
 const sectionClass = "rounded-lg bg-white p-4 shadow-sm sm:p-5";
-
-function describeListError(error: unknown, fallback: string) {
-  return error instanceof OrderFormatError ? `${error.message} Try again shortly.` : describeApiError(error, fallback);
-}
-
-/** A page kept in the address instead of in the list: the current page, and how to move to another (with a replace). */
-export type PageControl = { page: number; onPage: (page: number) => void };
-
-/**
- * Loads one page whenever the request (a memoized `load`), page or reload token changes; superseded answers
- * are dropped. A page past the end (the list shrank) is replaced by the last page that exists. The page is the
- * list's own unless `control` keeps it in the address.
- */
-function usePage<T extends { pagination: Pagination }>(load: (page: number) => Promise<T>, reloadToken: number, fallback: string, control?: PageControl) {
-  const [ownPage, setOwnPage] = useState(1);
-  const page = control ? control.page : ownPage;
-  const setPage = control ? control.onPage : setOwnPage;
-  const [loaded, setLoaded] = useState<LoadState<T>>({ status: "loading" });
-  const [attempt, setAttempt] = useState(0);
-  useEffect(() => {
-    let current = true;
-    load(page)
-      .then((data) => { if (current) setLoaded({ status: "ready", data }); })
-      .catch((error: unknown) => { if (current) setLoaded({ status: "error", message: describeListError(error, fallback) }); });
-    return () => { current = false; };
-  }, [load, page, attempt, reloadToken, fallback]);
-  const last = loaded.status === "ready" ? Math.max(1, loaded.data.pagination.pages) : null;
-  const pastEnd = last !== null && page > last;
-  useEffect(() => {
-    if (pastEnd && last !== null) setPage(last);
-  }, [pastEnd, last, setPage]);
-  // A page past the end, whether still asked for or still the answer on screen after the move back, reads as loading
-  // until the last page arrives, never as an empty list.
-  const showsPastEnd = loaded.status === "ready" && loaded.data.pagination.page > Math.max(1, loaded.data.pagination.pages);
-  const state: LoadState<T> = pastEnd || showsPastEnd ? { status: "loading" } : loaded;
-  return { setPage, state, setState: setLoaded, retry: () => setAttempt((value) => value + 1) };
-}
 
 function countText(pagination: Pagination, noun: [string, string]) {
   const label = pagination.total === 1 ? noun[0] : noun[1];

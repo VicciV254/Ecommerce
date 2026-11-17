@@ -1,6 +1,7 @@
 import prisma from '../config/database.js';
 import { catalogDiscountSchema, catalogDiscountPatchSchema } from '../utils/catalogValidation.js';
 import { discountDto, httpError, serializable } from '../services/catalogService.js';
+import { ACTIVITY, recordActivity } from '../services/activityService.js';
 
 async function validateTargets(db, discount) {
   if (discount.type === 'PERCENTAGE' && discount.value > 100) throw httpError(400, 'Percentage discounts cannot exceed 100');
@@ -33,7 +34,9 @@ export const createDiscount = async (req, res, next) => {
     const discount = await serializable(async (db) => {
       const data = { ...input, endDate: input.endDate ?? null, isActive: input.isActive ?? true, isDemo: false };
       await validateTargets(db, data);
-      return db.discount.create({ data });
+      const discount = await db.discount.create({ data });
+      await recordActivity(db, req.admin.id, { action: ACTIVITY.DISCOUNT_CREATED, targetType: 'discount', targetId: discount.id, details: discount.name });
+      return discount;
     });
     res.status(201).json(discountDto(discount));
   } catch (error) { next(error); }
@@ -45,17 +48,26 @@ export const updateDiscount = async (req, res, next) => {
       const current = await db.discount.findUnique({ where: { id: req.params.id } });
       if (!current) throw httpError(404, 'Discount not found');
       await validateTargets(db, { ...current, ...input });
-      return db.discount.update({ where: { id: current.id }, data: input });
+      const updated = await db.discount.update({ where: { id: current.id }, data: input });
+      await recordActivity(db, req.admin.id, { action: ACTIVITY.DISCOUNT_UPDATED, targetType: 'discount', targetId: updated.id, details: updated.name });
+      return updated;
     });
     res.json(discountDto(discount));
   } catch (error) { next(error); }
 };
+/** Stops a demo discount (it stays, inactive) or deletes a live one. */
 export const deleteDiscount = async (req, res, next) => {
   try {
-    const discount = await prisma.discount.findUnique({ where: { id: req.params.id } });
-    if (!discount) throw httpError(404, 'Discount not found');
-    if (discount.isDemo) await prisma.discount.update({ where: { id: discount.id }, data: { isActive: false } });
-    else await prisma.discount.delete({ where: { id: discount.id } });
+    await prisma.$transaction(async (db) => {
+      const discount = await db.discount.findUnique({ where: { id: req.params.id } });
+      if (!discount) throw httpError(404, 'Discount not found');
+      if (discount.isDemo) await db.discount.update({ where: { id: discount.id }, data: { isActive: false } });
+      else await db.discount.delete({ where: { id: discount.id } });
+      await recordActivity(db, req.admin.id, {
+        action: discount.isDemo ? ACTIVITY.DISCOUNT_STOPPED : ACTIVITY.DISCOUNT_DELETED,
+        targetType: 'discount', targetId: discount.id, details: discount.name,
+      });
+    });
     res.json({ success: true });
   } catch (error) { next(error); }
 };

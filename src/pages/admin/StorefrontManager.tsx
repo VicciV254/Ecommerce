@@ -1,17 +1,29 @@
-import { useMemo } from "react";
-import type { Campaign, StorefrontSettings } from "../../api/catalog";
+import { useMemo, useRef } from "react";
+import type { Campaign, StorefrontDraft, StorefrontSettings } from "../../api/catalog";
 import { COLOR_SLOTS, FONT_OPTIONS } from "../../store/storefrontTheme";
 import { Link } from "../../router";
+import { formatNairobiDateTime } from "../../utils/nairobiDate";
 import { useAdminCatalog } from "./AdminCatalogContext";
 import { ADMIN_PREVIEW_ROUTE } from "./adminRoutes";
 import { CampaignEditor, STOREFRONT_LIMITS, SectionEditor, type PickerItem } from "./StorefrontEditors";
 import { draftProblems, useStorefrontDraft } from "./StorefrontDraft";
+import { StorefrontHistory } from "./StorefrontHistory";
 import { StorefrontSummary } from "./StorefrontSummary";
 import { Feedback, Field, Panel, categoryOptions, inputClass, primaryButtonClass, smallButtonClass } from "./shared";
 
 type Section = StorefrontSettings["sections"][number];
 
 const CENTRED_FOCAL = { x: 50, y: 50 };
+
+/** "Last published 17 Nov 2026, 14:05 by alice (version 6).", in Nairobi time, or that nothing is published. */
+function publicationLine(draft: StorefrontDraft) {
+  if (!draft.publishedAt) return "Not published yet.";
+  const when = formatNairobiDateTime(draft.publishedAt);
+  const line = draft.publishedBy
+    ? `Last published ${when} by ${draft.publishedBy} (version ${draft.publishedVersion}).`
+    : `Last published ${when} (version ${draft.publishedVersion}; publisher not recorded).`;
+  return `${line} Times are Nairobi time.`;
+}
 
 function uniqueId(base: string, taken: string[]) {
   let candidate = base;
@@ -26,6 +38,7 @@ function uniqueId(base: string, taken: string[]) {
 export function StorefrontManager({ canWrite }: { canWrite: boolean }) {
   const { data, categories } = useAdminCatalog();
   const { load, settings, dirty, busy, notice, stale, media, unresolved, update, register, reloadDraft, save, publish } = useStorefrontDraft();
+  const statusHeading = useRef<HTMLHeadingElement>(null);
 
   const products = useMemo(() => data?.snapshot.products ?? [], [data]);
   const productItems = useMemo<PickerItem[]>(() => products.map((product) => ({
@@ -74,16 +87,22 @@ export function StorefrontManager({ canWrite }: { canWrite: boolean }) {
     };
     update({ ...settings, campaigns: [...settings.campaigns, campaign] });
   };
+  const settingsProblems = draftProblems(settings);
   const problems = [
-    ...draftProblems(settings),
+    ...settingsProblems,
     ...unresolved.filter((reference) => reference.repairable).map((reference) => `${reference.label} (${reference.id}) is unavailable; choose another image.`),
   ];
+  // A draft saved before a rule existed (a ranking claim in a heading) loads, but the server refuses to publish it.
+  const publishBlocked = dirty
+    ? "Save the draft before publishing"
+    : unresolved.length ? "Repair unavailable media first" : settingsProblems.length ? "Fix the problems listed below first" : undefined;
 
   return (
     <div className="space-y-6">
       <Panel
         title="Storefront"
-        description={`Draft version ${draft.version}. ${draft.publishedAt ? `Last published ${new Date(draft.publishedAt).toLocaleString("en-KE")} (version ${draft.publishedVersion}).` : "Not published yet."} Saving a draft never changes what shoppers see; publishing does.`}
+        headingRef={statusHeading}
+        description={`Draft version ${draft.version}. Saving a draft never changes what shoppers see; publishing does.`}
         actions={
           <div className="flex flex-wrap gap-2">
             <Link to={ADMIN_PREVIEW_ROUTE} className={`inline-flex items-center ${smallButtonClass}`}>Draft preview</Link>
@@ -91,13 +110,14 @@ export function StorefrontManager({ canWrite }: { canWrite: boolean }) {
               <>
                 <button type="button" onClick={reloadDraft} disabled={busy !== ""} className={smallButtonClass}>{dirty ? "Discard changes" : "Reload draft"}</button>
                 <button type="button" onClick={() => void save()} disabled={!dirty || problems.length > 0 || busy !== ""} className={primaryButtonClass}>{busy === "save" ? "Saving…" : "Save draft"}</button>
-                <button type="button" onClick={() => void publish()} disabled={dirty || unresolved.length > 0 || busy !== ""} title={dirty ? "Save the draft before publishing" : unresolved.length ? "Repair unavailable media first" : undefined} className={primaryButtonClass}>{busy === "publish" ? "Publishing…" : "Publish"}</button>
+                <button type="button" onClick={() => void publish()} disabled={Boolean(publishBlocked) || busy !== ""} title={publishBlocked} className={primaryButtonClass}>{busy === "publish" ? "Publishing…" : "Publish"}</button>
               </>
             )}
           </div>
         }
       >
         <div className="space-y-3">
+          <p className="text-sm text-navy-900 [overflow-wrap:break-word]">{publicationLine(draft)}</p>
           <Feedback message={notice.text} tone={notice.tone} />
           {stale && (
             <p className="text-xs text-charcoal">
@@ -114,14 +134,19 @@ export function StorefrontManager({ canWrite }: { canWrite: boolean }) {
             </div>
           )}
           {problems.length > 0 && (
-            <ul className="list-inside list-disc rounded-md border border-warning/40 bg-warning/10 p-3 text-xs text-charcoal">
-              {problems.map((problem) => <li key={problem}>{problem}</li>)}
-            </ul>
+            <div className="rounded-md border border-warning/40 bg-warning/10 p-3 text-xs text-charcoal [overflow-wrap:break-word]">
+              <p className="font-bold">Fix these before saving or publishing:</p>
+              <ul className="mt-1 list-inside list-disc">
+                {problems.map((problem) => <li key={problem}>{problem}</li>)}
+              </ul>
+            </div>
           )}
           {dirty && <p className="text-xs font-semibold text-warning">Unsaved changes</p>}
           {!canWrite && <p className="text-sm text-navy-800">View only: your role can see the storefront draft and its preview but cannot change them.</p>}
         </div>
       </Panel>
+
+      <StorefrontHistory canWrite={canWrite} onRestoreSettled={() => statusHeading.current?.focus()} />
 
       {!canWrite && <StorefrontSummary settings={settings} media={media} products={productItems} categories={categoryItems} />}
 

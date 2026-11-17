@@ -22,7 +22,7 @@ router.post('/init', createInitialAdmin);
 
 router.use(authenticateAdmin);
 router.get('/me', getAdminMe);
-router.get('/activity', getActivityLogs);
+router.get('/activity', authorize('SUPER_ADMIN', 'ADMIN'), getActivityLogs);
 router.get('/users', getUsers);
 router.post('/users/verify', authorize('SUPER_ADMIN', 'ADMIN'), sendVerificationToUsers);
 router.post('/users/:id/verify', authorize('SUPER_ADMIN', 'ADMIN'), sendVerificationToUser);

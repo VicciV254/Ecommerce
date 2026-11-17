@@ -8,6 +8,7 @@ import {
   assertNoPublishedReferences, catalogSnapshot, categoryContext, categoryDtos,
   httpError, loadCategories, nextVersion, serializable,
 } from '../services/catalogService.js';
+import { ACTIVITY, recordActivity } from '../services/activityService.js';
 
 const CATEGORY_CHANGED = 'Someone else changed this category after you opened it. Reload it to see their changes, then make yours again.';
 const SIBLINGS_CHANGED = 'The categories here changed after you opened them. Reload and try again.';
@@ -57,6 +58,7 @@ export const createCategory = async (req, res, next) => {
       };
       const context = validateCategory(categories, data);
       await db.category.create({ data });
+      await recordActivity(db, req.admin.id, { action: ACTIVITY.CATEGORY_CREATED, targetType: 'category', targetId: data.id, details: data.name });
       return categoryDtos(context, [], true).find((item) => item.id === data.id);
     });
     res.status(201).json(category);
@@ -89,6 +91,7 @@ export const updateCategory = async (req, res, next) => {
         await assertNoPublishedReferences(db, { categoryIds: newlyHidden, productIds: products.map((item) => item.id) });
       }
       await db.category.update({ where: { id: current.id }, data });
+      await recordActivity(db, req.admin.id, { action: ACTIVITY.CATEGORY_UPDATED, targetType: 'category', targetId: current.id, details: candidate.name });
       const snapshot = await catalogSnapshot(db, true);
       return snapshot.categories.find((item) => item.id === current.id);
     });
@@ -112,6 +115,9 @@ export const reorderCategories = async (req, res, next) => {
       for (const [order, id] of orderedIds.entries()) {
         await db.category.update({ where: { id }, data: { order, updatedAt: nextVersion(byId.get(id).updatedAt) } });
       }
+      // The parent exists: its children were just found by `parentId`.
+      const details = parentId ? (await db.category.findUnique({ where: { id: parentId }, select: { name: true } })).name : 'departments';
+      await recordActivity(db, req.admin.id, { action: ACTIVITY.CATEGORIES_REORDERED, targetType: 'category', targetId: parentId, details });
       const updated = new Map((await catalogSnapshot(db, true)).categories.map((item) => [item.id, item]));
       return orderedIds.map((id) => updated.get(id));
     });
@@ -131,6 +137,7 @@ export const deleteCategory = async (req, res, next) => {
       if (children || products) throw httpError(409, 'Remove or move the child categories and products first, or hide the category instead');
       await assertNoPublishedReferences(db, { categoryIds: [category.id] });
       await db.category.update({ where: { id: category.id }, data: { deletedAt: new Date(), isActive: false } });
+      await recordActivity(db, req.admin.id, { action: ACTIVITY.CATEGORY_DELETED, targetType: 'category', targetId: category.id, details: category.name });
     });
     res.json({ success: true });
   } catch (error) { next(error); }

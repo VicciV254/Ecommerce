@@ -10,6 +10,7 @@ import {
 } from '../services/catalogService.js';
 import { expireReservations } from '../services/inventoryService.js';
 import { verifiedCloudinaryMedia } from '../services/cloudinaryService.js';
+import { ACTIVITY, recordActivity } from '../services/activityService.js';
 
 const PRODUCT_CHANGED = 'Someone else changed this product after you opened it. Reload it to see their changes, then make yours again.';
 
@@ -241,6 +242,7 @@ export const createProduct = async (req, res, next) => {
       await writeVariants(db, product.id, variants, req.admin.id);
       // Variants created in this request have no client-known IDs yet, so new images cannot target one.
       await writeImages(db, product, images ?? []);
+      await recordActivity(db, req.admin.id, { action: ACTIVITY.PRODUCT_CREATED, targetType: 'product', targetId: product.id, details: product.name });
       return productDto(await db.product.findUnique({ where: { id: product.id }, include: productInclude(true) }), context, true);
     });
     res.status(201).json(result);
@@ -273,6 +275,7 @@ export const updateProduct = async (req, res, next) => {
       const product = await db.product.update({ where: { id: existing.id }, data: { ...fields, updatedAt: nextVersion(existing.updatedAt) } });
       if (variants) await writeVariants(db, existing.id, variants, req.admin.id);
       if (images) await writeImages(db, product, images, existing.images, new Set(existing.variants.map((variant) => variant.id)));
+      await recordActivity(db, req.admin.id, { action: ACTIVITY.PRODUCT_UPDATED, targetType: 'product', targetId: product.id, details: product.name });
       return productDto(await db.product.findUnique({ where: { id: existing.id }, include: productInclude(true) }), context, true);
     });
     res.json(result);
@@ -287,6 +290,7 @@ export const deleteProduct = async (req, res, next) => {
       await assertNoPublishedReferences(db, { productIds: [product.id] });
       await db.product.update({ where: { id: product.id }, data: { deletedAt: new Date(), isActive: false } });
       await db.productVariant.updateMany({ where: { productId: product.id }, data: { isActive: false } });
+      await recordActivity(db, req.admin.id, { action: ACTIVITY.PRODUCT_DELETED, targetType: 'product', targetId: product.id, details: product.name });
     });
     res.json({ success: true });
   } catch (error) { next(error); }

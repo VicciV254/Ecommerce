@@ -200,7 +200,7 @@ export function parseStaffOrder(data: unknown, expectedId?: string): StaffOrder 
   return order;
 }
 
-function isPagination(value: unknown): value is Pagination {
+export function isPagination(value: unknown): value is Pagination {
   return isRecord(value) && isQuantity(value.page) && isQuantity(value.limit) && isCount(value.total) && isCount(value.pages);
 }
 

@@ -122,7 +122,7 @@ export const adminStocks: CatalogStock[] = adminSnapshot.products.flatMap((produ
 
 export const publishedStorefront = fixtureStorefront();
 export const storefrontDraft: StorefrontDraft = {
-  version: 5, publishedVersion: 3, publishedAt: publishedStorefront.publishedAt, settings: fixtureStorefrontSettings(),
+  version: 5, publishedVersion: 3, publishedAt: publishedStorefront.publishedAt, publishedBy: staff.username, settings: fixtureStorefrontSettings(),
   media: [], unavailableMediaIds: [],
 };
 

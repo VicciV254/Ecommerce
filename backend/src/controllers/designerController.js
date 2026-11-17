@@ -1,6 +1,7 @@
 import prisma from '../config/database.js';
 import { catalogDesignerSchema, catalogDesignerPatchSchema } from '../utils/catalogValidation.js';
 import { assertNoPublishedReferences, catalogSnapshot, designerDto, httpError, serializable } from '../services/catalogService.js';
+import { ACTIVITY, recordActivity } from '../services/activityService.js';
 
 export const getAllDesigners = async (_req, res, next) => {
   try { res.json((await prisma.$transaction((db) => catalogSnapshot(db), { isolationLevel: 'RepeatableRead' })).designers); }
@@ -17,7 +18,11 @@ export const getDesignerById = async (req, res, next) => {
 export const createDesigner = async (req, res, next) => {
   try {
     const input = catalogDesignerSchema.parse(req.body);
-    const designer = await prisma.designer.create({ data: { ...input, location: input.location ?? '' } });
+    const designer = await prisma.$transaction(async (db) => {
+      const record = await db.designer.create({ data: { ...input, location: input.location ?? '' } });
+      await recordActivity(db, req.admin.id, { action: ACTIVITY.DESIGNER_CREATED, targetType: 'designer', targetId: record.id, details: record.fullName });
+      return record;
+    });
     res.status(201).json(designerDto(designer));
   } catch (error) { next(error); }
 };
@@ -31,7 +36,9 @@ export const updateDesigner = async (req, res, next) => {
         const products = await db.product.findMany({ where: { designerId: existing.id, deletedAt: null }, select: { id: true } });
         await assertNoPublishedReferences(db, { productIds: products.map((item) => item.id) });
       }
-      return db.designer.update({ where: { id: existing.id }, data: input });
+      const updated = await db.designer.update({ where: { id: existing.id }, data: input });
+      await recordActivity(db, req.admin.id, { action: ACTIVITY.DESIGNER_UPDATED, targetType: 'designer', targetId: updated.id, details: updated.fullName });
+      return updated;
     });
     res.json(designerDto(designer));
   } catch (error) { next(error); }
@@ -45,6 +52,7 @@ export const deleteDesigner = async (req, res, next) => {
         throw httpError(409, 'Reassign the products before deleting this designer');
       }
       await db.designer.update({ where: { id: designer.id }, data: { deletedAt: new Date(), isActive: false } });
+      await recordActivity(db, req.admin.id, { action: ACTIVITY.DESIGNER_DELETED, targetType: 'designer', targetId: designer.id, details: designer.fullName });
     });
     res.json({ success: true });
   } catch (error) { next(error); }

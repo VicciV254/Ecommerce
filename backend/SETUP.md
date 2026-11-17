@@ -256,8 +256,11 @@ remain separate operations.
 | Product/category/designer CRUD | Validated JSON; stable IDs/slugs, soft retirement and transactional consistency |
 | `/api/admin/stock/:variantId` | Per-SKU inventory, not product-level inferred allocation |
 | `GET /api/settings/storefront` | Safe published configuration and referenced media only |
-| `/api/settings/storefront/draft` | Staff draft with optimistic version checks, referenced media and unavailable media IDs |
-| `POST /api/settings/storefront/publish` | Validate references, then atomically publish the current version |
+| `/api/settings/storefront/draft` | Staff draft with optimistic version checks (409 `STOREFRONT_CHANGED`), the live version's publisher (`publishedBy`), referenced media and unavailable media IDs |
+| `POST /api/settings/storefront/publish` | Validate references and section headings, then atomically publish the current version, recording it as a revision with its publisher and time |
+| `GET /api/settings/storefront/revisions` | Publication history for any signed-in staff member: newest first, 20 a page (`?page=`), each with its version, time, publisher (null when not recorded) and whether it is live; never the documents |
+| `POST /api/settings/storefront/revisions/:version/restore` | SUPER_ADMIN and ADMIN copy a published version into the draft, sending the draft version they hold (`{ "version": n }`); 409 `STOREFRONT_CHANGED`, 404 `REVISION_NOT_FOUND`, 409 `REVISION_INVALID` (breaks current rules) or 409 `REVISION_UNAVAILABLE` (uses a deleted product, category or image) change nothing; shoppers see the version only after the next publish |
+| `GET /api/admin/activity` | Staff activity for SUPER_ADMIN and ADMIN: sign-ins and staff changes that have no history of their own, newest first, 25 a page (`?type=all\|signins\|storefront\|catalog\|discounts\|customers\|promotions&page=`); never IP addresses, user agents or emails |
 | `POST /api/media` | Staff URL/provenance registration; external uploads remain separate |
 | `POST /api/orders/quotes` | Authenticated, versioned, expiring server quote from IDs and customer choices |
 | `GET /api/orders/quotes/:id` | Owner-only saved quote, including consumed/expired state for retry recovery |
@@ -275,6 +278,11 @@ Draft reads preserve missing reference IDs and return them in
 another asset. Save and publish reject invalid references. Unpublished
 standalone artwork is returned in the authenticated draft's `media` list,
 not leaked into the public snapshot.
+
+Section headings may not claim a ranking or popularity the store does not
+measure (for example "best sellers", "top rated" or "trending"): saves and
+publishes refuse them with 400, and restores refuse versions that use them.
+A stored document that contains such a heading still loads, so staff can fix it.
 
 ## Pricing and reservation contract
 

@@ -1,0 +1,35 @@
+{
+  "refused": [
+    "Best sellers",
+    "Bestsellers",
+    "Best-selling linen",
+    "Top rated",
+    "Top-rated jackets",
+    "Highest rated",
+    "Most popular",
+    "Popular now",
+    "Trending",
+    "Customer favourites",
+    "Customers’ picks",
+    "Fan favorites",
+    "#1 in Nairobi",
+    "No. 1 jackets",
+    "Top sellers this week",
+    "Hot sellers",
+    "Customer's picks",
+    "Shopper’s choice"
+  ],
+  "allowed": [
+    "Featured",
+    "Featured products",
+    "Staff picks",
+    "Top picks",
+    "New arrivals",
+    "Selected products",
+    "Shop by department",
+    "Best deals",
+    "Linen for hot days",
+    "Sellers' corner",
+    "Number of styles"
+  ]
+}

@@ -63,7 +63,7 @@ function noWrites() {
 }
 
 const draft: StorefrontDraft = {
-  version: 5, publishedVersion: 3, publishedAt: null, settings: fixtureStorefrontSettings(), media: [], unavailableMediaIds: [],
+  version: 5, publishedVersion: 3, publishedAt: null, publishedBy: null, settings: fixtureStorefrontSettings(), media: [], unavailableMediaIds: [],
 };
 
 beforeEach(() => {

@@ -18,6 +18,7 @@ import { OrdersManager } from "./OrdersManager";
 import { canRead, canWrite, firstPermittedModule, isStaffRole, permittedModules, roleLabel } from "./permissions";
 import { ProductPreview } from "./ProductPreview";
 import { PromotionsManager } from "./PromotionsManager";
+import { StaffActivity } from "./StaffActivity";
 import { StockManager } from "./StockManager";
 import { StorefrontDraftProvider } from "./StorefrontDraft";
 import { StorefrontManager } from "./StorefrontManager";
@@ -308,6 +309,7 @@ function ModuleBody({ module, role, activeDiscounts, showToast }: {
     case "storefront": return <StorefrontManager canWrite={writable} />;
     case "customers": return <CustomersManager canWrite={writable} showToast={showToast} />;
     case "promotions": return <PromotionsManager showToast={showToast} />;
+    case "activity": return <StaffActivity />;
     default: return null;
   }
 }

@@ -6,9 +6,10 @@ type Place = { route: string; h1: string; open?: (page: Page) => Promise<void> }
 
 /** The places a role can reach, plus the not-found state, the drawer and the product dialog. */
 function placesFor(role: "ADMIN" | "VIEWER"): Place[] {
+  const writersOnly = (route: string) => route.endsWith("/promotions") || route.endsWith("/activity");
   const places: Place[] = ADMIN_PLACES.map((place) =>
-    role === "VIEWER" && place.route.endsWith("/promotions") ? { route: place.route, h1: "Not available for your role" } : { ...place });
-  places.push({ route: "/admin/settings/activity", h1: "Page not found" });
+    role === "VIEWER" && writersOnly(place.route) ? { route: place.route, h1: "Not available for your role" } : { ...place });
+  places.push({ route: "/admin/settings/no-such-page", h1: "Page not found" });
   places.push({
     route: "/admin/orders/orders?order=order-quote-admin-2",
     h1: "Orders",

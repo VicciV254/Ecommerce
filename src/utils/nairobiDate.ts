@@ -20,6 +20,7 @@ const NUMERIC_DATE = nairobi({ year: "numeric", month: "2-digit", day: "2-digit"
 const DAY = nairobi({ day: "numeric" });
 const DAY_MONTH = nairobi({ day: "numeric", month: "long" });
 const FULL_DATE = nairobi({ day: "numeric", month: "long", year: "numeric" });
+const SHORT_DATE = nairobi({ day: "numeric", month: "short", year: "numeric" });
 const CLOCK = nairobi({ hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 
 /** The Nairobi calendar date of an instant, as `YYYY-MM-DD`. */
@@ -33,6 +34,9 @@ export const formatNairobiDate = (iso: string) => FULL_DATE.format(new Date(iso)
 
 /** "14:05", the Nairobi time of an instant. */
 export const formatNairobiClock = (iso: string) => CLOCK.format(new Date(iso));
+
+/** "17 Nov 2026, 14:05": the Nairobi date and time of an instant, for staff records. */
+export const formatNairobiDateTime = (iso: string) => `${SHORT_DATE.format(new Date(iso))}, ${formatNairobiClock(iso)}`;
 
 /**
  * The Nairobi dates from `startIso` to `endIso` in words, naming each month and year once: "1–17 November 2026",

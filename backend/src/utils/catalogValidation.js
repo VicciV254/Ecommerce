@@ -237,6 +237,57 @@ export const storefrontDraftSchema = z.object({
 }).strict();
 export const versionSchema = z.object({ version: z.number().int().positive() }).strict();
 
+/**
+ * Section headings may not claim a ranking or popularity the store doesn't measure: it has no sales-rank, rating or
+ * popularity data, and staff choose what product sections show. The editor mirrors these (`src/store/storefrontClaims.ts`).
+ * Checked on writes only (save, publish, restore), never in `storefrontSchema`, so documents stored earlier still load.
+ */
+const RANKING_CLAIMS = [
+  /\b(?:best|top|hot|fast)[\s-]*sell(?:er|ers|ing)\b/,
+  /\b(?:top|highest|best)[\s-]*rated\b/,
+  /\bmost[\s-]+(?:popular|loved|wanted|bought|purchased|viewed|reviewed|wished)\b/,
+  /\bpopular\b/,
+  /\btrending\b/,
+  /\b(?:customer|shopper|fan)(?:s'?|'s)?[\s-]*(?:favou?rites?|picks?|choice)\b/,
+  /(?:#|\bno\.?\s*|\bnumber\s+)1\b/,
+];
+
+export const claimsUnmeasuredRanking = (title) => {
+  const heading = title.toLowerCase().replace(/[‘’]/g, "'");
+  return RANKING_CLAIMS.some((pattern) => pattern.test(heading));
+};
+
+export const rankingClaimMessage = (title) => `Section "${title}": headings can't claim a ranking or popularity the store doesn't measure, such as "best sellers", "top rated" or "trending". Use a heading such as "Featured" or "Staff picks".`;
+
+/** One issue per section heading that claims an unmeasured ranking, at its path in the settings (`sections.<i>.title`). */
+export function storefrontClaimIssues(settings) {
+  return settings.sections.flatMap((section, index) => (claimsUnmeasuredRanking(section.title)
+    ? [{ code: z.ZodIssueCode.custom, path: ['sections', index, 'title'], message: rankingClaimMessage(section.title) }]
+    : []));
+}
+
+/** Refuses settings with a ranking claim as a validation error (400), like the schema's own issues. */
+export function assertNoRankingClaims(settings) {
+  const issues = storefrontClaimIssues(settings);
+  if (issues.length) throw new z.ZodError(issues);
+}
+
+/** The highest page a list may be asked for; the admin's address parser uses the same limit. */
+export const MAX_LIST_PAGE = 10_000;
+/** The largest value of a Postgres INTEGER, the type of every stored version. */
+const MAX_STORED_VERSION = 2_147_483_647;
+const WHOLE_NUMBER = /^[1-9]\d*$/;
+
+/** A page number exactly as written in a query (digits, from 1); anything else is refused, never read as page 1. */
+export const pageQuery = z.string().regex(WHOLE_NUMBER, 'Use a whole page number from 1').transform(Number)
+  .refine((page) => page <= MAX_LIST_PAGE, `Use a page number up to ${MAX_LIST_PAGE}`)
+  .default('1');
+export const revisionListQuerySchema = z.object({ page: pageQuery }).strict();
+export const revisionParamsSchema = z.object({
+  version: z.string().regex(WHOLE_NUMBER, 'Use a published version number').transform(Number)
+    .refine((version) => version <= MAX_STORED_VERSION, 'Use a published version number'),
+}).strict();
+
 export const catalogDiscountSchema = z.object({
   name: text(180).min(2),
   type: z.enum(['PERCENTAGE', 'FIXED']),

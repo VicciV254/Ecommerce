@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { catalogAdminAPI, type MediaAsset, type StorefrontDraft, type StorefrontSettings } from "../../api/catalog";
-import { apiStatus, describeApiError } from "../../api/errors";
+import { apiErrorCode, apiStatus, describeApiError } from "../../api/errors";
+import { headingClaimProblem } from "../../store/storefrontClaims";
 import { useStorefront } from "../../store/StorefrontContext";
 import { isMedia, isStorefrontSettings } from "../../store/storefrontModel";
 import { withMediaDefaults } from "../../store/catalogModel";
@@ -13,15 +14,21 @@ import { useUnsavedChanges } from "./unsavedChanges";
 type DraftLoad = { status: "loading" } | { status: "error"; message: string } | { status: "ready"; draft: StorefrontDraft };
 type Notice = { text: string; tone: "error" | "success" };
 type MediaReference = { id: string; label: string; repairable: boolean };
+/** The write in progress; save, publish and restore never overlap. */
+type DraftBusy = "" | "save" | "publish" | "restore";
+
+const isNullableString = (value: unknown): value is string | null => value === null || typeof value === "string";
+/** Refusals after which the editor offers to reload: the draft changed, or a write raced this one. */
+const STALE_CODES = ["STOREFRONT_CHANGED", "CATALOG_CHANGED"];
 
 function parseDraft(data: unknown): StorefrontDraft | null {
   if (!isRecord(data) || typeof data.version !== "number" || typeof data.publishedVersion !== "number") return null;
-  if (!(data.publishedAt === null || typeof data.publishedAt === "string") || !isStorefrontSettings(data.settings)) return null;
+  if (!isNullableString(data.publishedAt) || !isNullableString(data.publishedBy) || !isStorefrontSettings(data.settings)) return null;
   const { media, unavailableMediaIds } = data;
   if (!Array.isArray(media) || !media.every(isMedia)) return null;
   if (!Array.isArray(unavailableMediaIds) || !unavailableMediaIds.every((id) => typeof id === "string")) return null;
   return {
-    version: data.version, publishedVersion: data.publishedVersion, publishedAt: data.publishedAt,
+    version: data.version, publishedVersion: data.publishedVersion, publishedAt: data.publishedAt, publishedBy: data.publishedBy,
     settings: data.settings, media: media.map(withMediaDefaults), unavailableMediaIds,
   };
 }
@@ -45,6 +52,8 @@ export function draftProblems(settings: StorefrontSettings): string[] {
   const campaignIds = new Set(settings.campaigns.map((campaign) => campaign.id));
   for (const section of settings.sections) {
     if (!section.title.trim()) problems.push("Every section needs a heading.");
+    const claim = headingClaimProblem(section.title);
+    if (claim) problems.push(claim);
     if (section.type === "products" && !section.productIds.length) problems.push(`"${section.title || "Selected products"}" needs at least one product.`);
     if (section.type === "campaign" && (!section.campaignId || !campaignIds.has(section.campaignId))) problems.push(`"${section.title || "Campaign"}" needs a campaign.`);
   }
@@ -67,10 +76,15 @@ type StorefrontDraftValue = {
   load: DraftLoad;
   settings: StorefrontSettings | null;
   dirty: boolean;
-  busy: "" | "save" | "publish";
+  busy: DraftBusy;
   notice: Notice;
-  /** The last save or publish was refused because someone else changed the draft. */
+  /** The last save, publish or restore was refused because someone else changed the draft. */
   stale: boolean;
+  /**
+   * Changes after each restore, which replaces the draft in place, so an open history refreshes. A publish reloads the
+   * whole editor, history included.
+   */
+  historyToken: number;
   /** Saved references resolve through the draft's media, plus product images and images registered in this session. */
   media: MediaAsset[];
   mediaById: ReadonlyMap<string, MediaAsset>;
@@ -81,6 +95,8 @@ type StorefrontDraftValue = {
   reloadDraft: () => void;
   save: () => Promise<void>;
   publish: () => Promise<void>;
+  /** Copies published version `revision` into the draft; resolves true once the draft is that version. */
+  restore: (revision: number) => Promise<boolean>;
 };
 
 const StorefrontDraftContext = createContext<StorefrontDraftValue | null>(null);
@@ -99,9 +115,10 @@ export function StorefrontDraftProvider({ canWrite, showToast, children }: {
   const [load, setLoad] = useState<DraftLoad>({ status: "loading" });
   const [settings, setSettings] = useState<StorefrontSettings | null>(null);
   const [dirty, setDirty] = useState(false);
-  const [busy, setBusy] = useState<"" | "save" | "publish">("");
+  const [busy, setBusy] = useState<DraftBusy>("");
   const [notice, setNotice] = useState<Notice>({ text: "", tone: "success" });
   const [stale, setStale] = useState(false);
+  const [historyToken, setHistoryToken] = useState(0);
   const [registered, setRegistered] = useState<MediaAsset[]>([]);
   const [attempt, setAttempt] = useState(0);
   useUnsavedChanges(canWrite && dirty, "Storefront draft", keepsStorefront);
@@ -194,8 +211,33 @@ export function StorefrontDraftProvider({ canWrite, showToast, children }: {
     }
   };
 
+  const restore = async (revision: number) => {
+    if (!loadedDraft || dirty || busy !== "") return false;
+    setBusy("restore");
+    setNotice({ text: "", tone: "success" });
+    try {
+      const { data: body } = await catalogAdminAPI.restoreStorefrontRevision(revision, loadedDraft.version);
+      const restored = parseDraft(body);
+      if (!restored) throw new Error("Unexpected draft response");
+      setLoad({ status: "ready", draft: restored });
+      setSettings(restored.settings);
+      setDirty(false);
+      setStale(false);
+      setHistoryToken((value) => value + 1);
+      setNotice({ text: `Version ${revision} is now the draft. Preview it, then publish to show it to shoppers.`, tone: "success" });
+      return true;
+    } catch (reason) {
+      // A stale draft offers the reload; a version that can't be restored says why, in the server's words.
+      setStale(STALE_CODES.includes(apiErrorCode(reason) ?? ""));
+      setNotice({ text: describeApiError(reason, "The version could not be restored."), tone: "error" });
+      return false;
+    } finally {
+      setBusy("");
+    }
+  };
+
   const value: StorefrontDraftValue = {
-    load, settings, dirty, busy, notice, stale, media, mediaById, unresolved, update, register, reloadDraft, save, publish,
+    load, settings, dirty, busy, notice, stale, historyToken, media, mediaById, unresolved, update, register, reloadDraft, save, publish, restore,
   };
   return <StorefrontDraftContext.Provider value={value}>{children}</StorefrontDraftContext.Provider>;
 }

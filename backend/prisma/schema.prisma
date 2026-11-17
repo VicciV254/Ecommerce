@@ -49,6 +49,22 @@ model SiteSetting {
   createdAt        DateTime  @default(now())
 }
 
+/// One publication of a setting: the document exactly as published, kept so staff can restore it into the draft.
+model StorefrontRevision {
+  id            String   @id @default(cuid())
+  settingKey    String
+  /// The `publishedVersion` this publication set.
+  version       Int
+  value         Json
+  publishedAt   DateTime
+  /// Null when nobody recorded the publisher (the revision seeded at migration) or the staff account was deleted.
+  publishedById String?
+  publishedBy   Admin?   @relation(fields: [publishedById], references: [id], onDelete: SetNull)
+  createdAt     DateTime @default(now())
+
+  @@unique([settingKey, version])
+}
+
 model MpesaPayment {
   id                 String              @id @default(cuid())
   checkoutRequestId  String?             @unique
@@ -176,16 +192,17 @@ model Subscription {
 // ========== ADMIN MODELS ==========
 
 model Admin {
-  id           String           @id @default(cuid())
-  email        String           @unique
-  username     String           @unique
+  id           String               @id @default(cuid())
+  email        String               @unique
+  username     String               @unique
   password     String
-  role         AdminRole        @default(ADMIN)
+  role         AdminRole            @default(ADMIN)
   lastLogin    DateTime?
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
   activityLogs ActivityLog[]
   alertReads   StaffAlertRead[]
+  publications StorefrontRevision[]
 }
 
 enum AdminRole {
@@ -195,14 +212,20 @@ enum AdminRole {
 }
 
 model ActivityLog {
-  id        String   @id @default(cuid())
-  adminId   String
-  admin     Admin    @relation(fields: [adminId], references: [id])
-  action    String
-  details   String
-  ipAddress String?
-  userAgent String?
-  createdAt DateTime @default(now())
+  id         String   @id @default(cuid())
+  adminId    String
+  admin      Admin    @relation(fields: [adminId], references: [id])
+  action     String
+  /// What the entry is about (`product`, `storefront`, …) and its id; null for sign-ins and entries about several records.
+  targetType String?
+  targetId   String?
+  details    String
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([action, createdAt])
 }
 
 // ========== PRODUCT MODELS ==========

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatNairobiClock, formatNairobiDate, formatNairobiRange, isCalendarDate, nairobiDate } from "./nairobiDate";
+import { formatNairobiClock, formatNairobiDate, formatNairobiDateTime, formatNairobiRange, isCalendarDate, nairobiDate } from "./nairobiDate";
 
 /* Every instant is written in UTC; Nairobi is UTC+3 all year, so its day starts at 21:00Z the day before. */
 describe("Nairobi dates", () => {
@@ -29,5 +29,10 @@ describe("Nairobi dates", () => {
     expect(formatNairobiDate("2026-10-31T21:30:00.000Z")).toBe("1 November 2026");
     expect(formatNairobiClock("2026-11-17T11:05:00.000Z")).toBe("14:05");
     expect(formatNairobiClock("2026-11-16T21:00:00.000Z")).toBe("00:00");
+  });
+
+  it("gives staff records' short Nairobi date and time, on the Nairobi day", () => {
+    expect(formatNairobiDateTime("2026-11-17T11:05:00.000Z")).toBe("17 Nov 2026, 14:05");
+    expect(formatNairobiDateTime("2026-11-14T21:12:00.000Z")).toBe("15 Nov 2026, 00:12");
   });
 });

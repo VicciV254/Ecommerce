@@ -1,6 +1,7 @@
 import { useId, useState } from "react";
 import { catalogAdminAPI, type Campaign, type MediaAsset, type StorefrontSettings } from "../../api/catalog";
 import { describeApiError } from "../../api/errors";
+import { headingClaimProblem } from "../../store/storefrontClaims";
 import { Feedback, Field, dangerButtonClass, inputClass, isAcceptedImageUrl, smallButtonClass } from "./shared";
 
 /** Limits enforced by the storefront API, mirrored so the editor stays within them. */
@@ -95,6 +96,8 @@ export function SectionEditor({
   onRemove: () => void;
 }) {
   const typeLabel = { departments: "Departments", featured: "Featured products", products: "Selected products", campaign: "Campaign" }[section.type];
+  const claimId = useId();
+  const claim = headingClaimProblem(section.title);
   return (
     <article className="space-y-3 rounded-md border border-light-gray p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -110,7 +113,14 @@ export function SectionEditor({
         </div>
       </div>
       <Field label="Heading">
-        {(id) => <input id={id} value={section.title} onChange={(event) => onChange({ ...section, title: event.target.value })} className={inputClass} />}
+        {(id) => (
+          <>
+            <input id={id} value={section.title} onChange={(event) => onChange({ ...section, title: event.target.value })}
+              aria-invalid={claim ? true : undefined} aria-describedby={claim ? claimId : undefined}
+              className={`${inputClass} aria-[invalid=true]:border-error`} />
+            {claim && <p id={claimId} className="mt-1 text-xs font-semibold text-error [overflow-wrap:break-word]">{claim}</p>}
+          </>
+        )}
       </Field>
       {section.type === "departments" && (
         <IdPicker label="Categories" items={categories} selected={section.categoryIds} max={STOREFRONT_LIMITS.categoryIds}

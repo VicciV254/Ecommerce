@@ -1,10 +1,11 @@
 import type { BrowserContext, Page } from "@playwright/test";
-import type { AdminUser, StaffOrder, Subscription } from "../../src/api/admin";
+import type { ActivityEntry, AdminUser, StaffOrder, Subscription } from "../../src/api/admin";
+import type { StorefrontRevision } from "../../src/api/catalog";
 import type { Order } from "../../src/api/orders";
 import { fixturePendingOrder } from "../../src/test-support/checkoutFixtures";
 import { fixtureStaffOrder, fixtureStaffRefund, fixtureStaffReturn, noFulfilment } from "../../src/test-support/orderFixtures";
 import { NOTHING_WAITING, fixtureDashboard, fixtureSalesReport } from "../../src/test-support/overviewFixtures";
-import { adminStocks, browserQuote, expect, serveStaffOrders } from "./fixtures";
+import { STAFF_TOKEN, adminStocks, browserQuote, expect, serveStaffOrders, staff, storefrontDraft } from "./fixtures";
 
 /** Every admin place, with its H1. */
 export const ADMIN_PLACES = [
@@ -20,6 +21,7 @@ export const ADMIN_PLACES = [
   { route: "/admin/customers/customers", h1: "Customers" },
   { route: "/admin/customers/discounts", h1: "Discounts" },
   { route: "/admin/customers/promotions", h1: "Email promotions" },
+  { route: "/admin/settings/activity", h1: "Staff activity" },
 ] as const;
 
 const customer = { id: "customer-admin-e2e", firstName: "Wanjiku", lastName: "Kamau-Odhiambo", email: "wanjiku.kamau-odhiambo@example.test" };
@@ -54,6 +56,69 @@ const subscriptions: Subscription[] = [
   { id: "sub-2", email: "lapsed.reader@example.test", isActive: false, createdAt: "2026-08-01T08:00:00Z" },
 ];
 
+const signedIn = { username: staff.username, role: staff.role };
+/** A long unbroken name, so layouts are checked with text that cannot wrap between words. */
+export const LONG_STAFF_NAME = "wanjiku.kamau-odhiambo.night-shift-supervisor";
+
+/** When the draft fixture's live version 3 was published. */
+const PUBLISHED_AT = storefrontDraft.publishedAt ?? "";
+
+/**
+ * Staff activity, newest first: a restore into the draft by the signed-in staff member, other kinds of change and long
+ * text, and the publication of the live version 3 by the same staff member.
+ */
+export const activityEntries: ActivityEntry[] = [
+  { id: "act-restore", at: "2026-11-17T11:20:00.000Z", action: "STOREFRONT_RESTORED", targetType: "storefront", targetId: "1", details: "version 1", staff: signedIn },
+  { id: "act-product", at: "2026-11-16T09:12:00.000Z", action: "PRODUCT_UPDATED", targetType: "product", targetId: "prod-linen-shirt", details: "Linen Short-Sleeve Shirt", staff: signedIn },
+  { id: "act-category", at: "2026-11-15T16:40:00.000Z", action: "CATEGORY_UPDATED", targetType: "category", targetId: "cat-men",
+    details: "Handwoven-linen-and-cotton-summer-workwear-for-coastal-Kenya", staff: { username: LONG_STAFF_NAME, role: "SUPER_ADMIN" } },
+  { id: "act-discount", at: "2026-11-14T08:00:00.000Z", action: "DISCOUNT_STOPPED", targetType: "discount", targetId: "disc-1", details: "Linen week", staff: signedIn },
+  { id: "act-customer", at: "2026-11-13T07:30:00.000Z", action: "CUSTOMER_DISABLED", targetType: "customer", targetId: "customer-2", details: "", staff: signedIn },
+  { id: "act-login", at: "2026-11-13T05:00:00.000Z", action: "LOGIN", targetType: null, targetId: null, details: "Admin logged in", staff: { username: LONG_STAFF_NAME, role: "SUPER_ADMIN" } },
+  { id: "act-publish", at: PUBLISHED_AT, action: "STOREFRONT_PUBLISHED", targetType: "storefront", targetId: "3", details: "version 3", staff: signedIn },
+];
+
+/** The actions each "Show" filter lists, as the API filters them. */
+const ACTIVITY_FILTERS: Record<string, (action: string) => boolean> = {
+  all: () => true,
+  signins: (action) => action === "LOGIN",
+  storefront: (action) => action.startsWith("STOREFRONT_"),
+  catalog: (action) => /^(PRODUCT_|CATEGORY_|CATEGORIES_REORDERED|DESIGNER_)/.test(action),
+  discounts: (action) => action.startsWith("DISCOUNT_"),
+  customers: (action) => action.startsWith("CUSTOMER_"),
+  promotions: (action) => action === "PROMOTION_SENT" || action === "SUBSCRIBER_REMOVED",
+};
+
+/** The storefront draft's history: version 3 is live (the draft fixture's `publishedVersion`), version 1 predates records. */
+export const storefrontRevisions: StorefrontRevision[] = [
+  { version: 3, publishedAt: PUBLISHED_AT, publishedBy: staff.username, live: true },
+  { version: 2, publishedAt: "2026-10-29T07:40:00.000Z", publishedBy: LONG_STAFF_NAME, live: false },
+  { version: 1, publishedAt: "2026-10-28T06:12:00.000Z", publishedBy: null, live: false },
+];
+
+type Route = Parameters<Parameters<BrowserContext["route"]>[1]>[0];
+const pageOf = <T,>(items: readonly T[], page: number, limit: number) =>
+  ({ items: items.slice((page - 1) * limit, page * limit), pagination: { page, limit, pages: Math.ceil(items.length / limit), total: items.length } });
+
+/** `GET /admin/activity` (25 a page, filtered by type) and `GET /settings/storefront/revisions` (20 a page). */
+export async function serveStaffHistory(context: BrowserContext, entries: () => readonly ActivityEntry[] = () => activityEntries,
+  revisions: () => readonly StorefrontRevision[] = () => storefrontRevisions) {
+  const staffOnly = (route: Route, answer: (url: URL) => unknown) => {
+    if (route.request().method() !== "GET") return route.fallback();
+    if (route.request().headers().authorization !== `Bearer ${STAFF_TOKEN}`) return route.fulfill({ status: 401, json: { error: "Invalid token" } });
+    return route.fulfill({ json: answer(new URL(route.request().url())) });
+  };
+  await context.route("**/api/admin/activity*", (route) => staffOnly(route, (url) => {
+    const matches = ACTIVITY_FILTERS[url.searchParams.get("type") ?? "all"] ?? (() => false);
+    const { items, pagination } = pageOf(entries().filter((entry) => matches(entry.action)), Number(url.searchParams.get("page") ?? 1), 25);
+    return { entries: items, pagination };
+  }));
+  await context.route("**/api/settings/storefront/revisions*", (route) => staffOnly(route, (url) => {
+    const { items, pagination } = pageOf(revisions(), Number(url.searchParams.get("page") ?? 1), 20);
+    return { revisions: items, pagination };
+  }));
+}
+
 /** Staff reads every module makes, answered as the API would; writes fall through to the test (or the 503 default). */
 export async function serveAdminData(context: BrowserContext) {
   const orders = staffOrders();
@@ -63,6 +128,7 @@ export async function serveAdminData(context: BrowserContext) {
   await context.route("**/api/admin/users?*", read({ users }));
   await context.route("**/api/admin/users", read({ users }));
   await context.route("**/api/subscriptions/admin/all*", read({ subscriptions }));
+  await serveStaffHistory(context);
   // The dashboard and the sales report for any period, reconciling with each other and with these records.
   const period = (route: Parameters<Parameters<BrowserContext["route"]>[1]>[0]) => new URL(route.request().url()).searchParams.get("period") ?? "month";
   await context.route("**/api/admin/analytics/sales*", (route) => route.request().method() === "GET"

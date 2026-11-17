@@ -4,10 +4,13 @@ import type {
   CatalogProduct,
   MediaAsset,
   PublishedStorefront,
+  StorefrontRevision,
+  StorefrontRevisionPage,
   StorefrontSettings,
 } from "../api/catalog";
 import { isRecord } from "../utils/storage";
 import { hasValidLaterMediaFields, withMediaDefaults, type CategoryTree } from "./catalogModel";
+import { isPagination } from "./orderModel";
 import { COLOR_SLOTS } from "./storefrontTheme";
 
 export const DEFAULT_BRAND_NAME = "Apex Cart";
@@ -69,6 +72,18 @@ export function parsePublishedStorefront(data: unknown): PublishedStorefront {
   if (!isStorefrontSettings(data.settings)) throw new StorefrontFormatError("settings");
   if (!Array.isArray(data.media) || !data.media.every(isMedia)) throw new StorefrontFormatError("media");
   return { version: data.version, publishedAt: data.publishedAt, settings: data.settings, media: data.media.map(withMediaDefaults) };
+}
+
+function isRevision(value: unknown): value is StorefrontRevision {
+  return isRecord(value) && Number.isInteger(value.version) && Number(value.version) > 0 &&
+    isString(value.publishedAt) && !Number.isNaN(Date.parse(value.publishedAt)) &&
+    isNullableString(value.publishedBy) && typeof value.live === "boolean";
+}
+
+/** A page of the publication history as the API sends it, or null when it is not in that shape. */
+export function parseRevisionPage(data: unknown): StorefrontRevisionPage | null {
+  if (!isRecord(data) || !Array.isArray(data.revisions) || !data.revisions.every(isRevision) || !isPagination(data.pagination)) return null;
+  return { revisions: data.revisions, pagination: data.pagination };
 }
 
 /* ------------------------------------------------------------------ */

@@ -27,10 +27,11 @@ describe("permission map", () => {
     refunds: { read: [["orderRoutes.js", 28]], write: [["orderRoutes.js", 29]] },
     products: { read: [["index.js", 54]], write: [["productRoutes.js", 27], ["productRoutes.js", 28], ["productRoutes.js", 29], ["categoryRoutes.js", 20], ["categoryRoutes.js", 21], ["categoryRoutes.js", 22], ["categoryRoutes.js", 23], ["designerRoutes.js", 19], ["index.js", 55], ["index.js", 56]] },
     stock: { read: [["stockRoutes.js", 17]], write: [["stockRoutes.js", 21], ["stockRoutes.js", 22], ["stockRoutes.js", 23]] },
-    storefront: { read: [["settingsRoutes.js", 7]], write: [["settingsRoutes.js", 8], ["settingsRoutes.js", 9]] },
+    storefront: { read: [["settingsRoutes.js", 7], ["settingsRoutes.js", 10]], write: [["settingsRoutes.js", 8], ["settingsRoutes.js", 9], ["settingsRoutes.js", 11]] },
     customers: { read: [["admin.js", 26]], write: [["admin.js", 27], ["admin.js", 28], ["admin.js", 29], ["admin.js", 30]] },
     discounts: { read: [["discountRoutes.js", 18]], write: [["discountRoutes.js", 19], ["discountRoutes.js", 20], ["discountRoutes.js", 21]] },
     promotions: { read: [["subscriptionRoutes.js", 18]], write: [["subscriptionRoutes.js", 19], ["subscriptionRoutes.js", 20]] },
+    activity: { read: [["admin.js", 25]], write: [] },
   };
 
   it.each(ADMIN_MODULE_IDS)("%s matches the backend's authorize lists", (module) => {
@@ -47,22 +48,30 @@ describe("permission map", () => {
   it("reads the role-free staff reads as open to every staff role", () => {
     expect(rolesAt("index.js", 54)).toBe("any staff");
     expect(rolesAt("settingsRoutes.js", 7)).toBe("any staff");
+    expect(rolesAt("settingsRoutes.js", 10)).toBe("any staff");
     expect(rolesAt("admin.js", 26)).toBe("any staff");
     expect(routeFile("settingsRoutes.js")[6]).toContain("/storefront/draft");
     expect(routeFile("admin.js")[25]).toContain("'/users'");
   });
 
-  it("gives viewers every module but email promotions, and no writes", () => {
-    expect(permittedModules("VIEWER")).toEqual(ADMIN_MODULE_IDS.filter((module) => module !== "promotions"));
+  it("cites the routes it names: the publication history, restore and staff activity", () => {
+    expect(routeFile("settingsRoutes.js")[9]).toContain("router.get('/storefront/revisions'");
+    expect(routeFile("settingsRoutes.js")[10]).toContain("router.post('/storefront/revisions/:version/restore'");
+    expect(routeFile("admin.js")[24]).toContain("router.get('/activity'");
+  });
+
+  it("gives viewers every module but email promotions and staff activity, and no writes", () => {
+    expect(permittedModules("VIEWER")).toEqual(ADMIN_MODULE_IDS.filter((module) => module !== "promotions" && module !== "activity"));
     for (const module of ADMIN_MODULE_IDS) expect(canWrite("VIEWER", module)).toBe(false);
     expect(canRead("VIEWER", "promotions")).toBe(false);
+    expect(canRead("VIEWER", "activity")).toBe(false);
   });
 
   it("gives administrators every module and every write the server allows", () => {
     for (const role of ["ADMIN", "SUPER_ADMIN"]) {
       expect(permittedModules(role)).toEqual([...ADMIN_MODULE_IDS]);
       for (const module of ADMIN_MODULE_IDS) {
-        expect(canWrite(role, module)).toBe(module !== "dashboard" && module !== "analytics");
+        expect(canWrite(role, module)).toBe(!["dashboard", "analytics", "activity"].includes(module));
       }
     }
   });
@@ -103,10 +112,12 @@ describe("sign-in landing", () => {
   it("lands a viewer who asked for a module it may not open on its first permitted module", () => {
     expect(landingRoute("VIEWER", "/admin/customers/promotions")).toBe("/admin/overview/dashboard");
     expect(landingRoute("ADMIN", "/admin/customers/promotions")).toBeNull();
+    expect(landingRoute("VIEWER", "/admin/settings/activity?type=catalog")).toBe("/admin/overview/dashboard");
+    expect(landingRoute("ADMIN", "/admin/settings/activity?type=catalog")).toBeNull();
   });
 
   it("leaves unknown routes and unknown roles where they are, so the shell can say so", () => {
-    expect(landingRoute("ADMIN", "/admin/settings/activity")).toBeNull();
+    expect(landingRoute("ADMIN", "/admin/settings/no-such-page")).toBeNull();
     expect(landingRoute("AUDITOR", "/admin")).toBeNull();
     expect(landingRoute("AUDITOR", "/admin/overview/dashboard")).toBeNull();
   });

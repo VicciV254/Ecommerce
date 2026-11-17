@@ -19,6 +19,7 @@ const api = vi.hoisted(() => ({
     refunds: { getAll: vi.fn() },
     attention: { getAll: vi.fn(), markRead: vi.fn() },
     subscriptions: { getAll: vi.fn() },
+    activity: { getAll: vi.fn() },
   },
   catalog: { getStorefront: vi.fn() },
   catalogAdmin: { getSnapshot: vi.fn(), getStock: vi.fn(), getStorefrontDraft: vi.fn() },
@@ -61,6 +62,7 @@ beforeEach(() => {
   api.admin.orders.getAll.mockResolvedValue({ data: { orders: [], ...emptyPage } });
   api.admin.users.getAll.mockResolvedValue({ data: { users: [] } });
   api.admin.subscriptions.getAll.mockResolvedValue({ data: { subscriptions: [] } });
+  api.admin.activity.getAll.mockResolvedValue({ data: { entries: [], pagination: { page: 1, limit: 25, total: 0, pages: 0 } } });
 });
 
 describe("admin entry and sign-in landing", () => {
@@ -114,12 +116,12 @@ describe("admin entry and sign-in landing", () => {
 describe("shell states", () => {
   it("says a page was not found, with links to the permitted modules, and never redirects", async () => {
     signIn("VIEWER");
-    renderAdmin("/admin/settings/activity");
+    renderAdmin("/admin/settings/no-such-page");
     expect(await screen.findByRole("heading", { level: 1, name: "Page not found" })).toBeTruthy();
     const main = screen.getByRole("main");
     const links = within(main).getAllByRole("link").map((link) => link.textContent);
     expect(links).toEqual(["Dashboard", "Sales report", "Orders", "Returns", "Refunds", "Products", "Stock", "Storefront editor", "Customers", "Discounts"]);
-    expect(window.location.hash).toBe("#/admin/settings/activity");
+    expect(window.location.hash).toBe("#/admin/settings/no-such-page");
     await waitFor(() => expect(document.title).toBe("Page not found · Admin · Apex Cart"));
   });
 
@@ -132,6 +134,28 @@ describe("shell states", () => {
     expect(within(nav()).queryByRole("link", { name: "Email promotions" })).toBeNull();
     expect(api.admin.subscriptions.getAll).not.toHaveBeenCalled();
     expect(window.location.hash).toBe("#/admin/customers/promotions");
+  });
+
+  it("keeps staff activity from view-only staff: no Settings and activity group, and its address is refused unasked", async () => {
+    signIn("VIEWER");
+    renderAdmin("/admin/settings/activity?type=catalog");
+    expect(await screen.findByRole("heading", { level: 1, name: "Not available for your role" })).toBeTruthy();
+    expect(screen.getByText("Your role (View only) can't open Staff activity.")).toBeTruthy();
+    expect(within(nav()).queryByText("Settings and activity")).toBeNull();
+    expect(within(nav()).queryByRole("link", { name: "Staff activity" })).toBeNull();
+    expect(api.admin.activity.getAll).not.toHaveBeenCalled();
+  });
+
+  it("lists Settings and activity last for administrators, and opens Staff activity there", async () => {
+    signIn("ADMIN");
+    renderAdmin("/admin/settings/activity");
+    expect(await screen.findByRole("heading", { level: 1, name: "Staff activity" })).toBeTruthy();
+    expect(screen.getByText("Sign-ins and changes made by staff, newest first. Times are Nairobi time.")).toBeTruthy();
+    const groups = within(nav()).getAllByRole("list");
+    expect(groups.at(-1)?.getAttribute("aria-labelledby") && document.getElementById(groups.at(-1)!.getAttribute("aria-labelledby")!)?.textContent).toBe("Settings and activity");
+    expect(within(groups.at(-1)!).getByRole("link", { name: "Staff activity" }).getAttribute("aria-current")).toBe("page");
+    expect(await screen.findByText("No staff activity yet.", undefined, WAIT)).toBeTruthy();
+    await waitFor(() => expect(document.title).toBe("Staff activity · Admin · Apex Cart"));
   });
 
   it("gives an unknown role no modules and loads no staff data", async () => {

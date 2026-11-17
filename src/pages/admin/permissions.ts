@@ -36,7 +36,8 @@ export const MODULE_ACCESS: Readonly<Record<AdminModuleId, Access>> = {
   products: { read: EVERY_ROLE, write: WRITERS },
   // stockRoutes.js:17-20 read for all three; :21-23 (update, bulk, restock) write for SUPER_ADMIN and ADMIN.
   stock: { read: EVERY_ROLE, write: WRITERS },
-  // settingsRoutes.js:7 GET /storefront/draft has no role filter; :8 (save) and :9 (publish) are SUPER_ADMIN and ADMIN.
+  // settingsRoutes.js:7 GET /storefront/draft and :10 GET /storefront/revisions (publication history) have no role
+  // filter; :8 (save), :9 (publish) and :11 (restore a version to the draft) are SUPER_ADMIN and ADMIN.
   storefront: { read: EVERY_ROLE, write: WRITERS },
   // admin.js:26 GET /users has no role filter; :27-30 (verification emails, disable, delete) are SUPER_ADMIN and ADMIN.
   customers: { read: EVERY_ROLE, write: WRITERS },
@@ -44,6 +45,8 @@ export const MODULE_ACCESS: Readonly<Record<AdminModuleId, Access>> = {
   discounts: { read: EVERY_ROLE, write: WRITERS },
   // subscriptionRoutes.js:18-20: listing, sending and deleting are all SUPER_ADMIN and ADMIN (VIEWER gets 403 reading).
   promotions: { read: WRITERS, write: WRITERS },
+  // admin.js:25 GET /activity (staff activity) is SUPER_ADMIN and ADMIN; nothing here writes.
+  activity: { read: WRITERS, write: NOBODY },
 };
 
 const ROLE_LABELS: Readonly<Record<StaffRole, string>> = { SUPER_ADMIN: "Super admin", ADMIN: "Admin", VIEWER: "View only" };
