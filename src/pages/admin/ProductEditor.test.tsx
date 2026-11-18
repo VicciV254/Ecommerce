@@ -472,6 +472,69 @@ describe("review fixes: image addresses", () => {
   });
 });
 
+describe("compare-at price", () => {
+  const RULE = "Compare-at price must be higher than the price, or left empty.";
+  const compareAt = () => screen.getByLabelText("Compare-at price (optional)") as HTMLInputElement;
+  const price = () => screen.getByLabelText("Price (KES)") as HTMLInputElement;
+  const save = () => fireEvent.click(screen.getByRole("button", { name: "Save product" }));
+  /** The message the field points to, or null when it points to none. */
+  const fieldError = () => {
+    const id = compareAt().getAttribute("aria-describedby");
+    return id ? document.getElementById(id)?.textContent ?? "" : null;
+  };
+
+  it("shows the rule on the field while the compare-at price is not above the price, and blocks saving", async () => {
+    renderEditor();
+    for (const value of ["1000", "999.99", "0.5"]) {
+      fireEvent.change(compareAt(), { target: { value } });
+      expect([compareAt().getAttribute("aria-invalid"), fieldError()], value).toEqual(["true", RULE]);
+    }
+    save();
+    expect(screen.getByRole("alert").textContent).toContain(RULE);
+    expect(mocks.updateProduct).not.toHaveBeenCalled();
+    // A price lowered below it is fine, and the check follows every edit of either price.
+    fireEvent.change(price(), { target: { value: "0.49" } });
+    expect([compareAt().hasAttribute("aria-invalid"), fieldError()]).toEqual([false, null]);
+    fireEvent.change(price(), { target: { value: "1000" } });
+    fireEvent.change(compareAt(), { target: { value: "1000.01" } });
+    expect([compareAt().hasAttribute("aria-invalid"), fieldError()]).toEqual([false, null]);
+    save();
+    await waitFor(() => expect(mocks.updateProduct).toHaveBeenCalledTimes(1));
+    expect(mocks.updateProduct.mock.calls[0][1]).toMatchObject({ price: 1000, compareAtPrice: 1000.01 });
+  });
+
+  it("saves an empty compare-at price as none", async () => {
+    renderEditor({ ...editable, comparePrice: 1200 });
+    fireEvent.change(compareAt(), { target: { value: "" } });
+    expect(fieldError()).toBeNull();
+    save();
+    await waitFor(() => expect(mocks.updateProduct).toHaveBeenCalledTimes(1));
+    expect(mocks.updateProduct.mock.calls[0][1]).toMatchObject({ compareAtPrice: null });
+  });
+
+  it("shows the server's refusal on the field, and keeps saving blocked until a price changes", async () => {
+    mocks.updateProduct.mockRejectedValue(apiError(400, { error: RULE, code: "COMPARE_AT_PRICE_INVALID" }));
+    renderEditor();
+    fireEvent.change(compareAt(), { target: { value: "1500" } });
+    save();
+    expect((await screen.findByRole("alert")).textContent).toBe(RULE);
+    expect([compareAt().getAttribute("aria-invalid"), fieldError()]).toEqual(["true", RULE]);
+    save();
+    expect(mocks.updateProduct).toHaveBeenCalledTimes(1);
+    fireEvent.change(compareAt(), { target: { value: "1600" } });
+    expect([compareAt().hasAttribute("aria-invalid"), fieldError()]).toEqual([false, null]);
+  });
+
+  it("does not point the field at an error the server gave for something else", async () => {
+    mocks.updateProduct.mockRejectedValue(apiError(400, { error: "Select an existing category", code: "CATEGORY_INVALID" }));
+    renderEditor();
+    fireEvent.change(compareAt(), { target: { value: "1500" } });
+    save();
+    expect((await screen.findByRole("alert")).textContent).toBe("Select an existing category");
+    expect(fieldError()).toBeNull();
+  });
+});
+
 describe("catalog manager image filter", () => {
   it("counts and lists products with no images or only sample images", () => {
     const sampleOnly = { ...poloShirt, id: "prod-sample-only", name: "Sample-only Polo", images: [{ ...poloShirt.images[0], isPlaceholder: true }] };

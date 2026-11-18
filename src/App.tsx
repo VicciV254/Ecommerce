@@ -30,6 +30,7 @@ import AccountProfile from "./pages/AccountProfile";
 import AccountOrders from "./pages/AccountOrders";
 import AccountAddresses from "./pages/AccountAddresses";
 import VerifyEmail from "./pages/VerifyEmail";
+import Unsubscribe from "./pages/Unsubscribe";
 
 function Router() {
   const route = useRoute();
@@ -81,6 +82,9 @@ function Router() {
       break;
     case "verify-email":
       page = <VerifyEmail />;
+      break;
+    case "unsubscribe":
+      page = <Unsubscribe />;
       break;
     case "account":
       page = (

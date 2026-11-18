@@ -4,7 +4,7 @@ import type { CatalogProduct } from "../api/catalog";
 import { buildCategoryTree } from "../store/catalogModel";
 import type { CatalogValue } from "../store/CatalogContext";
 import { StoreProvider, useStore } from "../store/StoreContext";
-import { fixtureCategories, fixtureReturnPolicy, linenShirt, poloShirt } from "../test-support/catalogFixtures";
+import { fixtureCategories, fixtureDelivery, fixtureReturnPolicy, linenShirt, poloShirt } from "../test-support/catalogFixtures";
 import { shopperStateKey } from "../utils/storage";
 import { MiniCartProvider, useMiniCart } from "./MiniCart";
 
@@ -16,7 +16,7 @@ function catalogWith(products: CatalogProduct[], status: CatalogValue["status"] 
   return {
     status, error: status === "error" ? "The catalog could not be loaded." : null, mode: "live", products,
     productsById: new Map(products.map((product) => [product.id, product])), categories: buildCategoryTree(fixtureCategories),
-    designers: [], discounts: [], returnPolicy: fixtureReturnPolicy, reload: vi.fn(),
+    designers: [], discounts: [], returnPolicy: fixtureReturnPolicy, delivery: fixtureDelivery, reload: vi.fn(),
   };
 }
 

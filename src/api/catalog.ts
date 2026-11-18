@@ -1,6 +1,6 @@
 import { isRecord } from "../utils/storage";
 import api from "./client";
-import type { DeliveryFeeRefund, Pagination, ReturnRule } from "./orders";
+import type { DeliveryFeeRefund, DeliveryMethod, Pagination, ReturnRule } from "./orders";
 import { staffRequest } from "./staffSession";
 
 export type MediaAsset = {
@@ -133,6 +133,16 @@ export type CatalogReturnPolicy = {
   refundRounding: "UP_TO_WHOLE_KES";
 };
 
+/** A delivery method new orders can use, as the checkout policy offers it; quotes still decide the fee charged. */
+export type CatalogDelivery = {
+  method: DeliveryMethod;
+  fee: number;
+  /** Merchandise total from which delivery is free; null when it never is. */
+  freeAbove: number | null;
+  /** Display names of the counties covered; empty means anywhere in Kenya. */
+  counties: string[];
+};
+
 export type CatalogSnapshot = {
   version: 2;
   mode: "live" | "demo" | "admin";
@@ -141,6 +151,8 @@ export type CatalogSnapshot = {
   designers: CatalogDesigner[];
   discounts: CatalogDiscount[];
   returnPolicy: CatalogReturnPolicy;
+  /** The offered methods, in the order shoppers see them; at least one. */
+  delivery: CatalogDelivery[];
 };
 
 /** A staff record's version: the `updatedAt` an editor loaded, sent back with its save (an older one is refused). */

@@ -2,8 +2,10 @@ import { useId, useState, type FormEvent, type ReactNode } from "react";
 import type { Address } from "../api/auth";
 import { MAX_QUOTE_ITEMS, type DeliveryMethod, type Order, type Quote } from "../api/orders";
 import { Link } from "../router";
-import { DELIVERY_LABELS, DELIVERY_METHODS, normalizeCouponCode } from "../store/checkoutModel";
+import { useCatalog } from "../store/CatalogContext";
+import { DELIVERY_LABELS, normalizeCouponCode } from "../store/checkoutModel";
 import { summaryRows } from "../store/checkoutSummary";
+import { deliveryDescription } from "../store/storeFacts";
 import type { CheckoutQuote } from "../store/useCheckoutQuote";
 import type { SubmissionState } from "../store/useOrderSubmission";
 import { formatDateTime } from "../utils/format";
@@ -35,7 +37,10 @@ function FieldError({ id, message }: { id: string; message: string | null }) {
   return <p id={id} role="alert" className="mt-1.5 text-sm font-semibold text-error">{message}</p>;
 }
 
-/** Choice cards for the delivery method; the fee for each appears only in the server's quote. */
+/**
+ * Choice cards for the delivery methods new orders can use, in the catalog's order; the fee for each appears only in the
+ * server's quote. Each radio is named by its visible label alone and described by the line under it.
+ */
 export function DeliveryMethodChoices({ deliveryMethod, disabled, error, onDelivery }: {
   deliveryMethod: DeliveryMethod;
   disabled: boolean;
@@ -43,22 +48,31 @@ export function DeliveryMethodChoices({ deliveryMethod, disabled, error, onDeliv
   onDelivery: (method: DeliveryMethod) => void;
 }) {
   const id = useId();
+  const { delivery } = useCatalog();
   return (
     <fieldset className="min-w-0" aria-describedby={error ? `${id}-delivery-error` : undefined}>
       <legend className={fieldLabelClass}>Delivery method</legend>
       <div className="mt-1.5 space-y-2">
-        {DELIVERY_METHODS.map((method) => (
-          <label key={method} className="flex min-h-[48px] cursor-pointer items-center gap-3 rounded-md border border-control bg-surface px-3 text-navy-900 has-[:checked]:border-2 has-[:checked]:border-navy-900 has-[:checked]:bg-surface-page has-[:disabled]:cursor-not-allowed">
-            <input
-              type="radio"
-              name={`${id}-delivery`}
-              value={method}
-              checked={deliveryMethod === method}
-              disabled={disabled}
-              onChange={() => onDelivery(method)}
-              className="size-5 shrink-0 accent-navy-900"
-            />
-            <span className="min-w-0 [overflow-wrap:anywhere]">{DELIVERY_LABELS[method]}</span>
+        {(delivery ?? []).map((option) => (
+          <label key={option.method} className="flex min-h-[48px] cursor-pointer items-start gap-3 rounded-md border border-control bg-surface px-3 py-2.5 text-navy-900 has-[:checked]:border-2 has-[:checked]:border-navy-900 has-[:checked]:bg-surface-page has-[:disabled]:cursor-not-allowed">
+            {/* As tall as the label's first line, so the radio stays beside it however the description wraps. */}
+            <span className="flex h-6 shrink-0 items-center">
+              <input
+                type="radio"
+                name={`${id}-delivery`}
+                value={option.method}
+                checked={deliveryMethod === option.method}
+                disabled={disabled}
+                onChange={() => onDelivery(option.method)}
+                aria-labelledby={`${id}-${option.method}-label`}
+                aria-describedby={`${id}-${option.method}-description`}
+                className="size-5 accent-navy-900"
+              />
+            </span>
+            <span className="min-w-0 [overflow-wrap:anywhere]">
+              <span id={`${id}-${option.method}-label`} className="block leading-6">{DELIVERY_LABELS[option.method]}</span>
+              <span id={`${id}-${option.method}-description`} className="block text-sm text-muted">{deliveryDescription(option)}</span>
+            </span>
           </label>
         ))}
       </div>

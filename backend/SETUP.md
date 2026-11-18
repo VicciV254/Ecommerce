@@ -16,7 +16,7 @@ The real `.env` is ignored by Git and excluded from container builds.
 | `JWT_SECRET`, `JWT_REFRESH_SECRET` | Distinct, unique signing secrets of at least 32 characters |
 | `HOST`, `PORT` | Local example binds `127.0.0.1:5000` |
 | `CORS_ORIGIN` | Comma-separated frontend origins, matching their actual host/port |
-| `FRONTEND_URL` | Public storefront origin used for links in customer emails |
+| `FRONTEND_URL` | Public storefront origin used for links in customer emails, including each promotional email's unsubscribe link |
 | `BACKGROUND_JOBS_ENABLED` | Opt-in in-process maintenance for always-on hosts; defaults to `false` |
 | `CRON_SECRET` | Bearer secret for `GET /api/internal/maintenance`; empty disables the endpoint |
 | `CLOUDINARY_URL` | Server-only `cloudinary://<api_key>:<api_secret>@<cloud_name>`; empty disables image uploads |
@@ -300,18 +300,24 @@ The compatibility pricing profile uses the following rules:
 | Automatic offers | Lowest eligible unit price; percentage/fixed offers do not compound; nearest KES 10, half-up, never above the base price or below zero |
 | Coupons | Optional normalized code; percentage or one fixed amount across eligible merchandise; use it only if the eligible basket saves more than automatic offers |
 | Coupon allocation and tax rounding | Exact cents; fixed allocation balances its final cent; tax rounds once, half-up |
-| Delivery | STANDARD 200, SAME_DAY 500, STORE_PICKUP 200; retained legacy fee behavior, no free threshold or county restriction by default |
+| Delivery | STANDARD 200 anywhere; SAME_DAY 500 in Nairobi County only; STORE_PICKUP not offered (policy version 2); no free threshold |
 | Quote / inventory hold | 600 seconds / 900 seconds |
 
-These retained delivery defaults are not a claim of commercial coverage.
-Before live activation, confirm merchant fees/coverage and published policy.
-`CHECKOUT_POLICY_JSON`, when supplied, replaces the whole profile and must
-match the schema in `src/config/checkoutPolicy.js`. It contains `version`,
-`currency`, `vatRate`, `discountStep`, `quoteSeconds`, `reservationSeconds`,
-and all three delivery rules. Each delivery rule has `fee`, nullable
-`freeAbove` and a `counties` list; an empty list imposes no county restriction.
-Increase the version when changing policy. Any profile-content change also
-changes its hash and invalidates unconsumed quotes.
+Apex Cart is a demonstration store; before any live activation, confirm fees,
+coverage and the published policy. `CHECKOUT_POLICY_JSON`, when supplied,
+replaces the whole profile and must match the schema in
+`src/config/checkoutPolicy.js`. It contains `version`, `currency`, `vatRate`,
+`discountStep`, `quoteSeconds`, `reservationSeconds` and `delivery`, whose
+`STANDARD`, `SAME_DAY` and `STORE_PICKUP` rules are each optional: a method left
+out is not offered for new orders (quotes refuse it with `DELIVERY_UNAVAILABLE`),
+and at least one must remain or the policy is invalid (503). A profile that
+still lists all three methods stays valid and offers them. Each delivery rule
+has `fee`, nullable `freeAbove` and a `counties` list of display names; an empty
+list means anywhere in Kenya. Counties match regardless of case, accents,
+apostrophes, hyphens and the words "County" and "City". The catalog publishes
+the offered methods with their fees, thresholds and counties, and nothing else
+from the profile. Increase the version when changing policy. Any
+profile-content change also changes its hash and invalidates unconsumed quotes.
 
 Create a quote with a body such as:
 
@@ -596,3 +602,12 @@ the money still owed), mark the failed attempt with
 (from `backend/`, against the same database), then deploy again. The migration
 links each paid order to its confirmed payment and applies the approved
 category return rules by slug.
+
+Migration `20261118120000_newsletter_unsubscribe_tokens` gives each
+subscription a private unsubscribe token and stores addresses trimmed and in
+lowercase. Rows for one address that differ only in letter case or surrounding
+spaces are merged into the oldest one, which stays active only if every variant
+was active (an opt-out on any of them wins); the other rows are deleted, so the
+change cannot be undone by a down migration. Take a backup or a database branch
+first. It then sets each account's promotional-email preference to whether an
+active subscription exists for its address; nobody's emails change.

@@ -7,6 +7,7 @@ import { generateToken } from '../../src/config/auth.js';
 import { initializeDemo } from '../../src/services/demoInitializer.js';
 import { buildDemoCatalog } from '../../src/data/demoCatalog.js';
 import { categoryContext } from '../../src/services/catalogService.js';
+import { DEFAULT_CHECKOUT_POLICY } from '../../src/config/checkoutPolicy.js';
 import defaults from '../../src/data/storefront-defaults.json' with { type: 'json' };
 import { mailer } from '../../src/services/notificationService.js';
 
@@ -107,6 +108,32 @@ test('public catalog, paging and department filters use the same database-backed
   assert.equal((await call('/products?category=retired-category', { token: null })).status, 404);
   assert.equal((await call('/products?limit=101', { token: null })).status, 400);
   assert.equal((await call('/products?active=false', { token: null })).status, 400);
+});
+
+test('the catalog publishes the offered delivery methods, in order, and nothing else from the checkout policy', async (t) => {
+  const DEFAULT_DELIVERY = [
+    { method: 'STANDARD', fee: 200, freeAbove: null, counties: [] },
+    { method: 'SAME_DAY', fee: 500, freeAbove: null, counties: ['Nairobi'] },
+  ];
+  const shoppers = await call('/catalog', { token: null });
+  assert.deepEqual(shoppers.data.delivery, DEFAULT_DELIVERY);
+  assert.deepEqual((await call('/admin/catalog')).data.delivery, DEFAULT_DELIVERY);
+  const published = JSON.stringify(shoppers.data);
+  for (const internal of ['quoteSeconds', 'reservationSeconds', 'discountStep', 'vatRate']) {
+    assert.equal(published.includes(internal), false, internal);
+  }
+
+  t.after(() => { delete process.env.CHECKOUT_POLICY_JSON; });
+  process.env.CHECKOUT_POLICY_JSON = JSON.stringify({ ...DEFAULT_CHECKOUT_POLICY, delivery: {
+    STORE_PICKUP: { fee: 0, freeAbove: null, counties: [] },
+    SAME_DAY: { fee: 450, freeAbove: 20000, counties: ['Nairobi', "Murang'a"] },
+    STANDARD: { fee: 250, freeAbove: null, counties: [] },
+  } });
+  assert.deepEqual((await call('/catalog', { token: null })).data.delivery, [
+    { method: 'STANDARD', fee: 250, freeAbove: null, counties: [] },
+    { method: 'SAME_DAY', fee: 450, freeAbove: 20000, counties: ['Nairobi', "Murang'a"] },
+    { method: 'STORE_PICKUP', fee: 0, freeAbove: null, counties: [] },
+  ]);
 });
 
 test('staff CRUD persists canonical products with real variant identity and no default stock invention', async () => {

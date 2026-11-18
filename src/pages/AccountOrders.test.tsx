@@ -148,6 +148,9 @@ describe("order actions, returns and refunds", () => {
     render(<AccountOrders />);
     const cards = await screen.findAllByRole("list", { name: /^Items in order/ }, WAIT);
     expect(cards).toHaveLength(4);
+    // Store pickup is off for new orders, but an order placed with it still shows its method and pickup status.
+    expect(screen.getAllByText(/ · Store pickup$/)).toHaveLength(1);
+    expect(screen.getAllByText("Ready for pickup").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /Cancel/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /Pick ?up|Collected|Confirm/i })).toBeNull();
     expect(screen.getAllByRole("button", { name: "Request a return" })).toHaveLength(1);

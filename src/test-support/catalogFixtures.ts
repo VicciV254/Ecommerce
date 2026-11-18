@@ -5,6 +5,7 @@
 import type {
   AdminCatalogSnapshot,
   CatalogCategory,
+  CatalogDelivery,
   CatalogDesigner,
   CatalogDiscount,
   CatalogProduct,
@@ -150,11 +151,18 @@ export const fixtureReturnPolicy: CatalogReturnPolicy = {
   version: 1, windowDays: 7, deliveryFeeRefund: "MERCHANT_FAULT_ONLY", partialReturns: true, refundRounding: "UP_TO_WHOLE_KES",
 };
 
+/** The default checkout policy's methods as the catalog API publishes them: Store pickup is off. */
+export const fixtureDelivery: CatalogDelivery[] = [
+  { method: "STANDARD", fee: 200, freeAbove: null, counties: [] },
+  { method: "SAME_DAY", fee: 500, freeAbove: null, counties: ["Nairobi"] },
+];
+
 export function fixtureSnapshot(overrides: Partial<CatalogSnapshot> = {}): CatalogSnapshot {
   return {
     version: 2, mode: "demo",
     products: [linenShirt, poloShirt, imagelessShirt, demoPhone],
     categories: fixtureCategories, designers: fixtureDesigners, discounts: fixtureDiscounts, returnPolicy: fixtureReturnPolicy,
+    delivery: fixtureDelivery,
     ...overrides,
   };
 }

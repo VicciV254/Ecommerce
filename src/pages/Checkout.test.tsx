@@ -19,7 +19,8 @@ import {
   poloLine,
 } from "../test-support/checkoutFixtures";
 import { fixtureConfirmedAttempt, fixturePaymentOverview } from "../test-support/paymentFixtures";
-import { shopperStateKey } from "../utils/storage";
+import { STORAGE_KEYS, shopperStateKey } from "../utils/storage";
+import { GuestCartMerge } from "../components/GuestCartMerge";
 import Cart from "./Cart";
 import Checkout from "./Checkout";
 
@@ -89,7 +90,7 @@ beforeEach(() => {
   mocks.catalog = {
     status: "ready", error: null, mode: "live", products: snapshot.products,
     productsById: new Map(snapshot.products.map((product) => [product.id, product])),
-    categories: buildCategoryTree(snapshot.categories), designers: [], discounts: [], returnPolicy: snapshot.returnPolicy, reload: vi.fn(),
+    categories: buildCategoryTree(snapshot.categories), designers: [], discounts: [], returnPolicy: snapshot.returnPolicy, delivery: snapshot.delivery, reload: vi.fn(),
   };
   for (const fn of [...Object.values(mocks.orders), ...Object.values(mocks.payments)]) fn.mockReset();
   mocks.orders.createQuote.mockResolvedValue({ data: fixtureQuote() });
@@ -490,5 +491,80 @@ describe("cart quote", () => {
     expect(mocks.orders.createQuote).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Remove" }));
     expect(await screen.findByText("KES 1,244", undefined, WAIT)).toBeTruthy();
+  });
+});
+
+describe("delivery choices", () => {
+  const STANDARD = { name: "Standard delivery", description: "Anywhere in Kenya · 2–5 working days" };
+  const SAME_DAY = {
+    name: "Same-day delivery",
+    description: "Nairobi only · Paid by 12:00 EAT on a working day: arrives that day; otherwise the next working day",
+  };
+  const choices = () => within(screen.getByRole("region", { name: "Order summary" })).getByRole("group", { name: "Delivery method" });
+  const quotedMethods = () => mocks.orders.createQuote.mock.calls.map(([request]) => (request as QuoteRequest).deliveryMethod);
+
+  it("lists only the methods the catalog offers, in its order, each named by its visible label and described by its line", async () => {
+    seed("customer-a", [linen]);
+    render(tree(<Cart />));
+    const group = choices();
+    expect(within(group).getAllByRole("radio").map((radio) => (radio as HTMLInputElement).value)).toEqual(["STANDARD", "SAME_DAY"]);
+    // A string name matches the whole accessible name: the description is announced separately, not as part of it.
+    expect((within(group).getByRole("radio", STANDARD) as HTMLInputElement).checked).toBe(true);
+    expect(within(group).getByRole("radio", SAME_DAY)).toBeTruthy();
+    expect(group.textContent).not.toMatch(/pickup|KES/i);
+    await screen.findByText("KES 1,244", undefined, WAIT);
+  });
+
+  it("follows a policy that still offers Store pickup, which states no promise of its own", () => {
+    mocks.catalog = { ...mocks.catalog!, delivery: [
+      { method: "STORE_PICKUP", fee: 0, freeAbove: null, counties: [] },
+      { method: "SAME_DAY", fee: 450, freeAbove: null, counties: ["Nairobi", "Kiambu"] },
+    ] };
+    seed("customer-a", [linen], { checkout: { addressId: null, deliveryMethod: "SAME_DAY" } });
+    render(tree(<Cart />));
+    const group = choices();
+    expect(within(group).getAllByRole("radio").map((radio) => (radio as HTMLInputElement).value)).toEqual(["STORE_PICKUP", "SAME_DAY"]);
+    expect(within(group).getByRole("radio", { name: "Store pickup", description: "Anywhere in Kenya" })).toBeTruthy();
+    expect(within(group).getByRole("radio", {
+      name: "Same-day delivery", description: "Nairobi and Kiambu only · Paid by 12:00 EAT on a working day: arrives that day; otherwise the next working day",
+    })).toBeTruthy();
+  });
+
+  it("quotes and saves the first offered method when the saved one, Store pickup, is no longer offered", async () => {
+    seed("customer-a", [linen], { checkout: { addressId: null, deliveryMethod: "STORE_PICKUP" } });
+    render(tree(<Cart />));
+    expect((within(choices()).getByRole("radio", STANDARD) as HTMLInputElement).checked).toBe(true);
+    await screen.findByText("KES 1,244", undefined, WAIT);
+    expect(quotedMethods()).toEqual(["STANDARD"]);
+    await persisted("customer-a", { checkout: { addressId: null, deliveryMethod: "STANDARD" } });
+  });
+
+  it("corrects a saved Store pickup when the catalog loads after the saved choices were read", async () => {
+    const ready = mocks.catalog!;
+    mocks.catalog = { ...ready, status: "loading", products: [], productsById: new Map(), returnPolicy: null, delivery: null };
+    seed("customer-a", [linen], { checkout: { addressId: null, deliveryMethod: "STORE_PICKUP" } });
+    const view = render(tree(<Cart />));
+    expect(mocks.orders.createQuote).not.toHaveBeenCalled();
+    mocks.catalog = ready;
+    view.rerender(tree(<Cart />));
+    await screen.findByText("KES 1,244", undefined, WAIT);
+    expect(quotedMethods()).toEqual(["STANDARD"]);
+    await persisted("customer-a", { checkout: { addressId: null, deliveryMethod: "STANDARD" } });
+  });
+
+  it("corrects a saved Store pickup after a guest cart joins the account at sign-in", async () => {
+    localStorage.setItem(shopperStateKey(null), JSON.stringify({ cart: [linen], wishlist: [] }));
+    seed("customer-a", [], { checkout: { addressId: null, deliveryMethod: "STORE_PICKUP" } });
+    mocks.user = null;
+    const app = () => <StoreProvider><Probe /><GuestCartMerge /><Cart /></StoreProvider>;
+    const view = render(app());
+    // The sign-in form of this tab leaves this note; the session then appears.
+    sessionStorage.setItem(STORAGE_KEYS.pendingGuestMerge, customerA.id);
+    mocks.user = customerA;
+    view.rerender(app());
+    await waitFor(() => expect(store.mergePending).toBe(false), WAIT);
+    await screen.findByText("KES 1,244", undefined, WAIT);
+    expect(quotedMethods()).toEqual(["STANDARD"]);
+    await persisted("customer-a", { cart: [linen], checkout: { addressId: null, deliveryMethod: "STANDARD" } });
   });
 });

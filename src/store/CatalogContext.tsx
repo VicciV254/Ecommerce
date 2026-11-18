@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   catalogAPI,
+  type CatalogDelivery,
   type CatalogDesigner,
   type CatalogDiscount,
   type CatalogProduct,
@@ -33,10 +34,12 @@ export type CatalogValue = {
   discounts: CatalogDiscount[];
   /** Return terms for new orders; `null` until the snapshot has loaded. */
   returnPolicy: CatalogReturnPolicy | null;
+  /** The delivery methods new orders can use, in order; `null` until the snapshot has loaded. */
+  delivery: CatalogDelivery[] | null;
   reload: () => void;
 };
 
-const EMPTY: Omit<CatalogSnapshot, "returnPolicy"> = { version: 2, mode: "live", products: [], categories: [], designers: [], discounts: [] };
+const EMPTY: Omit<CatalogSnapshot, "returnPolicy" | "delivery"> = { version: 2, mode: "live", products: [], categories: [], designers: [], discounts: [] };
 
 const CatalogContext = createContext<CatalogValue | null>(null);
 
@@ -59,6 +62,7 @@ function useCatalogValue(state: LoadState, reload: () => void): CatalogValue {
     designers: snapshot.designers,
     discounts: snapshot.discounts,
     returnPolicy: state.status === "ready" ? state.snapshot.returnPolicy : null,
+    delivery: state.status === "ready" ? state.snapshot.delivery : null,
     reload,
   }), [state, snapshot, productsById, categories, reload]);
 }

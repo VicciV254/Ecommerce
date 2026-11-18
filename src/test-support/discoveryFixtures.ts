@@ -6,6 +6,7 @@
 import type { CatalogCategory, CatalogProduct, CatalogSnapshot } from "../api/catalog";
 import {
   fixtureCategory,
+  fixtureDelivery,
   fixtureDesigners,
   fixtureDiscounts,
   fixtureImage,
@@ -116,6 +117,6 @@ export const discoveryCategories: CatalogCategory[] = nodes.map((node) => ({
 export function discoverySnapshot(): CatalogSnapshot {
   return {
     version: 2, mode: "demo", products: discoveryProducts, categories: discoveryCategories,
-    designers: fixtureDesigners, discounts: fixtureDiscounts, returnPolicy: fixtureReturnPolicy,
+    designers: fixtureDesigners, discounts: fixtureDiscounts, returnPolicy: fixtureReturnPolicy, delivery: fixtureDelivery,
   };
 }

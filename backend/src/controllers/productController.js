@@ -11,8 +11,15 @@ import {
 import { expireReservations } from '../services/inventoryService.js';
 import { verifiedCloudinaryMedia } from '../services/cloudinaryService.js';
 import { ACTIVITY, recordActivity } from '../services/activityService.js';
+import { decimal } from '../utils/money.js';
 
 const PRODUCT_CHANGED = 'Someone else changed this product after you opened it. Reload it to see their changes, then make yours again.';
+
+/** A compare-at ("was") price is shown only above the price, so a saved one must be higher; compared as money. */
+function assertCompareAtPrice(price, compareAtPrice) {
+  if (compareAtPrice === null || compareAtPrice === undefined || decimal(compareAtPrice).greaterThan(decimal(price))) return;
+  throw httpError(400, 'Compare-at price must be higher than the price, or left empty.', 'COMPARE_AT_PRICE_INVALID');
+}
 
 export const getCatalog = async (_req, res, next) => {
   try {
@@ -229,6 +236,7 @@ async function writeImages(db, product, input, existing = [], variantIds = new S
 export const createProduct = async (req, res, next) => {
   try {
     const input = catalogProductSchema.parse(req.body);
+    assertCompareAtPrice(input.price, input.compareAtPrice);
     const result = await serializable(async (db) => {
       const context = await loadCatalogContext(db);
       await validateProductRelations(db, input, null, context);
@@ -263,6 +271,8 @@ export const updateProduct = async (req, res, next) => {
       const existing = await db.product.findFirst({ where: { id: req.params.id, deletedAt: null }, include: productInclude(true) });
       if (!existing) throw httpError(404, 'Product not found');
       if (existing.updatedAt.getTime() !== expected.getTime()) throw httpError(409, PRODUCT_CHANGED, 'PRODUCT_CHANGED');
+      // Checked on the product as saved: an edit of the price alone must still sit below the stored compare-at price.
+      assertCompareAtPrice(input.price ?? existing.price, input.compareAtPrice === undefined ? existing.compareAtPrice : input.compareAtPrice);
       const context = await loadCatalogContext(db);
       await validateProductRelations(db, input, existing, context);
       const { variants: variantInputs, images, ...fields } = input;

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CatalogCategory } from "../api/catalog";
 import { buildCategoryTree } from "../store/catalogModel";
 import type { CatalogValue } from "../store/CatalogContext";
-import { fixtureCategory, fixtureReturnPolicy } from "../test-support/catalogFixtures";
+import { fixtureCategory, fixtureDelivery, fixtureReturnPolicy } from "../test-support/catalogFixtures";
 import { DepartmentShortcuts, DepartmentsMenu, DrawerMenu, PANEL_LEAF_LIMIT } from "./HeaderMenus";
 
 const state = vi.hoisted(() => ({ catalog: null as CatalogValue | null }));
@@ -22,7 +22,7 @@ const categories: CatalogCategory[] = [
 beforeEach(() => {
   state.catalog = {
     status: "ready", error: null, mode: "live", products: [], productsById: new Map(),
-    categories: buildCategoryTree(categories), designers: [], discounts: [], returnPolicy: fixtureReturnPolicy, reload: vi.fn(),
+    categories: buildCategoryTree(categories), designers: [], discounts: [], returnPolicy: fixtureReturnPolicy, delivery: fixtureDelivery, reload: vi.fn(),
   };
   window.location.hash = "#/";
 });

@@ -211,11 +211,20 @@ products, users, orders and existing staff credentials. See
 The cart requests a quote using only variant IDs, quantities, an owned
 address, delivery choice and optional coupon. The server calculates
 **16% VAT added to discounted merchandise**, delivery and the total using
-decimal arithmetic. The compatibility profile retains KES 200 standard/
-pickup delivery, KES 500 same-day delivery and nearest-KES-10 automatic
-offer rounding. Final delivery coverage and commercial policy still need
-merchant review; the versioned server profile can change without adding
-client-side pricing rules. See [Backend setup](backend/SETUP.md).
+decimal arithmetic. Automatic offers round to the nearest KES 10.
+
+Delivery methods come from the server's checkout policy. The catalog
+(`GET /api/catalog`) publishes the offered ones as `delivery` (fee,
+free-delivery threshold and covered counties), and the cart and checkout list
+exactly those, in that order. By default: Standard delivery anywhere in Kenya,
+KES 200; Same-day delivery in Nairobi County only, KES 500; **Store pickup is
+off** for new orders, while orders already placed with it still show and
+complete. There is no free-delivery threshold, and VAT never applies to the
+delivery fee. County names match however they are written ("Nairobi City
+County", "nairobi"). A saved Store pickup choice falls back to the first
+offered method. The promises under each choice ("2–5 working days") are worded
+in `src/store/storeFacts.ts`. The versioned server profile can change without
+adding client-side pricing rules. See [Backend setup](backend/SETUP.md).
 
 Quotes expire after 10 minutes by default. Price, address or delivery
 changes require a new quote and visible customer review. Coupon and delivery
@@ -289,9 +298,18 @@ prompt rather than assuming sandbox means no debit.
 Access the admin dashboard at `/#/admin` (staff-only). Features include:
 
 - Dashboard overview with metrics
-- Product catalog management
+- Product catalog management. A compare-at ("was") price must be higher than
+  the product's price, or left empty: the editor and the API refuse anything
+  else, including a price raised to or above a saved compare-at price. Products
+  saved before the rule still load; their lower compare-at price is not shown.
 - Stock management
 - Discount management
+- Promotions: newsletter subscribers and promotional emails. Each email carries
+  a link that unsubscribes only its recipient (`#/unsubscribe?token=…`, which
+  acts only when the person presses the button). Subscribing answers the same
+  way whether or not an address was already subscribed, addresses are stored in
+  lowercase, and an account's promotional-email preference always shows
+  whether those emails are sent to its address.
 - Order management
 - Customization options
 - Staff activity: sign-ins and staff changes, newest first, for super admins

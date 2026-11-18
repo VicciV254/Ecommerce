@@ -62,6 +62,31 @@ describe("catalog snapshot boundary", () => {
       .toThrow(/return policy/);
   });
 
+  it("carries the offered delivery methods in order, and fails the snapshot when they are missing or malformed", () => {
+    const snapshot = fixtureSnapshot();
+    expect(parseCatalogSnapshot(snapshot, ["demo"]).delivery).toEqual([
+      { method: "STANDARD", fee: 200, freeAbove: null, counties: [] },
+      { method: "SAME_DAY", fee: 500, freeAbove: null, counties: ["Nairobi"] },
+    ]);
+    const legacy = [{ method: "STORE_PICKUP", fee: 0, freeAbove: 5000, counties: [] }, ...snapshot.delivery];
+    expect(parseCatalogSnapshot({ ...snapshot, delivery: legacy }, ["demo"]).delivery.map((option) => option.method))
+      .toEqual(["STORE_PICKUP", "STANDARD", "SAME_DAY"]);
+    expect(parseAdminCatalogSnapshot(fixtureAdminSnapshot()).delivery).toEqual(snapshot.delivery);
+
+    const { delivery: _delivery, ...deliveryless } = snapshot;
+    const standard = snapshot.delivery[0];
+    for (const delivery of [
+      undefined, null, [], {}, [{ ...standard, method: "COURIER" }], [standard, { ...standard, fee: 300 }],
+      [{ ...standard, fee: -1 }], [{ ...standard, fee: "200" }], [{ ...standard, fee: 200.001 }], [{ ...standard, freeAbove: undefined }],
+      [{ ...standard, freeAbove: "free" }], [{ ...standard, counties: [""] }], [{ ...standard, counties: ["  "] }],
+      [{ ...standard, counties: "Nairobi" }], [{ ...standard, counties: [7] }], [{ method: "STANDARD", fee: 200, freeAbove: null }],
+    ]) {
+      const payload = delivery === undefined ? deliveryless : { ...snapshot, delivery };
+      expect(() => parseCatalogSnapshot(payload, ["demo"]), JSON.stringify(delivery)).toThrow(/delivery/);
+    }
+    expect(() => parseAdminCatalogSnapshot({ ...fixtureAdminSnapshot(), delivery: [] })).toThrow(/delivery/);
+  });
+
   it("reads media fields that older payloads omit as null and keeps uploaded-file facts", () => {
     const { variantId: _variant, format: _format, bytes: _bytes, width: _width, height: _height, ...older } = linenShirt.images[0];
     const uploaded = {

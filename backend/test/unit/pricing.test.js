@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Prisma } from '@prisma/client';
-import { checkoutPolicy, DEFAULT_CHECKOUT_POLICY, reservationsEnabled } from '../../src/config/checkoutPolicy.js';
+import { checkoutPolicy, DEFAULT_CHECKOUT_POLICY, offeredDelivery, reservationsEnabled } from '../../src/config/checkoutPolicy.js';
 import { decimal, isMoneyInput, moneyJsonReplacer, moneyNumber } from '../../src/utils/money.js';
-import { priceBasket, unitPrice } from '../../src/services/pricingService.js';
+import { countyKey, priceBasket, unitPrice } from '../../src/services/pricingService.js';
 
 const now = new Date('2026-10-31T12:00:00Z');
 const address = { county: 'Mombasa' };
@@ -88,8 +88,78 @@ test('delivery thresholds use discounted merchandise and unsupported counties fa
   assert.equal(quote([entry], [offer], null, free).shippingCost, 0);
   assert.equal(quote([{ ...entry, variant: { ...variant, price: 999 } }], [], null, free).shippingCost, 0);
   assert.equal(quote([{ ...entry, variant: { ...variant, price: 899.99 } }], [], null, free).shippingCost, 200);
-  assert.throws(() => priceBasket([entry], [], null, 'STANDARD', { county: 'Nairobi' }, free, now), /unavailable.*county/);
+  assert.throws(() => priceBasket([entry], [], null, 'STANDARD', { county: 'Nairobi' }, free, now),
+    { code: 'DELIVERY_UNAVAILABLE', message: 'Standard delivery is available only in mombasa. Choose another delivery method or address.' });
   assert.notEqual(free.hash, policy.hash);
+});
+
+/** A policy offering exactly `delivery`. */
+const offering = (delivery, version = DEFAULT_CHECKOUT_POLICY.version) =>
+  checkoutPolicy({ CHECKOUT_POLICY_JSON: JSON.stringify({ ...DEFAULT_CHECKOUT_POLICY, version, delivery }) });
+const LEGACY_DELIVERY = {
+  STORE_PICKUP: { fee: 200, freeAbove: null, counties: [] },
+  STANDARD: { fee: 200, freeAbove: null, counties: [] },
+  SAME_DAY: { fee: 500, freeAbove: null, counties: [] },
+};
+
+test('county names match however people write them, and only the same county matches', () => {
+  const written = {
+    Nairobi: ['Nairobi', 'nairobi', ' Nairobi County ', 'Nairobi City County', 'NAIROBI CITY', 'Nairobi-County'],
+    "Murang'a": ['Muranga', 'Murang’a County', 'Murang‘a', 'Murangʼa', 'Murang´a'],
+    'Tharaka-Nithi': ['Tharaka Nithi'],
+    'Elgeyo-Marakwet': ['Elgeyo Marakwet County'],
+  };
+  for (const [configured, names] of Object.entries(written)) {
+    for (const name of names) {
+      assert.equal(countyKey(name), countyKey(configured), `${JSON.stringify(name)} ~ ${configured}`);
+      // Both directions: the address as configured, or the configuration as people write it.
+      for (const [counties, county] of [[[configured], name], [[name], configured]]) {
+        assert.equal(priceBasket([entry], [], null, 'SAME_DAY', { county }, offering({ SAME_DAY: { fee: 500, freeAbove: null, counties } }), now).shippingCost, 500);
+      }
+    }
+  }
+  assert.equal(countyKey("Murang'a"), 'muranga');
+  for (const name of ['Nairobi West', 'Kiambu', 'Nai robi', '', '  ', 'County']) {
+    assert.notEqual(countyKey(name), countyKey('Nairobi'), JSON.stringify(name));
+    assert.throws(() => priceBasket([entry], [], null, 'SAME_DAY', { county: name }, policy, now), { code: 'DELIVERY_UNAVAILABLE' }, JSON.stringify(name));
+  }
+  // A name with no letters left never matches, even a configured name that also has none.
+  assert.throws(() => priceBasket([entry], [], null, 'SAME_DAY', { county: 'City' }, offering({ SAME_DAY: { fee: 500, freeAbove: null, counties: ['County'] } }), now),
+    { code: 'DELIVERY_UNAVAILABLE' });
+});
+
+test('refusals name the method, and the counties it covers joined naturally', () => {
+  assert.throws(() => priceBasket([entry], [], null, 'STORE_PICKUP', address, policy, now),
+    { code: 'DELIVERY_UNAVAILABLE', statusCode: 400, message: "Store pickup isn't offered. Choose another delivery method." });
+  assert.throws(() => priceBasket([entry], [], null, 'SAME_DAY', address, policy, now),
+    { code: 'DELIVERY_UNAVAILABLE', message: 'Same-day delivery is available only in Nairobi. Choose another delivery method or address.' });
+  const covering = (counties) => offering({ SAME_DAY: { fee: 500, freeAbove: null, counties } });
+  assert.throws(() => priceBasket([entry], [], null, 'SAME_DAY', address, covering(['Nairobi', 'Kiambu']), now),
+    { message: 'Same-day delivery is available only in Nairobi and Kiambu. Choose another delivery method or address.' });
+  assert.throws(() => priceBasket([entry], [], null, 'SAME_DAY', address, covering(['Nairobi', 'Kiambu', 'Machakos']), now),
+    { message: 'Same-day delivery is available only in Nairobi, Kiambu and Machakos. Choose another delivery method or address.' });
+});
+
+test('the default policy offers Standard anywhere and Same-day in Nairobi; methods are optional but one is required', () => {
+  assert.equal(DEFAULT_CHECKOUT_POLICY.version, 2);
+  assert.deepEqual(policy.delivery, {
+    STANDARD: { fee: 200, freeAbove: null, counties: [] },
+    SAME_DAY: { fee: 500, freeAbove: null, counties: ['Nairobi'] },
+  });
+  assert.equal('STORE_PICKUP' in policy.delivery, false);
+  assert.deepEqual(offeredDelivery(policy).map((option) => option.method), ['STANDARD', 'SAME_DAY']);
+  // A configuration that still lists all three methods stays valid and offers them, in the shoppers' order.
+  const legacy = offering(LEGACY_DELIVERY, 1);
+  assert.deepEqual(offeredDelivery(legacy), [
+    { method: 'STANDARD', fee: 200, freeAbove: null, counties: [] },
+    { method: 'SAME_DAY', fee: 500, freeAbove: null, counties: [] },
+    { method: 'STORE_PICKUP', fee: 200, freeAbove: null, counties: [] },
+  ]);
+  assert.equal(priceBasket([entry], [], null, 'STORE_PICKUP', address, legacy, now).shippingCost, 200);
+  assert.deepEqual(Object.keys(offering({ SAME_DAY: LEGACY_DELIVERY.SAME_DAY }).delivery), ['SAME_DAY']);
+  for (const delivery of [{}, { COURIER: LEGACY_DELIVERY.STANDARD }, { STANDARD: null }]) {
+    assert.throws(() => offering(delivery), { statusCode: 503, message: 'Checkout pricing policy configuration is invalid' }, JSON.stringify(delivery));
+  }
 });
 
 test('tax rounds once to cents and invalid policies or oversized orders are rejected', () => {

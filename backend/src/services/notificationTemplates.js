@@ -1,3 +1,4 @@
+import { DELIVERY_METHOD_LABELS } from '../config/checkoutPolicy.js';
 import { brandedEmail, emailPalette, escapeHtml, isHttpUrl } from './mailService.js';
 
 const BRAND_NAME = 'Apex Cart';
@@ -10,11 +11,6 @@ const shillingsWithCents = new Intl.NumberFormat('en-KE', { minimumFractionDigit
 const percentNumber = new Intl.NumberFormat('en-KE', { maximumFractionDigits: 2 });
 const dateTime = new Intl.DateTimeFormat('en-KE', { dateStyle: 'medium', timeStyle: 'short', timeZone: TIME_ZONE });
 
-const DELIVERY_METHOD_LABELS = Object.freeze({
-  STANDARD: 'Standard delivery',
-  SAME_DAY: 'Same-day delivery',
-  STORE_PICKUP: 'Store pickup',
-});
 const RETURN_REASON_LABELS = Object.freeze({
   CHANGED_MIND: 'Changed my mind',
   FAULTY: 'Faulty item',

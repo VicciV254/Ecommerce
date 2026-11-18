@@ -1,13 +1,13 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Link } from "../router";
 import { Container } from "./ui";
 import { BrandLogo } from "./Brand";
 import { useCatalog } from "../store/CatalogContext";
 import { useStorefront } from "../store/StorefrontContext";
-import { SHOPPING_FACTS, returnsFact } from "../store/shoppingFacts";
+import { SHOPPING_FACTS, deliveryFact, returnsFact } from "../store/shoppingFacts";
 import { subscriptionsAPI } from "../api/subscriptions";
 import { describeApiError } from "../api/errors";
-import toast from "react-hot-toast";
+import { useAuth } from "../contexts/AuthContext";
 
 const FOOTER_DEPARTMENT_LIMIT = 6;
 const columnHeading = "mb-3 text-xs font-bold uppercase tracking-[0.15em] text-gold-400";
@@ -22,25 +22,36 @@ const HELP_LINKS = [
 ];
 
 export function Footer() {
-  const { categories, returnPolicy } = useCatalog();
+  const { categories, returnPolicy, delivery } = useCatalog();
   const { brandName } = useStorefront();
+  const { user, refreshUser } = useAuth();
   const emailId = useId();
+  const errorId = useId();
   const [email, setEmail] = useState("");
   const [done, setDone] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const thanks = useRef<HTMLParagraphElement>(null);
 
+  // The confirmation replaces the form, so the focused field or button disappears: put focus on the confirmation instead
+  // (which also reads it out), unless focus has already moved somewhere else on the page.
+  useEffect(() => {
+    if (done && (document.activeElement === null || document.activeElement === document.body)) thanks.current?.focus();
+  }, [done]);
   const handleSubscribe = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) return;
 
     setLoading(true);
+    setError(null);
     try {
       await subscriptionsAPI.subscribe({ email });
       setDone(true);
       setEmail("");
-      toast.success("Successfully subscribed!");
-    } catch (error) {
-      toast.error(describeApiError(error, "Could not subscribe."));
+      // The address may be this account's: reload it, so its email preference shows what is now sent.
+      if (user) void refreshUser();
+    } catch (reason) {
+      setError(describeApiError(reason, "Could not subscribe."));
     } finally {
       setLoading(false);
     }
@@ -56,7 +67,9 @@ export function Footer() {
             <p className="mt-1">Subscribe for offers and new arrivals.</p>
           </div>
           {done ? (
-            <p className="font-semibold text-gold-400">✓ Thank you for subscribing!</p>
+            <p ref={thanks} tabIndex={-1} role="status" className="max-w-md text-center font-semibold text-gold-400 md:text-left">
+              Thank you for subscribing. Every email has a link to unsubscribe.
+            </p>
           ) : (
             /* Side by side only while the form is at least 20rem wide: rem grows with the text size, so at large text or
                on very narrow screens the field and button stack and the field keeps the full width. */
@@ -72,6 +85,8 @@ export function Footer() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="Your email address"
                   disabled={loading}
+                  aria-invalid={error ? true : undefined}
+                  aria-describedby={error ? errorId : undefined}
                   className="min-h-[44px] min-w-0 w-full rounded-sm bg-surface px-4 py-2.5 text-navy-900 placeholder:text-muted disabled:bg-surface-soft @xs:rounded-r-none"
                 />
                 <button
@@ -82,6 +97,11 @@ export function Footer() {
                   {loading ? "Subscribing..." : "Subscribe"}
                 </button>
               </form>
+              {error && (
+                <p id={errorId} role="alert" className="mt-2 rounded-sm bg-error-tint px-3 py-2 text-sm font-semibold text-error [overflow-wrap:break-word]">
+                  {error}
+                </p>
+              )}
             </div>
           )}
         </Container>
@@ -119,7 +139,7 @@ export function Footer() {
               <ul className="space-y-2 leading-relaxed">
                 <li>{SHOPPING_FACTS.vat}</li>
                 <li>{SHOPPING_FACTS.payment}</li>
-                <li>{SHOPPING_FACTS.delivery}</li>
+                <li>{deliveryFact(delivery)}</li>
                 <li>{returnsFact(returnPolicy?.windowDays ?? null)}</li>
               </ul>
             </section>

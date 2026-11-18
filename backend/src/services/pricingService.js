@@ -1,7 +1,37 @@
+import { DELIVERY_METHOD_LABELS } from '../config/checkoutPolicy.js';
 import { Decimal, decimal, moneyNumber, roundMoney, sumMoney } from '../utils/money.js';
 
 const pricingError = (message, code = 'PRICING_INVALID') =>
   Object.assign(new Error(message), { statusCode: 400, code });
+
+/** Apostrophe-like marks people type inside county names (Murang'a): removed before anything else. */
+const APOSTROPHES = /['\u2018\u2019\u02BC`\u00B4\u2032]/gu;
+const IGNORED_COUNTY_WORDS = new Set(['county', 'city']);
+
+/**
+ * A county name reduced for matching, so "Nairobi City County", "nairobi" and "Murang’a" compare as people mean them:
+ * no apostrophes, accents or case; other punctuation and spacing as single spaces; the words "county" and "city" ignored.
+ */
+export function countyKey(name) {
+  return String(name ?? '')
+    .replace(APOSTROPHES, '')
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/[^\p{L}]+/gu, ' ')
+    .split(' ')
+    .filter((word) => word !== '' && !IGNORED_COUNTY_WORDS.has(word))
+    .join(' ');
+}
+
+/** Whether `county` is one of `counties`; a name with no letters left matches nothing. */
+function coversCounty(counties, county) {
+  const key = countyKey(county);
+  return key !== '' && counties.some((name) => countyKey(name) === key);
+}
+
+/** "A", "A and B", "A, B and C". */
+const joinNames = (names) => names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
 
 export function discountApplies(discount, product, categoryPath, now) {
   if (!discount.isActive || new Date(discount.startDate) > now || (discount.endDate && new Date(discount.endDate) < now)) return false;
@@ -122,9 +152,10 @@ export function priceMerchandise(entries, discounts, couponCode, policy, now = n
 export function priceBasket(entries, discounts, couponCode, deliveryMethod, address, policy, now = new Date()) {
   const merchandise = priceMerchandise(entries, discounts, couponCode, policy, now);
   const rule = policy.delivery[deliveryMethod];
-  if (!rule) throw pricingError('Choose a supported delivery method', 'DELIVERY_UNAVAILABLE');
-  if (rule.counties.length && !rule.counties.some((county) => county.toLowerCase() === address.county.trim().toLowerCase())) {
-    throw pricingError('This delivery method is unavailable for the selected county', 'DELIVERY_UNAVAILABLE');
+  const label = DELIVERY_METHOD_LABELS[deliveryMethod];
+  if (!rule) throw pricingError(`${label} isn't offered. Choose another delivery method.`, 'DELIVERY_UNAVAILABLE');
+  if (rule.counties.length && !coversCounty(rule.counties, address.county)) {
+    throw pricingError(`${label} is available only in ${joinNames(rule.counties)}. Choose another delivery method or address.`, 'DELIVERY_UNAVAILABLE');
   }
   const discountedSubtotal = decimal(merchandise.discountedSubtotal);
   const tax = roundMoney(discountedSubtotal.mul(policy.vatRate).div(100));

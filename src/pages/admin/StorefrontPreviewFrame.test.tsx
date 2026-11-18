@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CatalogProduct } from "../../api/catalog";
 import { buildCategoryTree } from "../../store/catalogModel";
 import type { CatalogValue } from "../../store/CatalogContext";
-import { fixtureCategories, fixtureImage, fixtureReturnPolicy, fixtureStorefrontSettings, linenShirt, poloShirt } from "../../test-support/catalogFixtures";
+import { fixtureCategories, fixtureImage, fixtureDelivery, fixtureReturnPolicy, fixtureStorefrontSettings, linenShirt, poloShirt } from "../../test-support/catalogFixtures";
 import { StorefrontPreviewFrame } from "./StorefrontPreviewFrame";
 import { PREVIEW_MESSAGES } from "./storefrontPreviewModel";
 
@@ -16,7 +16,7 @@ function catalogWith(products: CatalogProduct[]): CatalogValue {
   return {
     status: "ready", error: null, mode: "live", products,
     productsById: new Map(products.map((product) => [product.id, product])),
-    categories: buildCategoryTree(fixtureCategories), designers: [], discounts: [], returnPolicy: fixtureReturnPolicy, reload: vi.fn(),
+    categories: buildCategoryTree(fixtureCategories), designers: [], discounts: [], returnPolicy: fixtureReturnPolicy, delivery: fixtureDelivery, reload: vi.fn(),
   };
 }
 

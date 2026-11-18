@@ -8,7 +8,7 @@ import {
   fixtureCategories,
   fixtureDesigners,
   fixtureProduct,
-  fixtureReturnPolicy,
+  fixtureDelivery, fixtureReturnPolicy,
   fixtureVariant,
   listPricing,
 } from "../test-support/catalogFixtures";
@@ -36,7 +36,7 @@ function catalogWith(products: CatalogProduct[]): CatalogValue {
     status: "ready", error: null, mode: "live", products,
     productsById: new Map(products.map((product) => [product.id, product])),
     categories: buildCategoryTree(fixtureCategories), designers: fixtureDesigners, discounts: [],
-    returnPolicy: fixtureReturnPolicy, reload: vi.fn(),
+    returnPolicy: fixtureReturnPolicy, delivery: fixtureDelivery, reload: vi.fn(),
   };
 }
 

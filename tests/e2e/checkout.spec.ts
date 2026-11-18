@@ -1,4 +1,4 @@
-import { browserQuote, expect, linenCartLine, orderPage, servePaymentOverview, shopperState, signInCustomer, test, watchPaymentWrites } from "./fixtures";
+import { browserQuote, expect, linenCartLine, orderPage, pageOverflow, servePaymentOverview, shopperState, signInCustomer, test, watchPaymentWrites } from "./fixtures";
 import { fixturePendingOrder, linenLine } from "../../src/test-support/checkoutFixtures";
 import { fixtureCustomerOrder } from "../../src/test-support/orderFixtures";
 import { PAYMENT_MESSAGES } from "../../src/test-support/paymentFixtures";
@@ -227,4 +227,61 @@ test("checkout totals and the primary action remain usable with doubled text", a
     };
   });
   expect(layout.overflow, JSON.stringify(layout)).toBeLessThanOrEqual(0);
+});
+
+const SAME_DAY_DESCRIPTION = "Nairobi only · Paid by 12:00 EAT on a working day: arrives that day; otherwise the next working day";
+
+test("delivery choices offer only the catalog's methods, each named by its label, with its line wrapped under it and no overflow", async ({ page, context, isMobile }) => {
+  await signInCustomer(page, [linenCartLine]);
+  const quoted: string[] = [];
+  await context.route("**/api/orders/quotes", (route) => {
+    const { deliveryMethod } = route.request().postDataJSON() as { deliveryMethod: "STANDARD" | "SAME_DAY" };
+    quoted.push(deliveryMethod);
+    return route.fulfill({ status: 201, json: browserQuote({ deliveryMethod }) });
+  });
+  const width = isMobile ? 360 : 1280;
+  await page.setViewportSize({ width, height: 900 });
+  for (const path of ["/#/cart", "/#/checkout?step=delivery"]) {
+    await page.goto(path);
+    const group = page.getByRole("main").getByRole("group", { name: "Delivery method" });
+    const standard = group.getByRole("radio", { name: "Standard delivery", exact: true });
+    const sameDay = group.getByRole("radio", { name: "Same-day delivery", exact: true });
+    await expect(group.getByRole("radio")).toHaveCount(2);
+    await expect(standard).toHaveAccessibleName("Standard delivery");
+    await expect(standard).toHaveAccessibleDescription("Anywhere in Kenya · 2–5 working days");
+    await expect(sameDay).toHaveAccessibleName("Same-day delivery");
+    await expect(sameDay).toHaveAccessibleDescription(SAME_DAY_DESCRIPTION);
+    await expect(group).not.toContainText(/pickup|KES/i);
+    for (const size of ["100%", "200%"]) {
+      await page.evaluate((value) => { document.documentElement.style.fontSize = value; }, size);
+      for (const radio of [standard, sameDay]) {
+        const card = await radio.evaluate((input) => {
+          const box = (element: Element) => element.getBoundingClientRect();
+          const label = document.getElementById(input.getAttribute("aria-labelledby") ?? "")!;
+          const description = document.getElementById(input.getAttribute("aria-describedby") ?? "")!;
+          const lineHeight = parseFloat(getComputedStyle(label).lineHeight);
+          return {
+            card: box(input.closest("label")!), radio: box(input), label: box(label), description: box(description),
+            firstLineMiddle: box(label).top + lineHeight / 2,
+          };
+        });
+        const where = `${path} at ${width}px, ${size} text, ${await radio.getAttribute("value")}`;
+        expect(card.card.height, `${where}: card height`).toBeGreaterThanOrEqual(48);
+        expect(card.card.right, `${where}: card fits`).toBeLessThanOrEqual(width + 0.5);
+        expect(Math.abs(card.radio.top + card.radio.height / 2 - card.firstLineMiddle), `${where}: radio beside the label's first line`).toBeLessThanOrEqual(1);
+        expect(card.description.top, `${where}: description under the label`).toBeGreaterThanOrEqual(card.label.bottom - 0.5);
+        expect(card.description.left, `${where}: description lines up with the label`).toBeCloseTo(card.label.left, 0);
+        expect(card.description.bottom, `${where}: description inside the card`).toBeLessThanOrEqual(card.card.bottom + 0.5);
+      }
+      expect(await pageOverflow(page), `${path} at ${width}px with ${size} text`).toBeLessThanOrEqual(0);
+    }
+    await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
+    // The whole card chooses: a click on its description line picks Same-day, which is then quoted.
+    await group.getByText(SAME_DAY_DESCRIPTION).click();
+    await expect(sameDay).toBeChecked();
+    await expect.poll(() => quoted.at(-1)).toBe("SAME_DAY");
+    await standard.check();
+    await expect.poll(() => quoted.at(-1)).toBe("STANDARD");
+  }
+  expect(quoted).not.toContain("STORE_PICKUP");
 });

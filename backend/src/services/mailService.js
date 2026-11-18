@@ -77,7 +77,7 @@ function normalizeSendError(error, provider) {
   return mailError(code, { provider, ...providerDiagnostics(error) });
 }
 
-function htmlToText(html = '') {
+export function htmlToText(html = '') {
   return html
     .replace(/<(head|style|script)\b[\s\S]*?<\/\1>/gi, ' ')
     .replace(/<(?:br|\/p|\/div|\/h[1-6]|\/li|\/tr)\b[^>]*>/gi, '\n')
@@ -125,8 +125,20 @@ function brandMark() {
   return `<table role="presentation" cellspacing="0" cellpadding="0"><tr><td style="padding-right:12px;vertical-align:middle;"><img src="${escapeHtml(logoUrl)}" alt="" width="40" height="40" style="display:block;border:0;width:40px;height:40px;" /></td><td style="vertical-align:middle;">${name}</td></tr></table>`;
 }
 
+/** The storefront's address for links in emails, without a trailing slash. */
+export function frontendUrl() {
+  return (process.env.FRONTEND_URL || process.env.CORS_ORIGIN?.split(',')?.[0] || 'http://localhost:5173').replace(/\/$/, '');
+}
+
+/** The link after the footer note: required by its caller, so an address that is not http(s) fails the email. */
+function footerLinkHtml(link, color) {
+  if (!link) return '';
+  if (!isHttpUrl(link.href)) throw Object.assign(new Error('An email footer link needs an http(s) address'), { code: 'EMAIL_LINK_INVALID' });
+  return `<br /><a href="${escapeHtml(link.href)}" style="color:${color};text-decoration:underline;">${escapeHtml(link.label)}</a>`;
+}
+
 // `body` is trusted HTML built by the caller; every other field is escaped here.
-export function brandedEmail({ eyebrow, title, intro, body = '', cta, footerNote } = {}) {
+export function brandedEmail({ eyebrow, title, intro, body = '', cta, footerNote, footerLink } = {}) {
   const { navy, gold, canvas, surface, border, ink, onNavy } = emailPalette;
   const eyebrowHtml = eyebrow
     ? `<div style="margin-top:10px;font-size:12px;line-height:1.4;letter-spacing:0.14em;text-transform:uppercase;font-weight:700;color:${gold};">${escapeHtml(eyebrow)}</div>`
@@ -164,7 +176,7 @@ export function brandedEmail({ eyebrow, title, intro, body = '', cta, footerNote
             </tr>
             <tr>
               <td style="background:${navy};padding:18px 28px;font-size:13px;line-height:1.6;color:${onNavy};">
-                ${escapeHtml(footerNote || DEFAULT_FOOTER_NOTE)}
+                ${escapeHtml(footerNote || DEFAULT_FOOTER_NOTE)}${footerLinkHtml(footerLink, surface)}
               </td>
             </tr>
           </table>
@@ -268,8 +280,7 @@ export async function sendMail({ to, subject, text, html, replyTo } = {}) {
 export async function sendVerificationEmail(user, token) {
   if (!isMailConfigured()) return false;
 
-  const frontendUrl = process.env.FRONTEND_URL || process.env.CORS_ORIGIN?.split(',')?.[0] || 'http://localhost:5173';
-  const verifyUrl = `${frontendUrl.replace(/\/$/, '')}/#/verify-email?token=${encodeURIComponent(token)}&email=${encodeURIComponent(user.email)}`;
+  const verifyUrl = `${frontendUrl()}/#/verify-email?token=${encodeURIComponent(token)}&email=${encodeURIComponent(user.email)}`;
   const html = brandedEmail({
     eyebrow: 'Account verification',
     title: `Welcome, ${user.firstName}`,

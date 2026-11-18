@@ -15,7 +15,9 @@ import {
 } from "../api/orders";
 import { apiErrorCode, apiStatus, describeApiError } from "../api/errors";
 import { isRecord } from "../utils/storage";
-import { isMoney } from "./catalogModel";
+import { DELIVERY_METHODS, isDeliveryMethod, isMoney } from "./catalogModel";
+
+export { DELIVERY_METHODS, isDeliveryMethod };
 
 /* ------------------------------------------------------------------ */
 /* Boundary validation: a malformed quote or order is never trusted   */
@@ -37,7 +39,6 @@ const isQuantity = (value: unknown): value is number => Number.isInteger(value) 
 const isTimestamp = (value: unknown): value is string => isString(value) && !Number.isNaN(Date.parse(value));
 const MAX_RATE = 100;
 
-export const DELIVERY_METHODS: readonly DeliveryMethod[] = ["STANDARD", "SAME_DAY", "STORE_PICKUP"];
 export const DELIVERY_LABELS: Record<DeliveryMethod, string> = {
   STANDARD: "Standard delivery",
   SAME_DAY: "Same-day delivery",
@@ -47,8 +48,6 @@ const ORDER_STATUSES: readonly OrderStatus[] = ["PENDING", "PROCESSING", "SHIPPE
 const PAYMENT_STATUSES: readonly PaymentStatus[] = ["PENDING", "PAID", "FAILED", "REFUNDED", "PARTIALLY_REFUNDED"];
 const RESERVATION_STATUSES: readonly ReservationStatus[] = ["HELD", "COMMITTED", "RELEASED", "EXPIRED"];
 
-export const isDeliveryMethod = (value: unknown): value is DeliveryMethod =>
-  DELIVERY_METHODS.some((method) => method === value);
 export const isOrderStatus = (value: unknown): value is OrderStatus => ORDER_STATUSES.some((status) => status === value);
 export const isPaymentStatus = (value: unknown): value is PaymentStatus => PAYMENT_STATUSES.some((status) => status === value);
 export const isReservationStatus = (value: unknown): value is ReservationStatus =>

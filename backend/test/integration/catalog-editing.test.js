@@ -222,6 +222,50 @@ test('a refused save writes nothing: no field, variant, stock, stock log, image 
   assert.deepEqual(await productRows(product.id), before);
 });
 
+test('a compare-at price must be higher than the price as saved; refusals write nothing; a lower stored one still loads', async () => {
+  const COMPARE_AT_INVALID = { error: 'Compare-at price must be higher than the price, or left empty.', code: 'COMPARE_AT_PRICE_INVALID' };
+  const products = await prisma.product.count();
+  for (const compareAtPrice of [1000, 999.99]) {
+    const refused = await call('/products', { method: 'POST', body: {
+      name: 'Was-price tee', description: 'A tee for the compare-at checks', price: 1000, compareAtPrice, categoryId: category.id,
+    } });
+    assert.deepEqual(refused, { status: 400, data: COMPARE_AT_INVALID }, String(compareAtPrice));
+  }
+  assert.equal(await prisma.product.count(), products);
+  // The rule is about the product price: a variant priced above the compare-at price simply shows no "was" price.
+  const product = await createProduct('Was-price tee', {
+    compareAtPrice: 1000.01, variants: [{ sku: `EDIT-${++sequence}-M`, attributes: { size: 'M' }, price: 1500, stock: { quantity: 3 } }],
+  });
+  assert.deepEqual([product.price, product.comparePrice, product.variants[0].pricing.comparePrice], [1000, 1000.01, null]);
+
+  const edit = async (changes) => save('product', product.id, { ...changes, expectedUpdatedAt: (await open('product', product.id)).updatedAt });
+  // Refused: a compare-at price at or below the price, and an edit of the price alone up to or past the stored one.
+  for (const changes of [{ compareAtPrice: 1000 }, { compareAtPrice: 500 }, { price: 1200, compareAtPrice: 1200 }, { price: 1000.01 }, { price: 1500 }]) {
+    const before = await productRows(product.id);
+    assert.deepEqual(await edit(changes), { status: 400, data: COMPARE_AT_INVALID }, JSON.stringify(changes));
+    assert.deepEqual(await productRows(product.id), before, JSON.stringify(changes));
+  }
+  // Accepted: a price lowered below the stored compare-at price, a higher compare-at price, then clearing it with null.
+  const lowered = await edit({ price: 800 });
+  assert.deepEqual([lowered.status, lowered.data.price, lowered.data.comparePrice], [200, 800, 1000.01]);
+  const raised = await edit({ compareAtPrice: 1250 });
+  assert.deepEqual([raised.status, raised.data.price, raised.data.comparePrice], [200, 800, 1250]);
+  const cleared = await edit({ compareAtPrice: null, price: 5000 });
+  assert.deepEqual([cleared.status, cleared.data.price, cleared.data.comparePrice], [200, 5000, null]);
+
+  // Written before the rule: a compare-at price at or below the price still loads everywhere, and shows no "was" price.
+  await prisma.product.update({ where: { id: product.id }, data: { compareAtPrice: 4000 } });
+  await prisma.productVariant.updateMany({ where: { productId: product.id }, data: { price: null } });
+  const listed = (await call('/catalog', { token: null })).data.products.find((item) => item.id === product.id);
+  assert.deepEqual([listed?.comparePrice, listed?.variants[0].pricing.comparePrice], [4000, null]);
+  assert.equal((await call(`/products/${product.id}`, { token: null })).status, 200);
+  assert.equal((await open('product', product.id)).comparePrice, 4000);
+  // Saving it again needs a valid compare-at price, or none.
+  assert.deepEqual(await edit({ name: 'Was-price tee, renamed' }), { status: 400, data: COMPARE_AT_INVALID });
+  const fixed = await edit({ name: 'Was-price tee, renamed', compareAtPrice: null });
+  assert.deepEqual([fixed.status, fixed.data.name, fixed.data.comparePrice], [200, 'Was-price tee, renamed', null]);
+});
+
 test('staff records carry their token; shoppers\' records do not', async () => {
   const product = await createProduct('Token coverage tee');
   const created = await createCategory('Token coverage category', category.id);

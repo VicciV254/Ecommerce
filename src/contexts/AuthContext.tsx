@@ -40,6 +40,8 @@ interface AuthContextValue {
   updateAddress: (id: string, address: Partial<Address>) => Promise<void>;
   deleteAddress: (id: string) => Promise<void>;
   updatePromotionalEmails: (enabled: boolean) => Promise<void>;
+  /** Reloads the signed-in account from the server (`/auth/me`), for changes made outside this account's own forms. */
+  refreshUser: () => Promise<void>;
 }
 
 /** A new account is either signed in at once (already verified) or waits for its email to be verified. */
@@ -223,6 +225,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       updateAddress,
       deleteAddress,
       updatePromotionalEmails,
+      refreshUser,
     }),
     [
       user,
@@ -235,6 +238,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       updateAddress,
       deleteAddress,
       updatePromotionalEmails,
+      refreshUser,
     ]
   );
 

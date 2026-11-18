@@ -1,6 +1,6 @@
 import prisma from '../config/database.js';
 import { storefrontSchema, STOREFRONT_KEY } from '../utils/catalogValidation.js';
-import { checkoutPolicy } from '../config/checkoutPolicy.js';
+import { checkoutPolicy, offeredDelivery } from '../config/checkoutPolicy.js';
 import { effectiveReturnRule, policySnapshot, returnPolicy } from '../config/returnPolicy.js';
 import { unitPrice } from './pricingService.js';
 
@@ -176,6 +176,7 @@ export async function catalogSnapshot(db, admin = false) {
     products, categories: categoryDtos(context, products, admin),
     designers: designers.map(designerDto), discounts: discounts.map(discountDto),
     returnPolicy: (({ hash, ...terms }) => terms)(policySnapshot(returnPolicy())),
+    delivery: offeredDelivery(context.policy),
   };
 }
 

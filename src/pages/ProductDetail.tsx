@@ -19,7 +19,7 @@ import { Link, useEntryFocus } from "../router";
 import { useCatalog } from "../store/CatalogContext";
 import { CatalogFormatError, describeVariant, inCategory, isCatalogProduct, withProductMediaDefaults } from "../store/catalogModel";
 import { productReturnFact } from "../store/orderCopy";
-import { SHOPPING_FACTS } from "../store/shoppingFacts";
+import { deliveryFact } from "../store/shoppingFacts";
 import { useStore } from "../store/StoreContext";
 import { addedMessage, useProductSelection } from "../store/useProductSelection";
 import { isRecord } from "../utils/storage";
@@ -246,7 +246,7 @@ export function ProductView({ product, detail, retry, preview }: {
           </div>
           <section aria-labelledby={factsId} className="rounded-md border border-divider bg-surface-page p-4 text-sm text-navy-800">
             <h2 id={factsId} className="font-semibold text-navy-900">Delivery and returns</h2>
-            <p className="mt-2"><span className="font-semibold text-navy-900">Delivery: </span>{SHOPPING_FACTS.delivery}</p>
+            <p className="mt-2"><span className="font-semibold text-navy-900">Delivery: </span>{deliveryFact(catalog.delivery)}</p>
             {returnFact && (
               <p className="mt-2"><span className="font-semibold text-navy-900">Returns: </span>{returnFact.window} {returnFact.refunds}</p>
             )}

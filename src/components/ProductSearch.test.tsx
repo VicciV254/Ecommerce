@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildCategoryTree } from "../store/catalogModel";
 import type { CatalogValue } from "../store/CatalogContext";
-import { fixtureCategories, fixtureCategory, fixtureProduct, fixtureReturnPolicy, fixtureSnapshot } from "../test-support/catalogFixtures";
+import { fixtureCategories, fixtureCategory, fixtureProduct, fixtureDelivery, fixtureReturnPolicy, fixtureSnapshot } from "../test-support/catalogFixtures";
 import { ProductSearch, SUGGEST_DELAY_MS } from "./ProductSearch";
 
 const state = vi.hoisted(() => ({ catalog: null as CatalogValue | null }));
@@ -14,7 +14,7 @@ function catalog(status: CatalogValue["status"] = "ready"): CatalogValue {
     status, error: status === "error" ? "Catalog temporarily unavailable" : null, mode: "demo", products,
     productsById: new Map(products.map((product) => [product.id, product])),
     categories: buildCategoryTree(status === "ready" ? fixtureCategories : []), designers: [], discounts: [],
-    returnPolicy: status === "ready" ? fixtureReturnPolicy : null, reload: vi.fn(),
+    returnPolicy: status === "ready" ? fixtureReturnPolicy : null, delivery: status === "ready" ? fixtureDelivery : null, reload: vi.fn(),
   };
 }
 

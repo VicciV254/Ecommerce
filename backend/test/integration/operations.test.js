@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { after, before, beforeEach, mock, test } from 'node:test';
 import prisma from '../../src/config/database.js';
 import { generateToken } from '../../src/config/auth.js';
+import { DEFAULT_CHECKOUT_POLICY } from '../../src/config/checkoutPolicy.js';
 import { startServer } from '../../src/server.js';
 import { commitOrderReservation } from '../../src/services/inventoryService.js';
 import { MAX_NOTIFICATION_ATTEMPTS, deliverNotification, enqueueNotification, mailer } from '../../src/services/notificationService.js';
@@ -102,6 +103,26 @@ async function order(person, lines, { deliveryMethod = 'STANDARD', paid = true }
   return created.data;
 }
 
+/** The policy before Store pickup was turned off, under which the pickup orders still being fulfilled were placed. */
+const LEGACY_POLICY = {
+  ...DEFAULT_CHECKOUT_POLICY, version: 1, delivery: {
+    STANDARD: { fee: 200, freeAbove: null, counties: [] },
+    SAME_DAY: { fee: 500, freeAbove: null, counties: [] },
+    STORE_PICKUP: { fee: 200, freeAbove: null, counties: [] },
+  },
+};
+/** Places a pickup order as one placed before pickup was turned off; the environment is restored even on failure. */
+async function legacyPickupOrder(...args) {
+  const previous = process.env.CHECKOUT_POLICY_JSON;
+  process.env.CHECKOUT_POLICY_JSON = JSON.stringify(LEGACY_POLICY);
+  try {
+    return await order(...args);
+  } finally {
+    if (previous === undefined) delete process.env.CHECKOUT_POLICY_JSON;
+    else process.env.CHECKOUT_POLICY_JSON = previous;
+  }
+}
+
 const act = (orderId, action, expectedStatus, extra = {}, token = adminToken) =>
   call(`/orders/admin/${orderId}/actions`, { method: 'POST', token, body: { action, expectedStatus, ...extra } });
 const stockOf = (product) => prisma.stock.findUnique({ where: { variantId: product.variants[0].id } });
@@ -137,10 +158,10 @@ async function returnedRefund(person, placed, product, { reason = 'CHANGED_MIND'
 
 test('staff confirm each fulfilment step and stale, invalid or unauthorized actions change nothing', async () => {
   const person = await customer();
-  const unpaid = await order(person, [[catalog.mug, 1]], { deliveryMethod: 'STORE_PICKUP', paid: false });
+  const unpaid = await legacyPickupOrder(person, [[catalog.mug, 1]], { deliveryMethod: 'STORE_PICKUP', paid: false });
   assert.equal((await act(unpaid.id, 'START_PROCESSING', 'PENDING')).data.code, 'ACTION_NOT_ALLOWED');
 
-  const pickup = await order(person, [[catalog.mug, 1]], { deliveryMethod: 'STORE_PICKUP' });
+  const pickup = await legacyPickupOrder(person, [[catalog.mug, 1]], { deliveryMethod: 'STORE_PICKUP' });
   assert.equal((await act(pickup.id, 'START_PROCESSING', 'PENDING', {}, viewerToken)).status, 403);
   assert.equal((await act(pickup.id, 'START_PROCESSING', 'PROCESSING')).data.code, 'ORDER_CHANGED');
   const started = await act(pickup.id, 'START_PROCESSING', 'PENDING');

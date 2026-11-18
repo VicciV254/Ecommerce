@@ -291,6 +291,24 @@ test('escapeHtml escapes every HTML-significant character', () => {
   assert.equal(escapeHtml(`<a href="x">Tom & Jerry's</a>`), '&lt;a href=&quot;x&quot;&gt;Tom &amp; Jerry&#39;s&lt;/a&gt;');
 });
 
+test('a footer link follows the escaped footer note as an escaped anchor, and an address other than http(s) fails', (t) => {
+  useMailEnv(t, {});
+  const href = `https://shop.example.test/#/unsubscribe?token=a1b2&next="><script>alert('x')</script>`;
+  const html = brandedEmail({ title: 'Offers', footerNote: 'Footer <b>note</b>', footerLink: { href, label: 'Unsubscribe <now> & "forever"' } });
+  const anchors = [...html.matchAll(/<a href="([^"]*)"[^>]*>([^<]*)<\/a>/g)];
+  assert.equal(anchors.length, 1);
+  const [, attribute, label] = anchors[0];
+  const unescape = (value) => value.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  assert.equal(unescape(attribute), href);
+  assert.equal(label, 'Unsubscribe &lt;now&gt; &amp; &quot;forever&quot;');
+  assert.doesNotMatch(html, /<script|<b>|<now>/);
+  assert.ok(html.indexOf('Footer &lt;b&gt;note&lt;/b&gt;') < html.indexOf('<a href='), 'the link comes after the note');
+  for (const bad of ['javascript:alert(1)', 'shop.example.test/#/unsubscribe', '', 'https://shop.example.test/ x']) {
+    assert.throws(() => brandedEmail({ title: 'Offers', footerLink: { href: bad, label: 'Unsubscribe' } }), { code: 'EMAIL_LINK_INVALID' }, bad);
+  }
+  assert.doesNotMatch(brandedEmail({ title: 'Offers' }), /<a /);
+});
+
 test('verification and OTP emails are skipped without mail settings and use Apex Cart copy when configured', async (t) => {
   useMailEnv(t, {});
   const sent = t.mock.fn(async () => ({ messageId: '<auth@example.test>' }));

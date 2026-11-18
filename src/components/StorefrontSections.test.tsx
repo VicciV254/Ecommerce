@@ -7,7 +7,7 @@ import {
   campaignMedia,
   fixtureCategories,
   fixtureImage,
-  fixtureReturnPolicy,
+  fixtureDelivery, fixtureReturnPolicy,
   fixtureStorefrontSettings,
   linenShirt,
   poloShirt,
@@ -29,7 +29,7 @@ function catalogWith(products: CatalogProduct[], status: CatalogValue["status"] 
     categories: buildCategoryTree(fixtureCategories),
     designers: [],
     discounts: [],
-    returnPolicy: status === "ready" ? fixtureReturnPolicy : null,
+    returnPolicy: status === "ready" ? fixtureReturnPolicy : null, delivery: status === "ready" ? fixtureDelivery : null,
     reload: vi.fn(),
   };
 }

@@ -3,10 +3,16 @@ import prisma from '../config/database.js';
 import { generateToken, generateRefreshToken, isCustomerToken, verifyRefreshToken } from '../config/auth.js';
 import { registerSchema, loginSchema, forgotPasswordSchema, resetPasswordSchema, changePasswordSchema, addressSchema } from '../utils/validators.js';
 import { sendOtpVerificationEmail } from '../services/mailService.js';
+import { httpError } from '../services/catalogService.js';
+import {
+  activateSubscription, canonicalEmail, lockAddress, sanitizedFailure, syncPromotionalPreference,
+} from '../services/subscriptionService.js';
 import { addressSummarySelect, userAccessError, userSessionSelect } from '../utils/account.js';
 
 const OTP_EXPIRY_MINUTES = Number(process.env.OTP_EXPIRY_MINUTES || 10);
 const OTP_MAX_ATTEMPTS = Number(process.env.OTP_MAX_ATTEMPTS || 5);
+/** What sign-up and profile saves answer for an unexpected failure, as before; the database's own error never leaves. */
+const internalError = () => httpError(500, 'Internal server error');
 
 function generateOtp() {
   return Math.floor(100000 + Math.random() * 900000).toString();
@@ -52,29 +58,39 @@ export const register = async (req, res, next) => {
     const hashedPassword = await bcrypt.hash(validatedData.password, 10);
     const emailVerificationEnabled = process.env.ENABLE_EMAIL_VERIFICATION === 'true';
     
-    // Create user
-    const user = await prisma.user.create({
-      data: {
-        email: validatedData.email,
-        password: hashedPassword,
-        firstName: validatedData.firstName,
-        lastName: validatedData.lastName,
-        phone: validatedData.phone,
-        emailVerified: emailVerificationEnabled ? false : true,
-        emailVerifyToken: null,
-        emailVerifyExpires: null,
-      },
-      select: {
-        id: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        phone: true,
-        profileImage: true,
-        emailVerified: true,
-        createdAt: true,
-        addresses: { select: addressSummarySelect },
-      },
+    // Create the account and record its sign-up consent in one transaction; the account then shows the subscription list.
+    const user = await prisma.$transaction(async (db) => {
+      const email = canonicalEmail(validatedData.email);
+      await lockAddress(db, email);
+      const created = await db.user.create({
+        data: {
+          email: validatedData.email,
+          password: hashedPassword,
+          firstName: validatedData.firstName,
+          lastName: validatedData.lastName,
+          phone: validatedData.phone,
+          emailVerified: emailVerificationEnabled ? false : true,
+          emailVerifyToken: null,
+          emailVerifyExpires: null,
+        },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+          profileImage: true,
+          emailVerified: true,
+          createdAt: true,
+          addresses: { select: addressSummarySelect },
+        },
+      });
+      if (validatedData.promotionalEmails) await activateSubscription(db, email);
+      return { ...created, promotionalEmails: await syncPromotionalPreference(db, email) };
+    }).catch((error) => {
+      // Another sign-up with this address won the race; answer as the check above does.
+      if (error.code === 'P2002') throw httpError(400, 'Email already registered');
+      throw sanitizedFailure(error, internalError);
     });
 
     let verificationEmailSent = false;
@@ -104,7 +120,7 @@ export const login = async (req, res, next) => {
     // Find user
     const user = await prisma.user.findUnique({
       where: { email: validatedData.email },
-      select: { ...userSessionSelect, password: true, addresses: { select: addressSummarySelect } },
+      select: { ...userSessionSelect, password: true, promotionalEmails: true, addresses: { select: addressSummarySelect } },
     });
     
     if (!user) {
@@ -145,6 +161,7 @@ export const login = async (req, res, next) => {
         phone: user.phone,
         profileImage: user.profileImage,
         emailVerified,
+        promotionalEmails: user.promotionalEmails,
         addresses: user.addresses,
       },
       token,
@@ -167,6 +184,7 @@ export const getMe = async (req, res, next) => {
         phone: true,
         profileImage: true,
         emailVerified: true,
+        promotionalEmails: true,
         createdAt: true,
         updatedAt: true,
         addresses: { select: addressSummarySelect },
@@ -427,47 +445,37 @@ export const setDefaultAddress = async (req, res, next) => {
 export const updateProfile = async (req, res, next) => {
   try {
     const { firstName, lastName, phone, profileImage, promotionalEmails } = req.body;
-    
-    const user = await prisma.user.update({
-      where: { id: req.user.id },
-      data: {
-        firstName,
-        lastName,
-        phone,
-        profileImage,
-        ...(promotionalEmails !== undefined && { promotionalEmails }),
-      },
-      select: {
-        id: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        phone: true,
-        profileImage: true,
-        emailVerified: true,
-        promotionalEmails: true,
-        updatedAt: true,
-      },
-    });
-    
-    // Handle subscription sync
-    if (promotionalEmails !== undefined) {
-      if (promotionalEmails) {
-        // Add to subscription if enabled
-        await prisma.subscription.upsert({
-          where: { email: user.email },
-          update: { isActive: true },
-          create: { email: user.email, isActive: true },
-        });
-      } else {
-        // Deactivate subscription if disabled
-        await prisma.subscription.updateMany({
-          where: { email: user.email },
-          data: { isActive: false },
-        });
-      }
+    if (promotionalEmails !== undefined && typeof promotionalEmails !== 'boolean') {
+      return res.status(400).json({ error: 'promotionalEmails must be true or false' });
     }
-    
+
+    // The preference follows the subscription list: subscribe or unsubscribe the address, then show what is sent. The
+    // subscription is written before any account, the order every preference writer uses, so two writers never deadlock.
+    const user = await prisma.$transaction(async (db) => {
+      if (promotionalEmails !== undefined) {
+        const email = canonicalEmail(req.user.email);
+        await lockAddress(db, email);
+        if (promotionalEmails) await activateSubscription(db, email);
+        else await db.subscription.updateMany({ where: { email }, data: { isActive: false } });
+        await syncPromotionalPreference(db, email);
+      }
+      return db.user.update({
+        where: { id: req.user.id },
+        data: { firstName, lastName, phone, profileImage },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+          profileImage: true,
+          emailVerified: true,
+          promotionalEmails: true,
+          updatedAt: true,
+        },
+      });
+    }).catch((error) => { throw sanitizedFailure(error, internalError); });
+
     res.json(user);
   } catch (error) {
     next(error);

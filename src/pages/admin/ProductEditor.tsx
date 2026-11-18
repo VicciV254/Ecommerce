@@ -43,6 +43,11 @@ const MAX_SPEC_VALUE = 500;
 const SECTION_TOP_GAP_PX = 20;
 /** Refusals that reloading the product answers: someone else saved it, or another save raced this one. */
 const RELOAD_CODES = new Set(["PRODUCT_CHANGED", "CATALOG_CHANGED"]);
+/** The catalog API's rule and wording: a "was" price is shown only above the price. */
+const COMPARE_AT_INVALID = "Compare-at price must be higher than the price, or left empty.";
+const CENTS_PER_SHILLING = 100;
+/** A typed amount in whole cents, so prices compare as money rather than as floating-point numbers. */
+const cents = (value: string) => Math.round(Number(value) * CENTS_PER_SHILLING);
 
 type VariantRow = {
   rowKey: string;
@@ -132,11 +137,14 @@ function ProductForm({ product, canWrite, onClose, onSaved, onDelete, onReload, 
   /** The version this editor opened. A catalog reload behind it must not refresh it, or a save could overwrite newer edits. */
   const [loadedVersion] = useState(product?.updatedAt ?? "");
   const [changedElsewhere, setChangedElsewhere] = useState(false);
+  /** The server refused the compare-at price as typed; any change to either price lets the form's own check decide. */
+  const [compareAtRefused, setCompareAtRefused] = useState(false);
   const [reloading, setReloading] = useState(false);
   const [creating, setCreating] = useState<"category" | "designer" | null>(null);
   const body = useRef<HTMLDivElement>(null);
   const variantsHeading = useRef<HTMLHeadingElement>(null);
   const visibilityHintId = useId();
+  const compareAtErrorId = useId();
   // Unsaved when any value differs from what was loaded, an image changed, an upload is under way or an option name is typed.
   const formState = JSON.stringify({
     name, description, price, compareAt, categoryId, designerId, tags, collection, isActive, isFeatured, optionKeys, newOption,
@@ -210,6 +218,9 @@ function ProductForm({ product, canWrite, onClose, onSaved, onDelete, onReload, 
   if (description.trim().length < MIN_DESCRIPTION) problems.push(`Description needs at least ${MIN_DESCRIPTION} characters.`);
   if (!(Number(price) > 0)) problems.push("Enter a base price above zero.");
   if (compareAt.trim() && !(Number(compareAt) > 0)) problems.push("Compare-at price must be above zero, or left empty.");
+  const compareAtError = compareAtRefused || (compareAt.trim() && Number(compareAt) > 0 && Number(price) > 0 && cents(compareAt) <= cents(price))
+    ? COMPARE_AT_INVALID : null;
+  if (compareAtError) problems.push(compareAtError);
   if (!category) problems.push("Choose a category.");
   if (new Set(specs.map((spec) => spec.name.trim()).filter(Boolean)).size !== specs.filter((spec) => spec.name.trim()).length) {
     problems.push("Specification names must be unique.");
@@ -308,6 +319,7 @@ function ProductForm({ product, canWrite, onClose, onSaved, onDelete, onReload, 
       onSaved(product ? `Saved "${fields.name}"` : `Created "${fields.name}"`);
     } catch (reason) {
       setError(describeApiError(reason, "The product could not be saved."));
+      setCompareAtRefused(apiErrorCode(reason) === "COMPARE_AT_PRICE_INVALID");
       // A new product has no older version to reload.
       setChangedElsewhere(Boolean(product) && RELOAD_CODES.has(apiErrorCode(reason) ?? ""));
     } finally {
@@ -374,8 +386,23 @@ function ProductForm({ product, canWrite, onClose, onSaved, onDelete, onReload, 
               <Field label="Name">{(id) => <input id={id} value={name} onChange={(event) => setName(event.target.value)} className={inputClass} />}</Field>
               <Field label="Description">{(id) => <textarea id={id} rows={5} value={description} onChange={(event) => setDescription(event.target.value)} className={inputClass} />}</Field>
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Price (KES)">{(id) => <input id={id} type="number" min={0.01} step={0.01} value={price} onChange={(event) => setPrice(event.target.value)} className={inputClass} />}</Field>
-                <Field label="Compare-at price (optional)">{(id) => <input id={id} type="number" min={0.01} step={0.01} value={compareAt} onChange={(event) => setCompareAt(event.target.value)} className={inputClass} />}</Field>
+                <Field label="Price (KES)">
+                  {(id) => (
+                    <input id={id} type="number" min={0.01} step={0.01} value={price} className={inputClass}
+                      onChange={(event) => { setPrice(event.target.value); setCompareAtRefused(false); }} />
+                  )}
+                </Field>
+                <Field label="Compare-at price (optional)">
+                  {(id) => (
+                    <>
+                      <input id={id} type="number" min={0.01} step={0.01} value={compareAt}
+                        onChange={(event) => { setCompareAt(event.target.value); setCompareAtRefused(false); }}
+                        aria-invalid={compareAtError ? true : undefined} aria-describedby={compareAtError ? compareAtErrorId : undefined}
+                        className={`${inputClass} aria-[invalid=true]:border-error`} />
+                      {compareAtError && <p id={compareAtErrorId} className="mt-1 text-xs font-semibold text-error [overflow-wrap:break-word]">{compareAtError}</p>}
+                    </>
+                  )}
+                </Field>
               </div>
               <Field label="Category">
                 {(id) => (

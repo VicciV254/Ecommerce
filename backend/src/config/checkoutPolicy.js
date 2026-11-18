@@ -9,6 +9,14 @@ const deliveryRule = z.object({
   counties: z.array(z.string().trim().min(1).max(100)).max(100),
 }).strict();
 
+/** Every delivery method an order can have, in the order shoppers see the offered ones. */
+export const DELIVERY_METHODS = ['STANDARD', 'SAME_DAY', 'STORE_PICKUP'];
+export const DELIVERY_METHOD_LABELS = Object.freeze({
+  STANDARD: 'Standard delivery',
+  SAME_DAY: 'Same-day delivery',
+  STORE_PICKUP: 'Store pickup',
+});
+
 const policySchema = z.object({
   version: z.number().int().positive(),
   currency: z.literal('KES'),
@@ -16,20 +24,18 @@ const policySchema = z.object({
   discountStep: z.union([z.literal(0.01), z.literal(1), z.literal(10)]),
   quoteSeconds: z.number().int().min(30).max(1800),
   reservationSeconds: z.number().int().min(60).max(3600),
-  delivery: z.object({
-    STANDARD: deliveryRule,
-    SAME_DAY: deliveryRule,
-    STORE_PICKUP: deliveryRule,
-  }).strict(),
+  // A method left out is not offered for new orders; orders that already have it keep it.
+  delivery: z.object(Object.fromEntries(DELIVERY_METHODS.map((method) => [method, deliveryRule.optional()]))).strict()
+    .refine((delivery) => Object.keys(delivery).length > 0, 'Offer at least one delivery method'),
 }).strict();
 
+/** Store pickup is off: Apex Cart sells online only (decided 2026-11-18). */
 export const DEFAULT_CHECKOUT_POLICY = {
-  version: 1, currency: 'KES', vatRate: 16, discountStep: 10,
+  version: 2, currency: 'KES', vatRate: 16, discountStep: 10,
   quoteSeconds: 600, reservationSeconds: 900,
   delivery: {
     STANDARD: { fee: 200, freeAbove: null, counties: [] },
-    SAME_DAY: { fee: 500, freeAbove: null, counties: [] },
-    STORE_PICKUP: { fee: 200, freeAbove: null, counties: [] },
+    SAME_DAY: { fee: 500, freeAbove: null, counties: ['Nairobi'] },
   },
 };
 
@@ -48,6 +54,12 @@ export function checkoutPolicy(env = process.env) {
   const value = parsed.data;
   return { ...value, hash: createHash('sha256').update(JSON.stringify(value)).digest('hex') };
 }
+
+/** The offered methods as shoppers may know them: fee, free-delivery threshold and covered counties (none = all Kenya). */
+export const offeredDelivery = (policy) => DELIVERY_METHODS.flatMap((method) => {
+  const rule = policy.delivery[method];
+  return rule ? [{ method, fee: rule.fee, freeAbove: rule.freeAbove, counties: rule.counties }] : [];
+});
 
 function flag(name) {
   const value = process.env[name] ?? 'false';

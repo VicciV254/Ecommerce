@@ -1,6 +1,7 @@
 import type {
   AdminCatalogSnapshot,
   CatalogCategory,
+  CatalogDelivery,
   CatalogDesigner,
   CatalogDiscount,
   CatalogProduct,
@@ -10,7 +11,7 @@ import type {
   MediaAsset,
   VariantPricing,
 } from "../api/catalog";
-import type { DeliveryFeeRefund, ReturnRule } from "../api/orders";
+import type { DeliveryFeeRefund, DeliveryMethod, ReturnRule } from "../api/orders";
 import { isRecord } from "../utils/storage";
 
 /* ------------------------------------------------------------------ */
@@ -59,6 +60,23 @@ function isCatalogReturnPolicy(value: unknown): value is CatalogReturnPolicy {
   return isRecord(value) && Number.isInteger(value.version) && Number(value.version) > 0 &&
     isReturnWindowDays(value.windowDays) && isDeliveryFeeRefund(value.deliveryFeeRefund) &&
     typeof value.partialReturns === "boolean" && value.refundRounding === "UP_TO_WHOLE_KES";
+}
+
+/** Every delivery method an order can have, in the order shoppers see them; the catalog names those new orders can use. */
+export const DELIVERY_METHODS: readonly DeliveryMethod[] = ["STANDARD", "SAME_DAY", "STORE_PICKUP"];
+export const isDeliveryMethod = (value: unknown): value is DeliveryMethod =>
+  DELIVERY_METHODS.some((method) => method === value);
+
+function isCatalogDelivery(value: unknown): value is CatalogDelivery {
+  return isRecord(value) && isDeliveryMethod(value.method) && isMoney(value.fee) &&
+    (value.freeAbove === null || isMoney(value.freeAbove)) &&
+    Array.isArray(value.counties) && value.counties.every((county) => isString(county) && county.trim() !== "");
+}
+
+/** The offered delivery methods: at least one, each named once. */
+function isDeliveryList(value: unknown): value is CatalogDelivery[] {
+  return Array.isArray(value) && value.length > 0 && value.every(isCatalogDelivery) &&
+    new Set(value.map((option: CatalogDelivery) => option.method)).size === value.length;
 }
 
 /** Media fields added after the first catalog revision; payloads from before them omit them. */
@@ -141,13 +159,14 @@ export function parseCatalogSnapshot(data: unknown, modes: readonly CatalogSnaps
   const mode = data.mode;
   if (mode !== "live" && mode !== "demo" && mode !== "admin") throw new CatalogFormatError("unknown mode");
   if (!modes.includes(mode)) throw new CatalogFormatError(`unexpected ${mode} mode`);
-  const { products, categories, designers, discounts, returnPolicy } = data;
+  const { products, categories, designers, discounts, returnPolicy, delivery } = data;
   if (!Array.isArray(products) || !products.every(isCatalogProduct)) throw new CatalogFormatError("products");
   if (!Array.isArray(categories) || !categories.every(isCategory)) throw new CatalogFormatError("categories");
   if (!Array.isArray(designers) || !designers.every(isDesigner)) throw new CatalogFormatError("designers");
   if (!Array.isArray(discounts) || !discounts.every(isDiscount)) throw new CatalogFormatError("discounts");
   if (!isCatalogReturnPolicy(returnPolicy)) throw new CatalogFormatError("return policy");
-  return { version: 2, mode, products: products.map(withProductMediaDefaults), categories, designers, discounts, returnPolicy };
+  if (!isDeliveryList(delivery)) throw new CatalogFormatError("delivery");
+  return { version: 2, mode, products: products.map(withProductMediaDefaults), categories, designers, discounts, returnPolicy, delivery };
 }
 
 /** A version as the API issues it (`Date#toISOString()`); the server compares the one sent back exactly. */

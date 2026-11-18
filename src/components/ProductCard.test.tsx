@@ -4,7 +4,7 @@ import type { CatalogProduct } from "../api/catalog";
 import { buildCategoryTree } from "../store/catalogModel";
 import type { CatalogValue } from "../store/CatalogContext";
 import { StoreProvider, useStore } from "../store/StoreContext";
-import { fixtureCategories, fixtureReturnPolicy, linenShirt, poloShirt } from "../test-support/catalogFixtures";
+import { fixtureCategories, fixtureDelivery, fixtureReturnPolicy, linenShirt, poloShirt } from "../test-support/catalogFixtures";
 import { MiniCartProvider } from "./MiniCart";
 import { ProductCard } from "./ProductCard";
 
@@ -33,7 +33,7 @@ beforeEach(() => {
   const products = [linenShirt, poloShirt];
   mocks.catalog = {
     status: "ready", error: null, mode: "live", products, productsById: new Map(products.map((product) => [product.id, product])),
-    categories: buildCategoryTree(fixtureCategories), designers: [], discounts: [], returnPolicy: fixtureReturnPolicy, reload: vi.fn(),
+    categories: buildCategoryTree(fixtureCategories), designers: [], discounts: [], returnPolicy: fixtureReturnPolicy, delivery: fixtureDelivery, reload: vi.fn(),
   };
 });
 

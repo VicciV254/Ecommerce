@@ -182,11 +182,14 @@ model PasswordReset {
 }
 
 model Subscription {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id               String   @id @default(cuid())
+  /// Trimmed and lowercase: one subscription per address (a CHECK constraint from the 20261118120000 migration).
+  email            String   @unique
+  isActive         Boolean  @default(true)
+  /// The capability in this subscriber's unsubscribe link: never logged, returned by an API or shown on screen.
+  unsubscribeToken String   @unique @default(uuid())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 }
 
 // ========== ADMIN MODELS ==========

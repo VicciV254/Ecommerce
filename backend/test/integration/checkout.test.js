@@ -314,7 +314,7 @@ test('changed prices, addresses, delivery policy and expired quotes require a ne
     const quoted = await quote(f);
     if (change === 'price') await prisma.product.update({ where: { id: f.product.id }, data: { price: 1200 } });
     if (change === 'address') await prisma.address.update({ where: { id: f.user.addresses[0].id }, data: { county: 'Nairobi' } });
-    if (change === 'policy') process.env.CHECKOUT_POLICY_JSON = JSON.stringify({ ...DEFAULT_CHECKOUT_POLICY, version: 2 });
+    if (change === 'policy') process.env.CHECKOUT_POLICY_JSON = JSON.stringify({ ...DEFAULT_CHECKOUT_POLICY, version: DEFAULT_CHECKOUT_POLICY.version + 1 });
     if (change === 'expiry') await prisma.checkoutQuote.update({ where: { id: quoted.data.id }, data: { expiresAt: new Date(Date.now() - 1000) } });
     const result = await place(quoted.data.id, f.user);
     assert.equal(result.status, 409, change);
@@ -323,6 +323,33 @@ test('changed prices, addresses, delivery policy and expired quotes require a ne
     assert.equal(await prisma.order.count({ where: { quoteId: quoted.data.id } }), 0);
     delete process.env.CHECKOUT_POLICY_JSON;
   }
+});
+
+test('Same-day is quoted for Nairobi however the county is written, and Store pickup only when the policy offers it', async (t) => {
+  t.after(() => { delete process.env.CHECKOUT_POLICY_JSON; });
+  const f = await fixture();
+  const addressId = f.user.addresses[0].id;
+  const sameDay = () => quote(f, f.user, 1, { deliveryMethod: 'SAME_DAY' });
+  for (const county of ['Nairobi', 'nairobi', ' Nairobi County ', 'Nairobi City County', 'NAIROBI CITY', 'Nairobi-County']) {
+    await prisma.address.update({ where: { id: addressId }, data: { county } });
+    const quoted = await sameDay();
+    assert.equal(quoted.status, 201, `${county}: ${JSON.stringify(quoted.data)}`);
+    assert.deepEqual([quoted.data.deliveryMethod, quoted.data.shippingCost], ['SAME_DAY', 500], county);
+  }
+  await prisma.address.update({ where: { id: addressId }, data: { county: 'Mombasa' } });
+  const quotes = await prisma.checkoutQuote.count();
+  assert.deepEqual(await sameDay(), { status: 400, data: {
+    error: 'Same-day delivery is available only in Nairobi. Choose another delivery method or address.', code: 'DELIVERY_UNAVAILABLE',
+  } });
+  const pickup = () => quote(f, f.user, 1, { deliveryMethod: 'STORE_PICKUP' });
+  assert.deepEqual(await pickup(), { status: 400, data: { error: "Store pickup isn't offered. Choose another delivery method.", code: 'DELIVERY_UNAVAILABLE' } });
+  assert.equal(await prisma.checkoutQuote.count(), quotes);
+  process.env.CHECKOUT_POLICY_JSON = JSON.stringify({ ...DEFAULT_CHECKOUT_POLICY, delivery: {
+    ...DEFAULT_CHECKOUT_POLICY.delivery, STORE_PICKUP: { fee: 150, freeAbove: null, counties: [] },
+  } });
+  const offered = await pickup();
+  assert.equal(offered.status, 201, JSON.stringify(offered.data));
+  assert.deepEqual([offered.data.deliveryMethod, offered.data.shippingCost], ['STORE_PICKUP', 150]);
 });
 
 test('coupons remain private to staff, apply once, and expiration cannot be bypassed with an old quote', async () => {

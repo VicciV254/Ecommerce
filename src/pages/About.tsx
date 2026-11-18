@@ -2,7 +2,7 @@ import { Breadcrumb, Container } from "../components/ui";
 import { Link } from "../router";
 import { useCatalog } from "../store/CatalogContext";
 import { useStorefront } from "../store/StorefrontContext";
-import { SHOPPING_FACTS, returnsFact } from "../store/shoppingFacts";
+import { SHOPPING_FACTS, deliveryFact, returnsFact } from "../store/shoppingFacts";
 
 const primaryAction =
   "inline-flex min-h-[44px] items-center justify-center rounded-sm bg-navy-900 px-6 text-xs font-bold uppercase tracking-[0.12em] text-white transition-colors duration-(--motion-feedback) hover:bg-gold-500 hover:text-navy-900";
@@ -11,10 +11,10 @@ const secondaryAction =
 
 export default function About() {
   const { brandName } = useStorefront();
-  const { returnPolicy } = useCatalog();
+  const { returnPolicy, delivery } = useCatalog();
   const facts = [
     { title: "Prices and VAT", text: SHOPPING_FACTS.vat },
-    { title: "Delivery or pickup", text: SHOPPING_FACTS.delivery },
+    { title: "Delivery", text: deliveryFact(delivery) },
     { title: "Payment", text: SHOPPING_FACTS.payment },
     { title: "Returns", text: returnsFact(returnPolicy?.windowDays ?? null) },
   ];
