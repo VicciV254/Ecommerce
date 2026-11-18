@@ -241,7 +241,8 @@ describe("payment step from the address", () => {
     mocks.orders.getOrder.mockRejectedValue(apiError(404, { error: "Order not found", code: "ORDER_NOT_FOUND" }));
     render(page());
     expect(await screen.findByRole("heading", { level: 2, name: "Review and reserve" }, WAIT)).toBeTruthy();
-    expect(screen.getByText("That order isn't in your account")).toBeTruthy();
+    // The notice and the address change come from an effect after the step renders, so wait for them.
+    expect(await screen.findByText("That order isn't in your account", undefined, WAIT)).toBeTruthy();
     expect(window.location.hash).toBe("#/checkout");
     expect(screen.queryByRole("heading", { name: "Order reserved" })).toBeNull();
   });
