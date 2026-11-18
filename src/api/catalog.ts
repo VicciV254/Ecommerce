@@ -92,6 +92,8 @@ export type CatalogCategory = {
   image: string | null;
   attributeKeys: string[];
   isActive: boolean;
+  /** The category's own return rule; null inherits the nearest ancestor's (STANDARD at the top). */
+  returnRule: ReturnRule | null;
   /** Visible product count including every descendant category. */
   productCount: number;
 };

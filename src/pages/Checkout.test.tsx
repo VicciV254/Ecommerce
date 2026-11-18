@@ -492,6 +492,50 @@ describe("cart quote", () => {
     fireEvent.click(screen.getByRole("button", { name: "Remove" }));
     expect(await screen.findByText("KES 1,244", undefined, WAIT)).toBeTruthy();
   });
+
+  describe("sample products refused by the server", () => {
+    const DEMONSTRATION = "Apex Cart is a demonstration store: its products are samples and can't be ordered. Nothing has been reserved or charged.";
+    const REMOVE = "Demo listings are samples and cannot be ordered. Remove them from your cart to continue.";
+    const BLOCKED = "Sample products can't be ordered.";
+    const description = (element: HTMLElement) => (element.getAttribute("aria-describedby") ?? "").split(/\s+/)
+      .map((id) => document.getElementById(id)?.textContent ?? "").join(" ");
+    // The action stays blocked for a reason that asking again can't change, not "until the total is calculated".
+    const expectBlockedBySamples = (action: string) => {
+      expect(description(screen.getByRole("button", { name: action }))).toContain(BLOCKED);
+      expect(screen.queryByText(/must be calculated/)).toBeNull();
+    };
+    beforeEach(() => {
+      seed("customer-a", [linen]);
+      // The server's own refusal (checkoutService.js).
+      mocks.orders.createQuote.mockRejectedValue(apiError(409, {
+        error: "Demo products cannot create commercial orders; use a separate explicitly enabled local demo flow.",
+        code: "DEMO_ORDER_UNAVAILABLE",
+      }));
+    });
+
+    for (const [name, page, action] of [
+      ["the cart", <Cart key="cart" />, "Continue to checkout"],
+      ["checkout", <Checkout key="checkout" />, "Reserve order"],
+    ] as const) {
+      it(`says ${name} belongs to a demonstration store when the catalog is the demonstration one`, async () => {
+        mocks.catalog = { ...mocks.catalog!, mode: "demo" };
+        render(tree(page));
+        expect(await screen.findByText(DEMONSTRATION, undefined, WAIT)).toBeTruthy();
+        expect(screen.queryByText(REMOVE)).toBeNull();
+        // Asking again can't change the answer, so no retry is offered.
+        expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+        expectBlockedBySamples(action);
+      });
+    }
+
+    it("keeps asking for the samples to be removed when the catalog is live", async () => {
+      render(tree(<Checkout />));
+      expect(await screen.findByText(REMOVE, undefined, WAIT)).toBeTruthy();
+      expect(screen.queryByText(DEMONSTRATION)).toBeNull();
+      expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+      expectBlockedBySamples("Reserve order");
+    });
+  });
 });
 
 describe("delivery choices", () => {

@@ -135,7 +135,8 @@ export function isCatalogProduct(value: unknown): value is CatalogProduct {
 function isCategory(value: unknown): value is CatalogCategory {
   return isRecord(value) && isString(value.id) && isString(value.name) && isString(value.slug) &&
     isNullableString(value.parentId) && isNumber(value.order) && isNullableString(value.image) &&
-    isStringArray(value.attributeKeys) && typeof value.isActive === "boolean" && isNumber(value.productCount);
+    isStringArray(value.attributeKeys) && typeof value.isActive === "boolean" &&
+    (value.returnRule === null || isReturnRule(value.returnRule)) && isNumber(value.productCount);
 }
 
 function isDesigner(value: unknown): value is CatalogDesigner {

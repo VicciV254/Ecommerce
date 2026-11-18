@@ -14,7 +14,7 @@ import { useAuth, type User } from "../contexts/AuthContext";
 import { Link } from "../router";
 import { useCatalog } from "../store/CatalogContext";
 import { cartEstimate, cartLineViews } from "../store/cartModel";
-import { quoteRequestFor, reviewCart } from "../store/checkoutModel";
+import { isFinalQuoteFailure, quoteRequestFor, reviewCart, SAMPLES_BLOCKED } from "../store/checkoutModel";
 import { CHECKOUT_REGISTER, CHECKOUT_SIGN_IN } from "../store/returnTo";
 import { useStore } from "../store/StoreContext";
 import { useCheckoutChoices } from "../store/useCheckoutChoices";
@@ -138,7 +138,7 @@ function CartContent({ user }: { user: User }) {
   const quotable = submission.ownerReady && catalog.status === "ready" && state.cart.length > 0 && blocker === null;
   const quote = useCheckoutQuote(quotable && choices.address
     ? quoteRequestFor(state.cart, { addressId: choices.address.id, deliveryMethod: choices.deliveryMethod, couponCode: choices.couponCode })
-    : null);
+    : null, catalog.mode);
 
   const notices = (
     <>
@@ -163,6 +163,7 @@ function CartContent({ user }: { user: User }) {
   let unavailableReason = "Your total must be calculated before checkout.";
   if (current && !current.reservationsEnabled) unavailableReason = "Ordering is not available yet, so no order can be placed. Your cart is saved.";
   else if (current && quote.expired) unavailableReason = "Refresh prices to continue.";
+  else if (isFinalQuoteFailure(quote.error?.code)) unavailableReason = SAMPLES_BLOCKED;
   const choicesDisabled = settling;
 
   return (

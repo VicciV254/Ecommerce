@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   CheckoutFormatError,
   classifyOrderFailure,
+  describeQuoteFailure,
   isOrderIntent,
   newIdempotencyKey,
   normalizeCouponCode,
@@ -159,5 +160,32 @@ describe("order submission safety", () => {
     expect(isOrderIntent({ ...valid, idempotencyKey: "short" })).toBe(false);
     expect(isOrderIntent({ ...valid, total: 12.345 })).toBe(false);
     expect(isOrderIntent({ ...valid, quoteId: "" })).toBe(false);
+  });
+});
+
+describe("quote failure explanations", () => {
+  const sampleRefusal = apiError(409, {
+    error: "Demo products cannot create commercial orders; use a separate explicitly enabled local demo flow.",
+    code: "DEMO_ORDER_UNAVAILABLE",
+  });
+
+  it("explains a sample refusal in a demonstration catalog as the demonstration, with nothing reserved or charged", () => {
+    expect(describeQuoteFailure(sampleRefusal, "demo")).toEqual({
+      code: "DEMO_ORDER_UNAVAILABLE",
+      message: "Apex Cart is a demonstration store: its products are samples and can't be ordered. Nothing has been reserved or charged.",
+    });
+  });
+
+  it("asks for the samples to be removed when real products can be ordered, or before the catalog has loaded", () => {
+    for (const mode of ["live", null] as const) {
+      expect(describeQuoteFailure(sampleRefusal, mode)).toEqual({
+        code: "DEMO_ORDER_UNAVAILABLE", message: "Demo listings are samples and cannot be ordered. Remove them from your cart to continue.",
+      });
+    }
+  });
+
+  it("keeps the server's wording for other refusals in either mode", () => {
+    const refusal = apiError(409, { error: "Insufficient stock for Linen Short-Sleeve Shirt", code: "OUT_OF_STOCK" });
+    expect(describeQuoteFailure(refusal, "demo")).toEqual({ code: "OUT_OF_STOCK", message: "Insufficient stock for Linen Short-Sleeve Shirt" });
   });
 });

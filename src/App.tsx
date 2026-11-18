@@ -31,6 +31,15 @@ import AccountOrders from "./pages/AccountOrders";
 import AccountAddresses from "./pages/AccountAddresses";
 import VerifyEmail from "./pages/VerifyEmail";
 import Unsubscribe from "./pages/Unsubscribe";
+import Delivery from "./pages/Delivery";
+import Returns from "./pages/Returns";
+import Faq from "./pages/Faq";
+import Privacy from "./pages/Privacy";
+import Terms from "./pages/Terms";
+import NotFound from "./pages/NotFound";
+
+/** Pages that keep their place across their own `?section=` changes (see `InfoPage`). */
+const SECTIONED_PAGES = new Set(["faq", "privacy", "terms"]);
 
 function Router() {
   const route = useRoute();
@@ -86,6 +95,21 @@ function Router() {
     case "unsubscribe":
       page = <Unsubscribe />;
       break;
+    case "delivery":
+      page = <Delivery />;
+      break;
+    case "returns":
+      page = <Returns />;
+      break;
+    case "faq":
+      page = <Faq />;
+      break;
+    case "privacy":
+      page = <Privacy />;
+      break;
+    case "terms":
+      page = <Terms />;
+      break;
     case "account":
       page = (
         <Account>
@@ -96,14 +120,16 @@ function Router() {
     case "admin":
       return <Admin />;
     default:
-      page = <Home />;
+      page = <NotFound />;
   }
 
   // One shell for every shopper page, so the header and the guest-cart report persist across page changes.
   // The listing keeps its page across its own URL changes, so focus and scroll survive filtering. Checkout and the
-  // account keep theirs across query changes (a checkout step, an order to open), so in-progress state is never lost.
+  // account keep theirs across query changes (a checkout step, an order to open), so in-progress state is never lost;
+  // the long information pages keep theirs across section changes, which scroll and focus within the page.
   const pathname = route.split("?")[0] || "/";
-  const pageKey = root === "shop" ? "/shop" : root === "checkout" || root === "account" ? pathname : route;
+  const pageKey = root === "shop" ? "/shop"
+    : root === "checkout" || root === "account" || SECTIONED_PAGES.has(root) ? pathname : route;
   return (
     <div className="flex min-h-screen flex-col">
       <Header />

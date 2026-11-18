@@ -1,5 +1,5 @@
 import { isAxiosError, isCancel } from "axios";
-import type { CatalogProduct, CatalogVariant } from "../api/catalog";
+import type { CatalogProduct, CatalogSnapshot, CatalogVariant } from "../api/catalog";
 import {
   MAX_QUOTE_ITEMS,
   type DeliveryMethod,
@@ -16,6 +16,7 @@ import {
 import { apiErrorCode, apiStatus, describeApiError } from "../api/errors";
 import { isRecord } from "../utils/storage";
 import { DELIVERY_METHODS, isDeliveryMethod, isMoney } from "./catalogModel";
+import { STORE_FACTS } from "./storeFacts";
 
 export { DELIVERY_METHODS, isDeliveryMethod };
 
@@ -287,12 +288,26 @@ export function classifyOrderFailure(error: unknown): OrderFailure {
   return { kind: "rejected", code, message: (code && REVIEW_MESSAGES[code]) || message };
 }
 
-/** Customer-facing explanation of a failed quote, with the code that decides where it is shown. */
-export function describeQuoteFailure(error: unknown): { code?: string; message: string } {
+/**
+ * Customer-facing explanation of a failed quote, with the code that decides where it is shown. In a demonstration
+ * catalog every product is a sample, so a sample refusal says so rather than asking the shopper to remove them.
+ */
+export function describeQuoteFailure(error: unknown, mode: CatalogSnapshot["mode"] | null): { code?: string; message: string } {
   if (error instanceof CheckoutFormatError) return { message: `${error.message} Try again shortly.` };
   const code = apiErrorCode(error);
   if (code === "DEMO_ORDER_UNAVAILABLE") {
-    return { code, message: "Demo listings are samples and cannot be ordered. Remove them from your cart to continue." };
+    return {
+      code,
+      message: mode === "demo"
+        ? `${STORE_FACTS.operator} is a demonstration store: its products are samples and can't be ordered. Nothing has been reserved or charged.`
+        : "Demo listings are samples and cannot be ordered. Remove them from your cart to continue.",
+    };
   }
   return { code, message: describeApiError(error, "Prices for your cart could not be calculated.") };
 }
+
+/** A quote refusal that asking again can't change: sample products are never ordered, in either catalog mode. */
+export const isFinalQuoteFailure = (code: string | undefined) => code === "DEMO_ORDER_UNAVAILABLE";
+
+/** Why ordering stays blocked after that refusal, in place of waiting for a total to be calculated. */
+export const SAMPLES_BLOCKED = "Sample products can't be ordered.";

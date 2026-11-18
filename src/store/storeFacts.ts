@@ -1,6 +1,23 @@
 import type { CatalogDelivery } from "../api/catalog";
 import type { DeliveryMethod } from "../api/orders";
 
+const OPERATOR = "Apex Cart";
+
+/**
+ * The store's own facts, as the merchant approved them (2026-11-18), worded only here: every page that states a
+ * contact, the hours or the demonstration notice imports them, so no copy can drift.
+ */
+export const STORE_FACTS = {
+  /** A trading name only. */
+  operator: OPERATOR,
+  email: "vicmutua254@gmail.com",
+  phone: { display: "+254 729 125 144", tel: "+254729125144" },
+  hours: "Monday to Friday, 08:00–18:00 EAT",
+  /** When the Privacy notice and the Terms of use last changed (ISO date). */
+  policiesUpdated: "2026-11-18",
+  demonstration: `${OPERATOR} is a demonstration store: its products are samples, and nothing is sold or delivered.`,
+} as const;
+
 /**
  * The delivery promises Apex Cart states, worded only here. Where a method delivers comes from the catalog's delivery
  * facts instead, so it always matches what checkout offers.

@@ -47,7 +47,8 @@ export function fixtureImage(overrides: Partial<MediaAsset> & Pick<MediaAsset, "
 
 export function fixtureCategory(overrides: Partial<CatalogCategory> & Pick<CatalogCategory, "id" | "name">): CatalogCategory {
   return {
-    slug: slug(overrides.name), parentId: null, order: 0, image: null, attributeKeys: [], isActive: true, productCount: 0,
+    slug: slug(overrides.name), parentId: null, order: 0, image: null, attributeKeys: [], isActive: true, returnRule: null,
+    productCount: 0,
     ...overrides,
   };
 }

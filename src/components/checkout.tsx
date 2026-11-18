@@ -3,7 +3,7 @@ import type { Address } from "../api/auth";
 import { MAX_QUOTE_ITEMS, type DeliveryMethod, type Order, type Quote } from "../api/orders";
 import { Link } from "../router";
 import { useCatalog } from "../store/CatalogContext";
-import { DELIVERY_LABELS, normalizeCouponCode } from "../store/checkoutModel";
+import { DELIVERY_LABELS, isFinalQuoteFailure, normalizeCouponCode } from "../store/checkoutModel";
 import { summaryRows } from "../store/checkoutSummary";
 import { deliveryDescription } from "../store/storeFacts";
 import type { CheckoutQuote } from "../store/useCheckoutQuote";
@@ -26,7 +26,8 @@ export const primaryActionClass =
 export const secondaryActionClass =
   "flex min-h-[48px] w-full items-center justify-center rounded-sm border border-navy-900 px-[20px] text-center text-sm font-semibold text-navy-900 transition-colors duration-(--motion-feedback) hover:bg-surface-soft";
 export const textLinkClass = "inline-flex min-h-[44px] items-center font-semibold text-link underline underline-offset-4 hover:text-link-hover";
-const inlineLinkClass = "font-semibold text-link underline underline-offset-4 hover:text-link-hover";
+/** A link inside a sentence: as tall as its line (WCAG 2.5.8's inline exception), so it never breaks the text's rhythm. */
+export const inlineLinkClass = "font-semibold text-link underline underline-offset-4 hover:text-link-hover";
 
 export function formatAddress(address: Pick<Address, "street" | "city" | "county">) {
   return `${address.street}, ${address.city}, ${address.county}`;
@@ -233,6 +234,8 @@ export function QuoteSummary({ blocker, quote, onRefreshAvailability, changeDeli
     const choice = Object.values(CHOICE_ERRORS).some((item) => item === code);
     const stock = STOCK_ERRORS.includes(code);
     const elsewhere = changeDelivery !== undefined && DELIVERY_CHOICE_ERRORS.includes(code);
+    // Sample products are refused whatever is retried; the message says what (if anything) can be done instead.
+    const final = isFinalQuoteFailure(code);
     return (
       <div role="alert" className="rounded-md border border-error/40 bg-error-tint p-3 text-sm text-navy-800">
         <p className="font-semibold text-error">
@@ -240,7 +243,7 @@ export function QuoteSummary({ blocker, quote, onRefreshAvailability, changeDeli
         </p>
         {elsewhere && <p className="mt-1">{quote.error.message}</p>}
         {stock && <p className="mt-1">Reduce or remove that item, then check again.</p>}
-        {elsewhere ? changeDelivery : (
+        {elsewhere ? changeDelivery : !final && (
           <button type="button" onClick={stock ? onRefreshAvailability : quote.refresh} className={textLinkClass}>
             {stock ? "Refresh availability" : "Try again"}
           </button>

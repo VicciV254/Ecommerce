@@ -268,6 +268,36 @@ describes reversal of STK test funds; the application does not guarantee
 refund timing. Obtain explicit recipient and amount approval before a test
 prompt rather than assuming sandbox means no debit.
 
+## Public information pages
+
+Apex Cart is a demonstration store, and its public pages say how it is set up
+rather than promising delivery, refunds or emails. The Privacy notice and the
+Terms of use are reviewed by the store's owner before they are published.
+
+- Delivery (`#/delivery`), Returns and refunds (`#/returns`), the FAQ
+  (`#/faq`), the Privacy notice (`#/privacy`) and the Terms of use
+  (`#/terms`) share one reading layout, `src/components/InfoPage.tsx`. Long
+  pages list their sections under "On this page" and link each one as
+  `#/<page>?section=<id>`: the hash is the route, so there are no bare `#id`
+  links. Following a section link scrolls its heading to just below the sticky
+  header and moves focus to it; Back returns to the top of the page.
+- FAQ questions are native disclosures (`<details>`): each answer stays closed
+  until its question is opened by tap, click, Enter or Space, and several can
+  be open at once. The topics remain the page's headings.
+- Contacts, support hours, the demonstration statement, the policies' date and
+  the delivery promises are worded once, in `src/store/storeFacts.ts`. A unit
+  test fails if any other source file repeats the email address, phone number
+  or hours.
+- Fees, free-delivery thresholds, covered counties, the return window, the
+  delivery-fee refund rule and the return rules by category come from the
+  catalog snapshot (`GET /api/catalog`: `delivery`, `returnPolicy` and each
+  category's `returnRule`), so the pages always match what checkout offers.
+  Until the snapshot loads, Delivery and Returns show a loading panel and the
+  FAQ gives general answers.
+- An address the shop doesn't know shows a not-found page with links to the
+  home page, the shop and Contact. It is served like every other page (there is
+  no HTTP 404 status).
+
 ## Tech Stack
 
 - **React 19** - UI framework

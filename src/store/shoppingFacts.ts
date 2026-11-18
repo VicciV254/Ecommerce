@@ -4,7 +4,7 @@ import { joinNames } from "./storeFacts";
 
 /**
  * Plain statements of how buying works, shared by About, the footer and product pages so their wording cannot drift.
- * They describe the approved policy only: no contact details, hours or locations are published yet.
+ * They describe the approved policy only; the store's contacts and hours are in `storeFacts.ts`.
  */
 export const SHOPPING_FACTS = {
   vat: "Prices are shown excluding VAT; 16% VAT is added at checkout.",

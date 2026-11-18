@@ -235,7 +235,8 @@ async function moveFocusPastHeader(page: Page, from: Locator, target: Locator, k
 /** Stands for the last tab stop in the sticky chrome (the phone search row, or else the header), whichever the width shows. */
 const LAST_HEADER_STOP = "the header's last control";
 const SHOP_CARD = { route: "/#/shop", height: 700, key: "Shift+Tab", from: "Choose options for Linen Short-Sleeve Shirt", to: "Linen Short-Sleeve Shirt" } as const;
-const ABOUT = { route: "/#/about", key: "Shift+Tab", from: "Track an order", to: "Browse products" } as const;
+// About's first content stop after "Browse products" is the Delivery card's "See Delivery" link.
+const ABOUT = { route: "/#/about", key: "Shift+Tab", from: "See Delivery", to: "Browse products" } as const;
 const CONTACT = { route: "/#/contact", key: "Tab", from: "Name", to: "Email" } as const;
 const OUT_OF_HEADER = { route: "/#/about", key: "Tab", from: LAST_HEADER_STOP, to: "Home" } as const;
 const FOCUS_MOVES: Record<"phone" | "desktop", FocusMove[]> = {

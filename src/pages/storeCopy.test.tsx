@@ -1,10 +1,11 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { AxiosError, AxiosHeaders } from "axios";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import About from "./About";
 import Contact from "./Contact";
 import { Footer } from "../components/Footer";
 import type { CatalogDelivery } from "../api/catalog";
+import { STORE_FACTS } from "../store/storeFacts";
 import { fixtureSnapshot } from "../test-support/catalogFixtures";
 
 const contact = vi.hoisted(() => ({ send: vi.fn() }));
@@ -13,10 +14,14 @@ const auth = vi.hoisted(() => ({ value: { user: null as { id: string } | null, r
 const catalog = vi.hoisted(() => ({
   value: { returnPolicy: null as { windowDays: number } | null, delivery: null as CatalogDelivery[] | null },
 }));
+const titles = vi.hoisted(() => [] as string[]);
 vi.mock("../api/contact", () => ({ contactAPI: contact }));
 vi.mock("../api/subscriptions", () => ({ subscriptionsAPI: subscriptions }));
 vi.mock("../contexts/AuthContext", () => ({ useAuth: () => auth.value }));
-vi.mock("../store/StorefrontContext", () => ({ useStorefront: () => ({ brandName: "Apex Cart" }) }));
+vi.mock("../store/StorefrontContext", () => ({
+  useStorefront: () => ({ brandName: "Apex Cart" }),
+  usePageTitle: (title: string) => { titles.push(title); },
+}));
 vi.mock("../store/CatalogContext", () => ({
   useCatalog: () => ({
     categories: { roots: [{ slug: "fashion", name: "Fashion" }] }, returnPolicy: catalog.value.returnPolicy, delivery: catalog.value.delivery,
@@ -30,9 +35,12 @@ function apiError(status: number, data: unknown) {
 
 /** Details of the previous physical store that must not be published for Apex Cart. */
 const RETIRED_DETAILS = [
-  /maneno/i, /mombasa/i, /digo/i, /\bCBD\b/, /720\s*784\s*379/, /\+254/, /iko kitu/i, /floors?\b/i,
-  /generations/i, /find us/i, /google maps/i, /\bmon\b|monday|sunday|9\s*am|6:30/i, /opening hours/i, /@\w/,
+  /maneno/i, /mombasa/i, /digo/i, /\bCBD\b/, /720\s*784\s*379/, /iko kitu/i, /floors?\b/i,
+  /generations/i, /find us/i, /google maps/i, /\bmon\b|sunday|9\s*am|6:30/i, /opening hours/i,
 ];
+
+/** Any contact detail: the approved ones appear only where the P8.4 contract places them (Contact, not About or the footer). */
+const CONTACT_DETAILS = [/@\w/, /\+?254|\b07\d{2}/, /monday|friday|\d{2}:\d{2}/i, /\bcall\b|whatsapp/i];
 
 function expectNoRetiredDetails() {
   const text = document.body.textContent ?? "";
@@ -41,11 +49,18 @@ function expectNoRetiredDetails() {
   for (const image of document.querySelectorAll("img")) expect(image.getAttribute("alt") ?? "").not.toMatch(/mombasa|market/i);
 }
 
+function expectNoContactDetails() {
+  const text = document.body.textContent ?? "";
+  for (const pattern of CONTACT_DETAILS) expect(text).not.toMatch(pattern);
+  for (const link of document.querySelectorAll("a")) expect(link.getAttribute("href") ?? "").not.toMatch(/^(mailto|tel):/);
+}
+
 beforeEach(() => {
   const { returnPolicy, delivery } = fixtureSnapshot();
   catalog.value = { returnPolicy, delivery };
   auth.value = { user: null, refreshUser: vi.fn().mockResolvedValue(undefined) };
   subscriptions.subscribe.mockReset();
+  titles.length = 0;
 });
 
 describe("About", () => {
@@ -63,6 +78,20 @@ describe("About", () => {
     expect(document.body.textContent).not.toMatch(/pick ?up|collect/i);
     expect(document.querySelectorAll("img")).toHaveLength(0);
     expectNoRetiredDetails();
+    expectNoContactDetails();
+  });
+
+  it("promises no ordering, since every product is a sample, and links the pages it summarises", () => {
+    render(<About />);
+    expect(document.body.textContent).not.toMatch(/order online/i);
+    const links = ["See Delivery", "See Returns and refunds", "See the FAQ"].map((name) => screen.getByRole("link", { name }).getAttribute("href"));
+    expect(links).toEqual(["#/delivery", "#/returns", "#/faq"]);
+  });
+
+  it("is titled for the brand and lets entry focus land on its h1", () => {
+    render(<About />);
+    expect(titles.at(-1)).toBe("About · Apex Cart");
+    expect(screen.getByRole("heading", { level: 1, name: "About Apex Cart" }).tabIndex).toBe(-1);
   });
 
   it("names no return window or delivery methods until the catalog has loaded them", () => {
@@ -86,13 +115,36 @@ describe("About", () => {
 });
 
 describe("Contact", () => {
-  it("keeps a labelled message form and publishes no store contact details", () => {
+  it("keeps a labelled message form and publishes no retired store details", () => {
     render(<Contact />);
     for (const name of ["Name", "Email", "Phone (optional)", "Message"]) expect(screen.getByLabelText(name)).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 2, name: "Or send us a message" })).toBeTruthy();
+    expect(screen.getByText("Messages are emailed to our mailbox.")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Track an order" }).getAttribute("href")).toBe("#/track");
     expect(document.querySelectorAll("img, iframe")).toHaveLength(0);
-    expect(document.body.textContent).not.toMatch(/@|\bcall\b|whatsapp/i);
+    expect(document.body.textContent).not.toMatch(/whatsapp/i);
     expectNoRetiredDetails();
+  });
+
+  it("lists the approved contact details above the form, from the store's facts, as working links", () => {
+    render(<Contact />);
+    const details = screen.getByRole("heading", { level: 2, name: "Contact details" }).closest("section")!;
+    const terms = [...details.querySelectorAll("dt")].map((term) => [term.textContent, term.nextElementSibling?.textContent]);
+    expect(terms).toEqual([["Email", STORE_FACTS.email], ["Phone", STORE_FACTS.phone.display], ["Hours", STORE_FACTS.hours]]);
+    expect(within(details).getByRole("link", { name: STORE_FACTS.email }).getAttribute("href")).toBe(`mailto:${STORE_FACTS.email}`);
+    expect(within(details).getByRole("link", { name: STORE_FACTS.phone.display }).getAttribute("href")).toBe(`tel:${STORE_FACTS.phone.tel}`);
+    const form = screen.getByRole("heading", { level: 2, name: "Or send us a message" });
+    expect(details.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The only contact details on the page are the approved ones.
+    const text = (document.body.textContent ?? "").replace(STORE_FACTS.email, "").replace(STORE_FACTS.phone.display, "")
+      .replace(STORE_FACTS.hours, "");
+    for (const pattern of CONTACT_DETAILS) expect(text).not.toMatch(pattern);
+  });
+
+  it("is titled for the brand and lets entry focus land on its h1", () => {
+    render(<Contact />);
+    expect(titles.at(-1)).toBe("Contact us · Apex Cart");
+    expect(screen.getByRole("heading", { level: 1, name: "Contact us" }).tabIndex).toBe(-1);
   });
 
   it("sends the message and confirms it without promising a reply time", async () => {
@@ -130,6 +182,31 @@ describe("Footer", () => {
     expect(screen.getByLabelText("Email address")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Staff portal" }).getAttribute("href")).toBe("#/admin");
     expectNoRetiredDetails();
+    expectNoContactDetails();
+  });
+
+  it("lists the help links in order, ending with About the published brand", () => {
+    render(<Footer />);
+    const help = within(screen.getByRole("navigation", { name: "Help" })).getAllByRole("link");
+    expect(help.map((link) => [link.textContent, link.getAttribute("href")])).toEqual([
+      ["Track an order", "#/track"], ["Your orders", "#/account/orders"], ["Delivery", "#/delivery"], ["Returns", "#/returns"],
+      ["FAQ", "#/faq"], ["Contact us", "#/contact"], ["About Apex Cart", "#/about"],
+    ]);
+  });
+
+  it("closes with the demonstration line as plain text, then Privacy, Terms and Staff portal, then the copyright", () => {
+    render(<Footer />);
+    const statement = screen.getByText(STORE_FACTS.demonstration);
+    expect(statement.closest("a")).toBeNull();
+    const bar = statement.parentElement!;
+    const links = within(bar).getAllByRole("link");
+    expect(links.map((link) => [link.textContent, link.getAttribute("href")])).toEqual([
+      ["Privacy", "#/privacy"], ["Terms", "#/terms"], ["Staff portal", "#/admin"],
+    ]);
+    // Phones read it top to bottom: the statement, the links, then the copyright.
+    expect([...bar.children].map((child) => child.tagName)).toEqual(["P", "UL", "P"]);
+    expect(bar.lastElementChild?.textContent).toBe("© 2026 Apex Cart. All rights reserved.");
+    expect(bar.textContent).toBe(`${STORE_FACTS.demonstration}Privacy·Terms·Staff portal© 2026 Apex Cart. All rights reserved.`);
   });
 });
 

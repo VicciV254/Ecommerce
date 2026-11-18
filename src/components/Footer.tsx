@@ -5,20 +5,30 @@ import { BrandLogo } from "./Brand";
 import { useCatalog } from "../store/CatalogContext";
 import { useStorefront } from "../store/StorefrontContext";
 import { SHOPPING_FACTS, deliveryFact, returnsFact } from "../store/shoppingFacts";
+import { STORE_FACTS } from "../store/storeFacts";
 import { subscriptionsAPI } from "../api/subscriptions";
 import { describeApiError } from "../api/errors";
 import { useAuth } from "../contexts/AuthContext";
 
 const FOOTER_DEPARTMENT_LIMIT = 6;
 const columnHeading = "mb-3 text-xs font-bold uppercase tracking-[0.15em] text-gold-400";
+/** At least 44px each way on phones, so even a short label ("FAQ", "Terms") is an easy target. */
 const footerLink =
-  "inline-flex min-h-[44px] items-center text-on-navy-muted transition-colors duration-(--motion-feedback) hover:text-white md:min-h-[32px]";
+  "inline-flex min-h-[44px] min-w-[44px] items-center text-on-navy-muted transition-colors duration-(--motion-feedback) hover:text-white md:min-h-[32px]";
 
 const HELP_LINKS = [
   { to: "/track", label: "Track an order" },
-  { to: "/account/orders", label: "Orders and returns" },
+  { to: "/account/orders", label: "Your orders" },
+  { to: "/delivery", label: "Delivery" },
+  { to: "/returns", label: "Returns" },
+  { to: "/faq", label: "FAQ" },
   { to: "/contact", label: "Contact us" },
-  { to: "/about", label: "About Apex Cart" },
+];
+
+const BOTTOM_LINKS = [
+  { to: "/privacy", label: "Privacy" },
+  { to: "/terms", label: "Terms" },
+  { to: "/admin", label: "Staff portal" },
 ];
 
 export function Footer() {
@@ -129,7 +139,7 @@ export function Footer() {
             <nav aria-labelledby="footer-help">
               <h2 id="footer-help" className={columnHeading}>Help</h2>
               <ul>
-                {HELP_LINKS.map((item) => (
+                {[...HELP_LINKS, { to: "/about", label: `About ${brandName}` }].map((item) => (
                   <li key={item.to}><Link to={item.to} className={footerLink}>{item.label}</Link></li>
                 ))}
               </ul>
@@ -146,11 +156,21 @@ export function Footer() {
           </div>
         </div>
 
-        <div className="mt-10 flex flex-col items-center justify-between gap-2 border-t border-white/10 pt-6 text-xs md:flex-row">
+        {/* Phones: the demonstration line, the links, then the copyright. From 768px: both lines left, the links right. */}
+        <div className="mt-10 grid justify-items-center gap-2 border-t border-white/10 pt-6 text-xs md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:justify-items-start md:gap-x-8">
+          <p className="min-w-0 max-w-full text-center [overflow-wrap:break-word] md:text-left">{STORE_FACTS.demonstration}</p>
+          {/* Padded links keep the gaps around the dots even (short labels would otherwise centre in their 44px). From 768px
+              the list is pulled 8px right so the last label lines up with the edge, which leaves it 8px wider than its
+              column: it isn't capped at the column's width there, or the last link would wrap onto a second line. */}
+          <ul className="flex min-w-0 max-w-full flex-wrap items-center justify-center md:col-start-2 md:row-span-2 md:row-start-1 md:-mr-2 md:max-w-none">
+            {BOTTOM_LINKS.map((item, index) => (
+              <li key={item.to} className="flex items-center">
+                {index > 0 && <span aria-hidden="true">·</span>}
+                <Link to={item.to} className={`${footerLink} justify-center px-2`}>{item.label}</Link>
+              </li>
+            ))}
+          </ul>
           <p className="min-w-0 max-w-full text-center [overflow-wrap:break-word] md:text-left">© 2026 {brandName}. All rights reserved.</p>
-          <Link to="/admin" className="inline-flex min-h-[44px] items-center transition-colors duration-(--motion-feedback) hover:text-white">
-            Staff portal
-          </Link>
         </div>
       </Container>
     </footer>

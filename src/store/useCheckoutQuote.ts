@@ -1,5 +1,6 @@
 import { isCancel } from "axios";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { CatalogSnapshot } from "../api/catalog";
 import { checkoutAPI, type Quote, type QuoteRequest } from "../api/orders";
 import {
   CheckoutFormatError,
@@ -17,7 +18,7 @@ const MAX_TIMER_MS = 2_147_483_647;
 
 type QuoteResult = { attempt: number } & (
   | { status: "ready"; quote: Quote }
-  | { status: "error"; code?: string; message: string }
+  | { status: "error"; error: unknown }
 );
 
 export type CheckoutQuote = {
@@ -37,9 +38,10 @@ export type CheckoutQuote = {
 
 /**
  * Server quote for the current cart and choices. Results for an older request, attempt or
- * unmounted owner are discarded, so a slow response can never replace a newer total.
+ * unmounted owner are discarded, so a slow response can never replace a newer total. `mode` is the
+ * catalog's, which decides how a refusal of sample products is explained.
  */
-export function useCheckoutQuote(request: QuoteRequest | null): CheckoutQuote {
+export function useCheckoutQuote(request: QuoteRequest | null, mode: CatalogSnapshot["mode"] | null): CheckoutQuote {
   const signature = request ? requestSignature(request) : null;
   // Each new signature or refresh is a new attempt; a result only counts for the attempt that asked for it.
   const [current, setCurrent] = useState<{ signature: string | null; attempt: number; replaced: Quote | null }>(
@@ -62,7 +64,7 @@ export function useCheckoutQuote(request: QuoteRequest | null): CheckoutQuote {
           if (live) setResult({ attempt, status: "ready", quote });
         })
         .catch((error: unknown) => {
-          if (live && !isCancel(error)) setResult({ attempt, status: "error", ...describeQuoteFailure(error) });
+          if (live && !isCancel(error)) setResult({ attempt, status: "error", error });
         });
     }, QUOTE_DEBOUNCE_MS);
     return () => {
@@ -73,6 +75,8 @@ export function useCheckoutQuote(request: QuoteRequest | null): CheckoutQuote {
 
   const latest = signature !== null && result?.attempt === attempt ? result : null;
   const quote = latest?.status === "ready" ? latest.quote : null;
+  const failed = latest?.status === "error" ? latest : null;
+  const error = useMemo(() => (failed ? describeQuoteFailure(failed.error, mode) : null), [failed, mode]);
 
   useEffect(() => {
     if (!quote) return;
@@ -93,7 +97,7 @@ export function useCheckoutQuote(request: QuoteRequest | null): CheckoutQuote {
     signature,
     quote,
     replaced: current.signature === signature ? current.replaced : null,
-    error: latest?.status === "error" ? { code: latest.code, message: latest.message } : null,
+    error,
     expired: quote !== null && quote.id === expiredQuoteId,
     refresh,
   };

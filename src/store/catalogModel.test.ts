@@ -87,6 +87,20 @@ describe("catalog snapshot boundary", () => {
     expect(() => parseAdminCatalogSnapshot({ ...fixtureAdminSnapshot(), delivery: [] })).toThrow(/delivery/);
   });
 
+  it("carries each category's own return rule or null, and fails the snapshot on an unknown or missing one", () => {
+    const [fashion, ...others] = fixtureSnapshot().categories;
+    const snapshot = fixtureSnapshot({ categories: [{ ...fashion, returnRule: "FAULT_ONLY" }, ...others] });
+    const parsed = parseCatalogSnapshot(snapshot, ["demo"]);
+    expect(parsed.categories.map((category) => category.returnRule)).toEqual(["FAULT_ONLY", null, null, null, null]);
+    expect(parseAdminCatalogSnapshot(fixtureAdminSnapshot({ categories: snapshot.categories })).categories[0].returnRule).toBe("FAULT_ONLY");
+
+    const { returnRule: _rule, ...ruleless } = fashion;
+    for (const category of [ruleless, { ...fashion, returnRule: "EXCHANGE_ONLY" }, { ...fashion, returnRule: "" }, { ...fashion, returnRule: 1 }]) {
+      expect(() => parseCatalogSnapshot({ ...snapshot, categories: [category, ...others] }, ["demo"]), JSON.stringify(category))
+        .toThrow(/categories/);
+    }
+  });
+
   it("reads media fields that older payloads omit as null and keeps uploaded-file facts", () => {
     const { variantId: _variant, format: _format, bytes: _bytes, width: _width, height: _height, ...older } = linenShirt.images[0];
     const uploaded = {

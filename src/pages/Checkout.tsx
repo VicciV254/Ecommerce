@@ -28,7 +28,7 @@ import { EMPTY_ADDRESS, clearAddressDraft, readAddressDraft, saveAddressDraft } 
 import { useCatalog } from "../store/CatalogContext";
 import { cartEstimate, cartLineViews, type CartLineView } from "../store/cartModel";
 import { describeVariant } from "../store/catalogModel";
-import { CheckoutFormatError, DELIVERY_LABELS, parseOrder, quoteRequestFor, reviewCart, samePricing } from "../store/checkoutModel";
+import { CheckoutFormatError, DELIVERY_LABELS, isFinalQuoteFailure, parseOrder, quoteRequestFor, reviewCart, samePricing, SAMPLES_BLOCKED } from "../store/checkoutModel";
 import { checkoutRoute, checkoutSteps, parseCheckoutRoute, type CheckoutStep, type StepView } from "../store/checkoutSteps";
 import { pendingReason, type CheckoutFigures } from "../store/checkoutSummary";
 import { CHECKOUT_REGISTER, CHECKOUT_SIGN_IN } from "../store/returnTo";
@@ -204,7 +204,7 @@ function CheckoutContent({ user }: { user: User }) {
     catalog.status === "ready" && state.cart.length > 0 && blocker === null;
   const quote = useCheckoutQuote(quotable && choices.address
     ? quoteRequestFor(state.cart, { addressId: choices.address.id, deliveryMethod: choices.deliveryMethod, couponCode: choices.couponCode })
-    : null);
+    : null, catalog.mode);
 
   // The reserved order joins the address, so a reload (or Back to it) shows this order's payment again.
   const placedId = placedHere?.id ?? null;
@@ -323,6 +323,7 @@ function CheckoutContent({ user }: { user: User }) {
   if (!sending && !canReserve) {
     if (reviewNeeded) blockedReason = "Confirm you have reviewed the updated total to continue.";
     else if (current && quote.expired) blockedReason = "Refresh prices to continue.";
+    else if (isFinalQuoteFailure(quote.error?.code)) blockedReason = SAMPLES_BLOCKED;
     else blockedReason = "Your total must be calculated before you can reserve.";
   }
 

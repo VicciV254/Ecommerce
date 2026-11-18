@@ -160,7 +160,8 @@ export function productReturnFact(rule: ReturnRule, policy: Pick<CatalogReturnPo
   return { window, refunds: `Refunds by M-Pesa; ${DELIVERY_FEE_FACT[policy.deliveryFeeRefund]}.` };
 }
 
-const DELIVERY_FEE_TERMS: Record<DeliveryFeeRefund, string> = {
+/** How a return refund treats the delivery fee, per rule; also stated on the Returns and refunds page. */
+export const DELIVERY_FEE_TERMS: Record<DeliveryFeeRefund, string> = {
   MERCHANT_FAULT_ONLY: "The delivery fee is refunded only if staff confirm an item was faulty, damaged or wrong.",
   ALWAYS: "The delivery fee is included in your first accepted return refund.",
   NEVER: "The delivery fee is not refunded for returns.",
