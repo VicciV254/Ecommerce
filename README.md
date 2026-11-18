@@ -298,6 +298,25 @@ Terms of use are reviewed by the store's owner before they are published.
   home page, the shop and Contact. It is served like every other page (there is
   no HTTP 404 status).
 
+## Search and link previews
+
+Link previews (WhatsApp, X, Facebook) don't run JavaScript, so `index.html`
+carries the store's description, canonical address and Open Graph and X card
+tags beside `<title>`, ahead of the inlined app.
+
+- The description is the demonstration statement from
+  `src/store/storeFacts.ts`; a unit test keeps the two equal.
+- The canonical address, `og:url` and `og:image` use the production address,
+  `https://ecommerce-vicciv.vercel.app/`. Change all three if it changes.
+- The preview image is `public/og-image.png` (1200×630): the gold mark, the
+  store name and "A demonstration store" on navy.
+- `public/robots.txt` lets every crawler in, including `/api`, which the pages
+  render from.
+- There is no product or offer markup and no sitemap: the products are samples,
+  and hash routes (`#/…`) aren't separate pages to search engines.
+- The tags are fixed text, so a store name changed in the storefront settings
+  doesn't reach link previews.
+
 ## Tech Stack
 
 - **React 19** - UI framework
