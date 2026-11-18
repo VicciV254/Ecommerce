@@ -3,6 +3,7 @@ import { inlineLinkClass } from "../components/checkout";
 import { InfoPage, infoList, infoParagraph, type InfoSection } from "../components/InfoPage";
 import { EmailLink, PhoneLink } from "../components/StoreContacts";
 import { Link } from "../router";
+import { useCatalog } from "../store/CatalogContext";
 import { STORE_FACTS } from "../store/storeFacts";
 
 /** A list item that opens with its topic in bold ("Your account: …"). */
@@ -20,6 +21,9 @@ const ODPC_COMPLAINTS = "https://cie.odpc.go.ke/";
  */
 export default function Privacy() {
   const { operator } = STORE_FACTS;
+  // Where sample orders take demonstration payments the notice says so; otherwise (or until the catalog loads) today's.
+  const { status, demonstrationOrders } = useCatalog();
+  const demonstration = demonstrationOrders === true;
   const contact = (
     <>
       <EmailLink className={inlineLinkClass} /> or <PhoneLink className={inlineLinkClass} /> ({STORE_FACTS.hours})
@@ -55,8 +59,10 @@ export default function Privacy() {
               when checkout prices a cart for ordering, it saves the items, prices and a copy of the delivery address; an
               order then keeps what was ordered, prices, the delivery address and method and its progress, with M-Pesa
               payment details (the phone number paid from, the amount, the receipt number and the results Safaricom sends)
-              and any return requests with their reasons and comments. The sample products can't be ordered on this site,
-              so checkout saves none of these here.
+              and any return requests with their reasons and comments.{" "}
+              {demonstration
+                ? "Orders for sample products are kept like any order. A demonstration payment records the method, amount and time, but no mobile-money or provider details."
+                : "The sample products can't be ordered on this site, so checkout saves none of these here."}
             </Topic>
             <Topic name="Email verification and password resets">
               one-time codes and links. They stop working when they expire (verification codes after 10 minutes,
@@ -119,7 +125,8 @@ export default function Privacy() {
               hosts our mailbox, where messages to us are kept.
             </Topic>
             <Topic name="Safaricom (M-Pesa)">
-              the phone number, amount and an order reference, if a payment is requested. That can't happen on this site.
+              the phone number, amount and an order reference, if a payment is requested.{" "}
+              {demonstration ? "On this site, prompts can only be sent to the owner's approved test numbers." : "That can't happen on this site."}
             </Topic>
             <li>
               Cloudinary, Unsplash and Pexels deliver the store's images, and Google Fonts supplies its typefaces. Your
@@ -227,7 +234,8 @@ export default function Privacy() {
       content: (
         <p className={infoParagraph}>
           Passwords are stored only as one-way hashes. Payments are approved on the customer's phone in M-Pesa, so the
-          store never sees an M-Pesa PIN. Staff tools need a staff account.
+          store never sees an M-Pesa PIN.{demonstration && " A demonstration payment involves no M-Pesa at all."} Staff tools
+          need a staff account.
         </p>
       ),
     },
@@ -239,7 +247,7 @@ export default function Privacy() {
   ];
 
   return (
-    <InfoPage title="Privacy notice" updated={STORE_FACTS.policiesUpdated} sections={sections}>
+    <InfoPage title="Privacy notice" updated={STORE_FACTS.policiesUpdated} sections={sections} ready={status !== "loading"}>
       <p>
         {operator} is a demonstration store built as a personal project: its products are samples and nothing is sold. This
         notice explains what personal information the site collects, why, who can see it, who else receives it, how long

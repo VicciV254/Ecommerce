@@ -7,6 +7,8 @@ import {
   PAYMENT_MESSAGES,
   fixtureAttempt,
   fixtureConfirmedAttempt,
+  fixtureDemonstrationOverview,
+  fixtureDemonstrationPaidOverview,
   fixturePaymentOverview,
 } from "../test-support/paymentFixtures";
 import {
@@ -178,9 +180,9 @@ describe("payment view", () => {
 
   it("offers a new prompt after a failure only while the server allows one", () => {
     const failed = fixtureAttempt(order, { status: "FAILED", message: PAYMENT_MESSAGES.cancelled });
-    expect(paymentView(payable({ attempts: [failed] }), null)).toEqual({ kind: "payable", failed });
+    expect(paymentView(payable({ attempts: [failed] }), null)).toEqual({ kind: "payable", failed, demonstration: false });
     expect(paymentView(payable({ available: false, reasonCode: "PAYMENT_COOLDOWN", message: PAYMENT_MESSAGES.cooldown, attempts: [failed] }), null))
-      .toEqual({ kind: "unavailable", failed, message: PAYMENT_MESSAGES.cooldown, waiting: true });
+      .toEqual({ kind: "unavailable", failed, message: PAYMENT_MESSAGES.cooldown, waiting: true, demonstration: false });
   });
 
   it("does not offer a prompt for a fractional total, even if the server says payments are available", () => {
@@ -193,6 +195,61 @@ describe("payment view", () => {
   it("shows an unresolved request instead of anything new, retryable only once checked", () => {
     expect(paymentView(payable(), { checked: false })).toEqual({ kind: "unresolved", retryable: false });
     expect(paymentView(payable(), { checked: true })).toEqual({ kind: "unresolved", retryable: true });
+  });
+});
+
+describe("demonstration payments", () => {
+  const sample = fixturePendingOrder(fixtureQuote(), { isDemo: true });
+
+  it("keep the overview's payment method and demonstration block, and refuse malformed ones", () => {
+    const offered = fixtureDemonstrationOverview(sample);
+    expect(parsePaymentOverview(JSON.parse(JSON.stringify(offered)), sample.id)).toEqual(offered);
+    const paid = parsePaymentOverview(fixtureDemonstrationPaidOverview(sample), sample.id);
+    expect([paid.order.paymentMethod, paid.demonstration]).toEqual(["DEMONSTRATION", { available: false, reasonCode: "ORDER_NOT_PAYABLE" }]);
+    expect(parsePaymentOverview(fixturePaymentOverview(order), order.id).demonstration).toBeNull();
+    const malformed: unknown[] = [
+      { ...offered, demonstration: undefined },
+      { ...offered, demonstration: { available: "yes", reasonCode: null } },
+      { ...offered, demonstration: { available: false, reasonCode: 7 } },
+      { ...offered, demonstration: { available: true } },
+      { ...offered, order: { ...offered.order, paymentMethod: "CASH" } },
+      { ...offered, order: { ...offered.order, paymentMethod: undefined } },
+    ];
+    for (const data of malformed) expect(() => parsePaymentOverview(data, sample.id)).toThrow(PaymentFormatError);
+  });
+
+  it("are offered beside M-Pesa, including when M-Pesa is off or cannot take a fractional total", () => {
+    expect(paymentView(fixtureDemonstrationOverview(sample), null)).toEqual({ kind: "payable", failed: null, demonstration: true });
+    const off = fixtureDemonstrationOverview(sample, { available: false, environment: null, reasonCode: "MPESA_DISABLED", message: PAYMENT_MESSAGES.disabled });
+    expect(paymentView(off, null)).toEqual({ kind: "unavailable", failed: null, message: PAYMENT_MESSAGES.disabled, waiting: false, demonstration: true });
+    const fractional = fixtureDemonstrationOverview({ ...sample, total: 1244.01 });
+    expect(paymentView(fractional, null)).toMatchObject({ kind: "unavailable", demonstration: true });
+    // Not where the server refuses it, for a live order, or while an earlier M-Pesa request is unresolved.
+    const refused = fixtureDemonstrationOverview(sample, { demonstration: { available: false, reasonCode: "ORDER_NOT_PAYABLE" } });
+    expect(paymentView(refused, null)).toMatchObject({ kind: "payable", demonstration: false });
+    expect(paymentView(fixtureDemonstrationOverview(sample), { checked: true })).toEqual({ kind: "unresolved", retryable: true });
+    const open = fixtureDemonstrationOverview(sample, {
+      available: false, reasonCode: "PAYMENT_EXISTS", demonstration: { available: false, reasonCode: "PAYMENT_EXISTS" }, attempts: [fixtureAttempt(sample)],
+    });
+    expect(paymentView(open, null)).toMatchObject({ kind: "attempt", stage: "waiting" });
+  });
+
+  it("show a demonstration-paid order as paid by demonstration, with any money M-Pesa later reported", () => {
+    expect(paymentView(fixtureDemonstrationPaidOverview(sample), null)).toEqual({ kind: "demonstration-paid", attempt: null });
+    const refunded = fixtureDemonstrationPaidOverview(sample);
+    refunded.order = { ...refunded.order, paymentStatus: "REFUNDED" };
+    expect(paymentView(refunded, null)).toMatchObject({ kind: "demonstration-paid" });
+    const late = fixtureConfirmedAttempt(sample, { status: "REVIEW", reviewRequired: true, reasonCode: "EXTRA_PAYMENT" });
+    const failedBefore = fixtureAttempt(sample, { id: "attempt-2", status: "FAILED" });
+    expect(paymentView(fixtureDemonstrationPaidOverview(sample, { attempts: [late] }), null)).toEqual({ kind: "demonstration-paid", attempt: late });
+    expect(paymentView(fixtureDemonstrationPaidOverview(sample, { attempts: [failedBefore] }), null)).toEqual({ kind: "demonstration-paid", attempt: null });
+  });
+
+  it("carry the payment method into the order shown beside the panel", () => {
+    const summary = fixtureDemonstrationPaidOverview(sample).order;
+    const updated = withPaymentSummary(sample, summary);
+    expect(updated).toMatchObject({ paymentMethod: "DEMONSTRATION", paymentStatus: "PAID", reservationStatus: "COMMITTED" });
+    expect(withPaymentSummary(updated, summary)).toBe(updated);
   });
 });
 

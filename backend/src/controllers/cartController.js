@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import prisma from '../config/database.js';
 import { idSchema } from '../utils/catalogValidation.js';
-import { availableStock, demoCatalogEnabled, httpError, loadCatalogContext, productDto, productInclude, productWhere, serializable } from '../services/catalogService.js';
+import { availableStock, httpError, loadCatalogContext, productDto, productInclude, productWhere, serializable, storefrontShows } from '../services/catalogService.js';
 import { priceMerchandise } from '../services/pricingService.js';
 import { expireReservations } from '../services/inventoryService.js';
 import { couponCodeSchema } from '../utils/checkoutValidation.js';
@@ -34,7 +34,7 @@ async function cartDto(db, userId) {
     productImage: prices.get(item.variantId).productImage,
     product: productDto(item.product, context),
     available: item.variant.isActive && item.product.isActive && !item.product.deletedAt &&
-      context.visible.has(item.product.categoryId) && (!item.product.isDemo || demoCatalogEnabled()) &&
+      context.visible.has(item.product.categoryId) && storefrontShows(item.product) &&
       (!item.product.designer || (item.product.designer.isActive && !item.product.designer.deletedAt)),
   })) };
 }

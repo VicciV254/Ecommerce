@@ -3,7 +3,7 @@ import type { PaymentOrderSummary } from "../api/mpesa";
 import type { Order } from "../api/orders";
 import { useAuth } from "../contexts/AuthContext";
 import { Link } from "../router";
-import { PAYMENT_STATUS_LABELS } from "../store/orderCopy";
+import { PAYMENT_STATUS_LABELS, isDemonstrationOrder } from "../store/orderCopy";
 import { withPaymentSummary } from "../store/paymentModel";
 import { useStorefront } from "../store/StorefrontContext";
 import { formatDateTime, formatKES } from "../utils/format";
@@ -12,8 +12,8 @@ import { primaryActionClass, secondaryActionClass, textLinkClass } from "./check
 import { PaymentPanel } from "./PaymentPanel";
 
 /** The order's payment state in a few words; "Payment received" appears only once the server records the payment. */
-export function reservedStatus(order: Pick<Order, "paymentStatus" | "reservationStatus" | "reservationExpiresAt">) {
-  if (order.paymentStatus === "PAID") return "Payment received";
+export function reservedStatus(order: Pick<Order, "paymentStatus" | "paymentMethod" | "reservationStatus" | "reservationExpiresAt">) {
+  if (order.paymentStatus === "PAID") return isDemonstrationOrder(order) ? "Paid with a demonstration payment" : "Payment received";
   if (order.paymentStatus !== "PENDING") return `Payment ${PAYMENT_STATUS_LABELS[order.paymentStatus]}`;
   if (order.reservationStatus !== "HELD") return "Unpaid — no longer held";
   return order.reservationExpiresAt ? `Unpaid — held until ${formatDateTime(order.reservationExpiresAt)}` : "Unpaid — items held";
@@ -66,7 +66,9 @@ export function PaymentStep({ order: placed, remainingItems, headingRef, heading
         </dl>
         <p className="mt-4 text-sm text-navy-800">
           {paid
-            ? "Payment has been received for this order. Its payment details and next steps are shown below."
+            ? isDemonstrationOrder(order)
+              ? "This order is paid with a demonstration payment; no money was taken. Its details and next steps are shown below."
+              : "Payment has been received for this order. Its payment details and next steps are shown below."
             : lapsed ? "This order's hold has ended. Do not approve an outstanding payment prompt; check its status below or in your order history."
             : "Payment has not been confirmed for this order yet. Check its status below before requesting another prompt. An unpaid reservation can expire; you can review or cancel it in your order history."}
         </p>

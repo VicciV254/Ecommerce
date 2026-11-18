@@ -2,11 +2,14 @@ import { inlineLinkClass } from "../components/checkout";
 import { InfoPage, infoParagraph, type InfoSection } from "../components/InfoPage";
 import { EmailLink, PhoneLink } from "../components/StoreContacts";
 import { Link } from "../router";
+import { useCatalog } from "../store/CatalogContext";
 import { STORE_FACTS } from "../store/storeFacts";
 
 /** The terms of use of this demonstration store; the user reviews them before publication. */
 export default function Terms() {
   const { operator } = STORE_FACTS;
+  // Where sample orders take demonstration payments the terms say so; otherwise (or until the catalog loads) today's.
+  const { status, demonstrationOrders } = useCatalog();
   const sections: InfoSection[] = [
     {
       id: "a-demonstration-store",
@@ -15,7 +18,10 @@ export default function Terms() {
         <p className={infoParagraph}>
           {operator} is a demonstration store built as a personal project. Its products, prices, descriptions and images
           are samples, and many images are placeholders from Unsplash and Pexels. Nothing is sold or delivered, and the
-          site takes no real payments: on this site, checkout stops before an order is placed.
+          site takes no real payments:{" "}
+          {demonstrationOrders === true
+            ? "sample orders are paid with a demonstration payment that takes no money."
+            : "on this site, checkout stops before an order is placed."}
         </p>
       ),
     },
@@ -94,6 +100,7 @@ export default function Terms() {
       updated={STORE_FACTS.policiesUpdated}
       note={<p>{STORE_FACTS.demonstration}</p>}
       sections={sections}
+      ready={status !== "loading"}
     />
   );
 }

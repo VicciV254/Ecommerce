@@ -1,10 +1,14 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import prisma from '../config/database.js';
+import { demoOrdersEnabled } from '../config/checkoutPolicy.js';
 import { normalizePhone, paymentError, readMpesaConfig, validateMpesaAmount, validatePaymentMode } from '../config/mpesa.js';
 import { moneyNumber } from '../utils/money.js';
 import { idempotencyKeySchema } from '../utils/checkoutValidation.js';
 import { initiatePaymentSchema, parseCallback } from '../utils/mpesaValidation.js';
-import { commitOrderReservation, expireOrderReservation, isInventoryConflict, lockOrderInventory as lockOrder } from './inventoryService.js';
+import {
+  DEMONSTRATION_LOCATION, commitOrderReservation, demonstrationOrderWhere, expireOrderReservation, isInventoryConflict,
+  lockOrderInventory as lockOrder, orderTransaction,
+} from './inventoryService.js';
 import provider, { DarajaError } from './mpesaService.js';
 import { dispatchNotifications, enqueueNotification } from './notificationService.js';
 
@@ -72,14 +76,79 @@ function ensurePayable(order, config) {
   validatePaymentMode(order, config);
   if (!order.quoteId || order.paymentStatus !== 'PENDING' || order.status !== 'PENDING' ||
     order.reservationStatus !== 'HELD' || !order.reservationExpiresAt || order.reservationExpiresAt <= new Date()) {
-    throw paymentError(409, 'ORDER_NOT_PAYABLE', 'This order is not awaiting payment on an active reservation.');
+    throw paymentError(409, 'ORDER_NOT_PAYABLE', NOT_AWAITING_PAYMENT);
   }
   return validateMpesaAmount(order.total, config.maxAmount);
 }
 
+/* ------------------------------------------------------------------ */
+/* Demonstration payments: sample orders only, no money, no provider   */
+/* ------------------------------------------------------------------ */
+
+const NOT_AWAITING_PAYMENT = 'This order is not awaiting payment on an active reservation.';
+const NOT_SAMPLES = 'An item on this order is no longer an available sample product, so a demonstration payment cannot be recorded.';
+const OPEN_ATTEMPT = 'An M-Pesa payment for this order is still open. Check it instead of paying another way.';
+const DEMONSTRATION_PAID = 'Demonstration payment recorded; no money was taken. Awaiting fulfilment.';
+const PAYABLE_ITEMS = { items: { include: { variant: { include: { product: true } } } } };
+
+/** Every item is a sample product still offered as ordered: M-Pesa initiation's item check, for samples only. */
+const samplesOnly = (order) => order.items.length > 0 && order.items.every((item) =>
+  item.variant && item.variant.productId === item.productId && item.variant.isActive &&
+  item.variant.product.isActive && !item.variant.product.deletedAt && item.variant.product.isDemo === true);
+
+/** Unpaid, with its stock on hold; whether the hold has expired is checked separately. */
+const pendingOnHold = (order) => order.status === 'PENDING' && order.paymentStatus === 'PENDING' &&
+  order.reservationStatus === 'HELD' && order.reservationExpiresAt !== null;
+const hasOpenAttempt = (attempts) => attempts.some((attempt) => UNSETTLED.includes(attempt.status));
+
+/** Why a demonstration payment cannot be recorded now, or null when it can: the payment's own preconditions. */
+function demonstrationRefusal(order, samples, attempts, now = new Date()) {
+  if (!samples || !pendingOnHold(order) || order.reservationExpiresAt <= now) return 'ORDER_NOT_PAYABLE';
+  return hasOpenAttempt(attempts) ? 'PAYMENT_EXISTS' : null;
+}
+
+/**
+ * Records a demonstration payment for the customer's own sample order: it commits the held stock and marks the order
+ * paid, with no money, no provider call, no M-Pesa record and no payment email. Repeating it once it succeeded changes
+ * nothing. An expired hold is expired and the expiry kept, then the payment is refused.
+ */
+export async function payWithDemonstration(userId, orderId) {
+  const outcome = await orderTransaction(async (db) => {
+    const scope = demonstrationOrderWhere(userId);
+    if (!scope) throw paymentError(404, 'ORDER_NOT_FOUND', 'Order not found.');
+    await lockOrder(db, orderId);
+    const order = await db.order.findFirst({ where: { id: orderId, ...scope }, include: PAYABLE_ITEMS });
+    if (!order) throw paymentError(404, 'ORDER_NOT_FOUND', 'Order not found.');
+    // Already paid this way: a repeat answers unchanged, even after a product was retired.
+    if (order.paymentStatus === 'PAID' && order.paymentMethod === 'DEMONSTRATION') return { changed: false };
+    if (!samplesOnly(order)) throw paymentError(409, 'ORDER_NOT_PAYABLE', NOT_SAMPLES);
+    if (!pendingOnHold(order)) throw paymentError(409, 'ORDER_NOT_PAYABLE', NOT_AWAITING_PAYMENT);
+    const now = new Date();
+    if (order.reservationExpiresAt <= now) {
+      // Returned rather than thrown, so the expiry and its released stock are committed.
+      await expireOrderReservation(db, order.id, now);
+      return { refused: true };
+    }
+    const attempts = await db.mpesaPayment.findMany({ where: { orderId: order.id }, select: { status: true } });
+    if (hasOpenAttempt(attempts)) throw paymentError(409, 'PAYMENT_EXISTS', OPEN_ATTEMPT);
+    await commitOrderReservation(db, order.id, now);
+    await db.order.update({ where: { id: order.id }, data: {
+      paymentStatus: 'PAID', paymentMethod: 'DEMONSTRATION',
+      trackingHistory: { create: {
+        status: order.status, description: DEMONSTRATION_PAID, location: DEMONSTRATION_LOCATION,
+        actorType: 'DEMONSTRATION', actorId: userId,
+      } },
+    } });
+    return { changed: true };
+  });
+  if (outcome.refused) throw paymentError(409, 'ORDER_NOT_PAYABLE', NOT_AWAITING_PAYMENT);
+  return outcome;
+}
+
 export async function orderPayments(orderId, userId, staff = false) {
-  let order = await prisma.order.findFirst({ where: { id: orderId, ...(!staff && { userId }) } });
+  let order = await prisma.order.findFirst({ where: { id: orderId, ...(!staff && { userId }) }, include: PAYABLE_ITEMS });
   if (!order) throw paymentError(404, 'ORDER_NOT_FOUND', 'Order not found.');
+  const samples = samplesOnly(order);
   if (order.status === 'PENDING' && order.paymentStatus === 'PENDING' &&
     order.reservationStatus === 'HELD' && order.reservationExpiresAt <= new Date()) {
     order = await transaction((db) => expireOrderReservation(db, order.id));
@@ -102,13 +171,17 @@ export async function orderPayments(orderId, userId, staff = false) {
     reasonCode = error.code;
     message = error.message;
   }
+  // Offered only for sample orders where sample orders are enabled, on the payment's own preconditions.
+  const demonstrationCode = order.isDemo && demoOrdersEnabled() ? demonstrationRefusal(order, samples, payments) : undefined;
   return {
     order: {
       id: order.id, orderNumber: order.orderNumber, total: moneyNumber(order.total),
-      status: order.status, paymentStatus: order.paymentStatus, reservationStatus: order.reservationStatus,
+      status: order.status, paymentStatus: order.paymentStatus, paymentMethod: order.paymentMethod,
+      reservationStatus: order.reservationStatus,
       reservationExpiresAt: order.reservationExpiresAt?.toISOString() ?? null, isDemo: order.isDemo,
     },
     available, environment, reasonCode, message, attempts: payments.map(paymentDto),
+    demonstration: demonstrationCode === undefined ? null : { available: demonstrationCode === null, reasonCode: demonstrationCode },
   };
 }
 

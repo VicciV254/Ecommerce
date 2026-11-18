@@ -66,7 +66,7 @@ beforeEach(() => {
   state.catalog = {
     status: "ready", error: null, mode: "demo", products: snapshot.products,
     productsById: new Map(snapshot.products.map((product) => [product.id, product])), categories: buildCategoryTree(snapshot.categories),
-    designers: [], discounts: [], returnPolicy: snapshot.returnPolicy, delivery: snapshot.delivery, reload: () => undefined,
+    designers: [], discounts: [], returnPolicy: snapshot.returnPolicy, delivery: snapshot.delivery, demonstrationOrders: false, reload: () => undefined,
   };
   vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
   window.matchMedia = vi.fn().mockReturnValue({ matches: false, addEventListener: () => undefined, removeEventListener: () => undefined });

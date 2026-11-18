@@ -167,7 +167,11 @@ export function parseCatalogSnapshot(data: unknown, modes: readonly CatalogSnaps
   if (!Array.isArray(discounts) || !discounts.every(isDiscount)) throw new CatalogFormatError("discounts");
   if (!isCatalogReturnPolicy(returnPolicy)) throw new CatalogFormatError("return policy");
   if (!isDeliveryList(delivery)) throw new CatalogFormatError("delivery");
-  return { version: 2, mode, products: products.map(withProductMediaDefaults), categories, designers, discounts, returnPolicy, delivery };
+  if (typeof data.demonstrationOrders !== "boolean") throw new CatalogFormatError("demonstration orders");
+  return {
+    version: 2, mode, demonstrationOrders: data.demonstrationOrders,
+    products: products.map(withProductMediaDefaults), categories, designers, discounts, returnPolicy, delivery,
+  };
 }
 
 /** A version as the API issues it (`Date#toISOString()`); the server compares the one sent back exactly. */

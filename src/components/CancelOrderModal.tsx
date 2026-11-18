@@ -1,7 +1,7 @@
 import { useId, useState } from "react";
 import { ordersAPI, type CustomerOrder } from "../api/orders";
 import { apiErrorCode, describeApiError } from "../api/errors";
-import { cancellationRefund } from "../store/orderCopy";
+import { cancellationRefund, isDemonstrationOrder } from "../store/orderCopy";
 import { OrderFormatError, parseCustomerOrder } from "../store/orderModel";
 import { formatKES } from "../utils/format";
 import { ModalDialog } from "./Modal";
@@ -12,13 +12,17 @@ const CONFLICTS: Record<string, string> = {
   PAYMENT_REVIEW_REQUIRED: "This order cannot be cancelled while its payment is under review.",
 };
 
-/** What happens to the payment, in the customer's words; never a claim that money was sent. */
-function cancellationText(order: Pick<CustomerOrder, "orderNumber" | "paymentStatus" | "total">) {
+/**
+ * What happens to the payment, in the customer's words; never a claim that money was sent. A demonstration payment's
+ * refund sends no email, so none is promised.
+ */
+function cancellationText(order: Pick<CustomerOrder, "orderNumber" | "paymentStatus" | "paymentMethod" | "total">) {
+  const email = isDemonstrationOrder(order) ? "" : "; we will email you when it is sent";
   switch (cancellationRefund(order.paymentStatus)) {
     case "full":
-      return `Order ${order.orderNumber} is paid. If you cancel, a refund request for the full amount (${formatKES(order.total)}, including delivery) will be recorded; we will email you when it is sent.`;
+      return `Order ${order.orderNumber} is paid. If you cancel, a refund request for the full amount (${formatKES(order.total)}, including delivery) will be recorded${email}.`;
     case "remaining":
-      return `Part of your payment for order ${order.orderNumber} has already been refunded. If you cancel, a refund request for the remaining paid balance will be recorded; we will email you when it is sent.`;
+      return `Part of your payment for order ${order.orderNumber} has already been refunded. If you cancel, a refund request for the remaining paid balance will be recorded${email}.`;
     case "settled":
       return `Your payment for order ${order.orderNumber} has already been refunded, so cancelling records no further refund. Any items held for it will be released.`;
     default:
@@ -28,7 +32,7 @@ function cancellationText(order: Pick<CustomerOrder, "orderNumber" | "paymentSta
 
 /** Customer cancellation before dispatch. A paid order records a refund request; it never claims money was sent. */
 export default function CancelOrderModal({ order, onClose, onOrderCancelled, onConflict }: {
-  order: Pick<CustomerOrder, "id" | "orderNumber" | "paymentStatus" | "total">;
+  order: Pick<CustomerOrder, "id" | "orderNumber" | "paymentStatus" | "paymentMethod" | "total">;
   onClose: () => void;
   onOrderCancelled: (order: CustomerOrder) => void;
   /** Reloads the order after a refusal that means it changed; resolves `false` when it could not be reloaded. */

@@ -295,6 +295,11 @@ test('staff decisions and receipt restock exactly once and request a whole-KES r
   // (1000 + 1012.50) x 1.16 = 2334.50, rounded up; no delivery fee without a confirmed fault.
   assert.deepEqual(refunds.map((refund) => [refund.source, Number(refund.amount), refund.includesDeliveryFee, refund.status]),
     [['RETURN', 2335, false, 'REQUESTED']]);
+  // Staff wording in the stored history is the staff's own (the demonstration has its own wording).
+  const number = requested.data.returnRequest.number;
+  const told = (await prisma.trackingEvent.findMany({ where: { orderId: placed.id, actorType: 'STAFF' } })).map((event) => event.description);
+  for (const sentence of [`Return ${number} approved; staff will arrange the return.`, `Return ${number} received and inspected; refund of KES 2,335 requested.`,
+    `Refund ${refunds[0].number} of KES 2,335 requested; no money has been sent yet.`]) assert.ok(told.includes(sentence), `${sentence} in ${told}`);
   const own = (await call(`/orders/${placed.id}`, { token: person.token })).data;
   assert.equal(own.returns[0].status, 'RECEIVED');
   assert.equal(own.returns[0].inspectionNote, 'Both unopened');

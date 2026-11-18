@@ -25,7 +25,7 @@ export const MODULE_ACCESS: Readonly<Record<AdminModuleId, Access>> = {
   dashboard: { read: EVERY_ROLE, write: NOBODY },
   // Exports are built in the browser from the sales report read (analyticsRoutes.js:17).
   analytics: { read: EVERY_ROLE, write: NOBODY },
-  // orderRoutes.js:28 staffRead (lines 35-38: lists and one order), :29 staffWrite (lines 39-44: actions, returns,
+  // orderRoutes.js:33 staffRead (lines 40-43: lists and one order), :34 staffWrite (lines 44-49: actions, returns,
   // refunds); mpesaRoutes.js:8 reads payments for all three, :9 lets writers query M-Pesa; admin.js:32-33 attention
   // list and "mark read" (any staff), :34 email retry (writers).
   orders: { read: EVERY_ROLE, write: WRITERS },

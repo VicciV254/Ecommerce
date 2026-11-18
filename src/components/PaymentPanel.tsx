@@ -2,7 +2,8 @@ import { useId, useLayoutEffect, useRef, useState, type FocusEvent, type FormEve
 import type { PaymentAttempt, PaymentEnvironment, PaymentOrderSummary } from "../api/mpesa";
 import type { OrderStatus } from "../api/orders";
 import { useAuth } from "../contexts/AuthContext";
-import { attemptStage, isOpenAttempt, staffGuidance, type AttemptStage } from "../store/paymentModel";
+import { paymentMethodLabel } from "../store/orderCopy";
+import { attemptStage, isDemonstrationPaid, isOpenAttempt, staffGuidance, type AttemptStage } from "../store/paymentModel";
 import { useCustomerPayment, useStaffPayment, type PaymentBusy, type PaymentNotice } from "../store/useOrderPayment";
 import { formatDateTime, formatKES } from "../utils/format";
 
@@ -19,6 +20,7 @@ const BUSY_TEXT: Record<PaymentBusy, string> = {
   sending: "Requesting your M-Pesa prompt…",
   checking: "Checking this payment with M-Pesa…",
   watching: "",
+  paying: "Recording the demonstration payment…",
 };
 
 /** Returns focus to the panel heading when an update removes the control that had it, and only then. */
@@ -43,10 +45,14 @@ function useFocusRescue() {
   };
 }
 
-/** Labelled region with alert and status areas that stay mounted, so updates are announced where they happen. */
-function PanelFrame({ title, level, busy, notice, children }: {
+/**
+ * Labelled region with alert and status areas that stay mounted, so updates are announced where they happen. Framed,
+ * it is a card of its own; unframed, a section in the flow of the card around it (a hairline, not a card in a card).
+ */
+function PanelFrame({ title, level, framed = true, busy, notice, children }: {
   title: string;
   level: HeadingLevel;
+  framed?: boolean;
   busy: PaymentBusy | null;
   notice: PaymentNotice | null;
   children: ReactNode;
@@ -57,7 +63,8 @@ function PanelFrame({ title, level, busy, notice, children }: {
   const status = busy ? BUSY_TEXT[busy] : notice && notice.tone !== "error" ? notice.text : "";
   return (
     <section aria-labelledby={titleId} onFocus={focus.onFocus} onBlur={focus.onBlur}
-      className="@container rounded-lg border border-divider bg-surface p-4 text-left text-navy-800 shadow-card [overflow-wrap:anywhere] sm:p-6">
+      className={`@container text-left text-navy-800 [overflow-wrap:anywhere] ${framed
+        ? "rounded-lg border border-divider bg-surface p-4 shadow-card sm:p-6" : "border-t border-divider pt-5"}`}>
       <Heading id={titleId} ref={focus.heading} tabIndex={-1} className="type-h3 text-navy-900">
         {title}
       </Heading>
@@ -198,30 +205,39 @@ function stageText(attempt: PaymentAttempt, stage: CustomerStage, orderStatus: O
   }
 }
 
+/** A demonstration payment took no money; what the order waits for next. */
+const demonstrationPaidText = (orderStatus: OrderStatus) => `No money was taken. ${orderStatus === "PENDING"
+  ? "Your order is waiting to be prepared."
+  : `Order status: ${orderStatus.replace(/_/g, " ").toLowerCase()}.`}`;
+
 /**
- * The signed-in customer's M-Pesa payment for one order. Nothing is requested until the customer
- * confirms the amount and phone, and the PIN is only ever entered on their phone.
+ * The signed-in customer's payment for one order. Nothing is requested until the customer confirms: a sample order
+ * offers a demonstration payment (no money) first, and M-Pesa takes the amount and phone, with the PIN only ever entered
+ * on the phone.
  */
-export function PaymentPanel({ orderId, onOrderChange, headingLevel = 2 }: {
+export function PaymentPanel({ orderId, onOrderChange, headingLevel = 2, framed = true }: {
   orderId: string;
   /** Receives the server's order summary after each status load, so surrounding text never contradicts it. */
   onOrderChange?: (summary: PaymentOrderSummary) => void;
   headingLevel?: HeadingLevel;
+  /** `false` inside another card (the order dialog): a section of it, not a card in a card. */
+  framed?: boolean;
 }) {
   const { user } = useAuth();
   if (!user) return null;
   // Keyed by account and order: a request, phone number or late answer never reaches another customer.
   return (
     <CustomerPayment key={`${user.id}:${orderId}`} ownerId={user.id} orderId={orderId} defaultPhone={user.phone ?? ""}
-      level={headingLevel} onOrderChange={onOrderChange} />
+      level={headingLevel} framed={framed} onOrderChange={onOrderChange} />
   );
 }
 
-function CustomerPayment({ ownerId, orderId, defaultPhone, level, onOrderChange }: {
+function CustomerPayment({ ownerId, orderId, defaultPhone, level, framed, onOrderChange }: {
   ownerId: string;
   orderId: string;
   defaultPhone: string;
   level: HeadingLevel;
+  framed: boolean;
   onOrderChange?: (summary: PaymentOrderSummary) => void;
 }) {
   const payment = useCustomerPayment(ownerId, orderId, onOrderChange);
@@ -238,40 +254,103 @@ function CustomerPayment({ ownerId, orderId, defaultPhone, level, onOrderChange 
   };
 
   let body: ReactNode = <LoadFailure message={payment.loadError} busy={busy} onRetry={() => void payment.refresh(true)} />;
-  if (overview && view?.kind === "payable") {
-    const [amountId, phoneId, hintId, errorId, pinId] = ["amount", "phone", "hint", "error", "pin"].map((part) => `${ids}-${part}`);
-    body = (
+  if (overview && (view?.kind === "payable" || view?.kind === "unavailable")) {
+    const [amountId, phoneId, hintId, errorId, pinId, noMoneyId] = ["amount", "phone", "hint", "error", "pin", "no-money"].map((part) => `${ids}-${part}`);
+    const amount = <Amount id={amountId} label={view.kind === "payable" || view.demonstration ? "Amount to pay" : "Order total"} amount={overview.order.total} />;
+    const mpesa = view.kind === "payable" ? (
+      <form onSubmit={confirm} noValidate className="space-y-3">
+        <div>
+          <label htmlFor={phoneId} className={labelClass}>M-Pesa phone number</label>
+          <input
+            id={phoneId}
+            ref={phoneRef}
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
+            value={phone}
+            aria-invalid={Boolean(payment.phoneError)}
+            aria-describedby={payment.phoneError ? `${hintId} ${errorId}` : hintId}
+            onChange={(event) => { setPhone(event.target.value); payment.editPhone(); }}
+            className={fieldClass}
+          />
+          <p id={hintId} className="mt-1 text-sm text-muted">For example 0712 345 678 or +254 712 345 678.</p>
+          {payment.phoneError && <p id={errorId} role="alert" className="mt-1.5 text-sm font-semibold text-error">{payment.phoneError}</p>}
+        </div>
+        <p id={pinId} className="rounded-md border border-info/30 bg-info-tint p-3 text-sm font-semibold text-info">
+          Enter your M-Pesa PIN only on your phone, in the M-Pesa prompt. Never type it on this website.
+        </p>
+        <button type="submit" aria-disabled={busy} aria-describedby={`${amountId} ${pinId}`} className={primaryClass}>
+          {view.failed ? "Send new M-Pesa prompt" : "Send M-Pesa prompt"}
+        </button>
+      </form>
+    ) : (
+      <div className="space-y-3">
+        <div className="rounded-md border border-divider bg-surface-page p-3">
+          <p className="font-semibold text-navy-900">{view.waiting ? "Try again shortly" : "M-Pesa payment unavailable"}</p>
+          <p className="mt-1">{view.message}</p>
+        </div>
+        {view.waiting && <ActionButton busy={busy} onPress={() => void payment.refresh(true)}>Check again</ActionButton>}
+      </div>
+    );
+    body = view.demonstration ? (
+      <>
+        {/* The demonstration payment comes first; M-Pesa, for approved test numbers only, waits in a closed disclosure. */}
+        <div className={columnsClass}>
+          {amount}
+          <div className="space-y-2">
+            <ActionButton busy={busy} onPress={() => void payment.payWithDemonstration()} className={primaryClass} describedBy={`${amountId} ${noMoneyId}`}>
+              {/* Soft hyphens let the uppercase word break as "DEMON-STRA-TION" at enlarged text on a narrow phone. */}
+              Pay with a demon&shy;stra&shy;tion payment
+            </ActionButton>
+            <p id={noMoneyId} className="text-sm text-navy-800">No money is taken and no phone prompt is sent.</p>
+          </div>
+        </div>
+        {/* A section of the panel under a hairline, not a bordered box inside it. */}
+        <details className="group mt-4 border-t border-divider">
+          <summary className="flex min-h-[44px] cursor-pointer list-none items-center justify-between gap-3 py-2 font-semibold text-navy-900 hover:text-link [&::-webkit-details-marker]:hidden">
+            <span className="min-w-0">Pay with M-Pesa sandbox instead</span>
+            <svg aria-hidden="true" viewBox="0 0 20 20" fill="currentColor" className="size-5 shrink-0 transition-transform duration-(--motion-feedback) group-open:rotate-180 motion-reduce:transition-none">
+              <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.17l3.71-3.94a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clipRule="evenodd" />
+            </svg>
+          </summary>
+          <div className="space-y-3 pt-2">
+            <EnvironmentLabel environment={overview.environment} />
+            {overview.environment === "sandbox" && <p className="text-sm text-navy-800">Prompts can only be sent to approved test numbers.</p>}
+            {view.failed && <FailedAttempt attempt={view.failed} />}
+            {mpesa}
+          </div>
+        </details>
+      </>
+    ) : (
       <div className={columnsClass}>
         <div className="space-y-3">
-          <Amount id={amountId} label="Amount to pay" amount={overview.order.total} />
+          {amount}
           <EnvironmentLabel environment={overview.environment} />
-          {view.failed && <FailedAttempt attempt={view.failed} />}
+          {view.kind === "payable" && view.failed && <FailedAttempt attempt={view.failed} />}
         </div>
-        <form onSubmit={confirm} noValidate className="space-y-3">
-          <div>
-            <label htmlFor={phoneId} className={labelClass}>M-Pesa phone number</label>
-            <input
-              id={phoneId}
-              ref={phoneRef}
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel"
-              value={phone}
-              aria-invalid={Boolean(payment.phoneError)}
-              aria-describedby={payment.phoneError ? `${hintId} ${errorId}` : hintId}
-              onChange={(event) => { setPhone(event.target.value); payment.editPhone(); }}
-              className={fieldClass}
-            />
-            <p id={hintId} className="mt-1 text-sm text-muted">For example 0712 345 678 or +254 712 345 678.</p>
-            {payment.phoneError && <p id={errorId} role="alert" className="mt-1.5 text-sm font-semibold text-error">{payment.phoneError}</p>}
+        <div className="space-y-3">
+          {view.kind === "unavailable" && view.failed && <FailedAttempt attempt={view.failed} />}
+          {mpesa}
+        </div>
+      </div>
+    );
+  } else if (overview && view?.kind === "demonstration-paid") {
+    body = (
+      <div className={columnsClass}>
+        <Amount label="Order total" amount={overview.order.total} />
+        <div className="space-y-3">
+          <div aria-live="polite" className={`rounded-md border p-3 ${STAGE_TONES.paid}`}>
+            <p className="font-semibold text-navy-900 hyphenate-long-words">Paid with a demonstration payment</p>
+            <p className="mt-1">{demonstrationPaidText(overview.order.status)}</p>
           </div>
-          <p id={pinId} className="rounded-md border border-info/30 bg-info-tint p-3 text-sm font-semibold text-info">
-            Enter your M-Pesa PIN only on your phone, in the M-Pesa prompt. Never type it on this website.
-          </p>
-          <button type="submit" aria-disabled={busy} aria-describedby={`${amountId} ${pinId}`} className={primaryClass}>
-            {view.failed ? "Send new M-Pesa prompt" : "Send M-Pesa prompt"}
-          </button>
-        </form>
+          {view.attempt && (
+            <div className={`rounded-md border p-3 ${STAGE_TONES["received-review"]}`}>
+              <p className="font-semibold text-navy-900">{STAGE_TITLES["received-review"]}</p>
+              <p className="mt-1">{stageText(view.attempt, "received-review", overview.order.status)}</p>
+              <div className="mt-2"><AttemptDetails attempt={view.attempt} /></div>
+            </div>
+          )}
+        </div>
       </div>
     );
   } else if (overview && view?.kind === "unresolved") {
@@ -324,26 +403,11 @@ function CustomerPayment({ ownerId, orderId, defaultPhone, level, onOrderChange 
         </div>
       </div>
     );
-  } else if (overview && view?.kind === "unavailable") {
-    body = (
-      <div className={columnsClass}>
-        <div className="space-y-3">
-          <Amount label="Order total" amount={overview.order.total} />
-          <EnvironmentLabel environment={overview.environment} />
-        </div>
-        <div className="space-y-3">
-          {view.failed && <FailedAttempt attempt={view.failed} />}
-          <div className="rounded-md border border-divider bg-surface-page p-3">
-            <p className="font-semibold text-navy-900">{view.waiting ? "Try again shortly" : "M-Pesa payment unavailable"}</p>
-            <p className="mt-1">{view.message}</p>
-          </div>
-          {view.waiting && <ActionButton busy={busy} onPress={() => void payment.refresh(true)}>Check again</ActionButton>}
-        </div>
-      </div>
-    );
   }
 
-  return <PanelFrame title="Pay with M-Pesa" level={level} busy={payment.busy} notice={payment.notice}>{body}</PanelFrame>;
+  // A sample order can be paid another way, so the panel is about payment, not just M-Pesa.
+  const title = overview?.demonstration ? "Payment" : "Pay with M-Pesa";
+  return <PanelFrame title={title} level={level} framed={framed} busy={payment.busy} notice={payment.notice}>{body}</PanelFrame>;
 }
 
 const STAFF_STAGES: Record<AttemptStage, string> = {
@@ -392,13 +456,16 @@ function StaffPayment({ orderId, canCheck, level, attemptActions }: {
           <dd className="font-semibold">{formatKES(order.total)}</dd>
           <dt className="text-muted">Payment status</dt>
           <dd className="font-semibold">{order.paymentStatus}</dd>
+          <dt className="text-muted">Payment method</dt>
+          <dd>{paymentMethodLabel(order.paymentMethod)}</dd>
           <dt className="text-muted">Reservation</dt>
           <dd>{order.reservationStatus}{order.reservationExpiresAt ? ` until ${formatDateTime(order.reservationExpiresAt)}` : ""}</dd>
           <dt className="text-muted">Environment</dt>
           <dd>{overview.environment ?? "Not configured"}</dd>
         </dl>
         <p className="rounded-md bg-surface-page p-3 text-sm">
-          {overview.available ? "The customer can request a new M-Pesa prompt." : `No new prompt: ${overview.message ?? "not available"}`}
+          {isDemonstrationPaid(order) ? "Paid with a demonstration payment: no money was taken and there is nothing to collect."
+            : overview.available ? "The customer can request a new M-Pesa prompt." : `No new prompt: ${overview.message ?? "not available"}`}
         </p>
         {overview.attempts.length ? (
           <ol aria-label="M-Pesa attempts, newest first" className="grid gap-3 @3xl:grid-cols-2">

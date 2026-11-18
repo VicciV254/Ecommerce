@@ -4,7 +4,7 @@ import { Breadcrumb, Container } from "../components/ui";
 import { Link, useEntryFocus } from "../router";
 import { useCatalog } from "../store/CatalogContext";
 import { usePageTitle, useStorefront } from "../store/StorefrontContext";
-import { SHOPPING_FACTS, deliveryFact, returnsFact } from "../store/shoppingFacts";
+import { SHOPPING_FACTS, deliveryFact, paymentFact, returnsFact } from "../store/shoppingFacts";
 
 const primaryAction =
   "inline-flex min-h-[44px] items-center justify-center rounded-sm bg-navy-900 px-6 text-xs font-bold uppercase tracking-[0.12em] text-white transition-colors duration-(--motion-feedback) hover:bg-gold-500 hover:text-navy-900";
@@ -16,13 +16,16 @@ export default function About() {
   usePageTitle(`About · ${brandName}`);
   const heading = useRef<HTMLHeadingElement>(null);
   useEntryFocus(heading);
-  const { returnPolicy, delivery } = useCatalog();
+  const { returnPolicy, delivery, demonstrationOrders } = useCatalog();
   // Delivery and returns are summarised here; their own pages have the details.
   const facts = [
     { title: "Prices and VAT", text: SHOPPING_FACTS.vat },
     { title: "Delivery", text: deliveryFact(delivery), more: { to: "/delivery", label: "See Delivery" } },
-    { title: "Payment", text: SHOPPING_FACTS.payment },
-    { title: "Returns", text: returnsFact(returnPolicy?.windowDays ?? null), more: { to: "/returns", label: "See Returns and refunds" } },
+    { title: "Payment", text: paymentFact(demonstrationOrders) },
+    {
+      title: "Returns", text: returnsFact(returnPolicy?.windowDays ?? null, demonstrationOrders),
+      more: { to: "/returns", label: "See Returns and refunds" },
+    },
   ];
 
   return (

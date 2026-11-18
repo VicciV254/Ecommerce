@@ -45,6 +45,15 @@ describe("catalog snapshot boundary", () => {
     expect(() => parseCatalogSnapshot(broken, ["demo"])).toThrow(/products/);
   });
 
+  it("says whether sample orders can be paid with a demonstration payment, and requires the answer", () => {
+    expect(parseCatalogSnapshot(fixtureSnapshot({ demonstrationOrders: true }), ["demo"]).demonstrationOrders).toBe(true);
+    expect(parseCatalogSnapshot(fixtureSnapshot(), ["demo"]).demonstrationOrders).toBe(false);
+    expect(parseAdminCatalogSnapshot(fixtureAdminSnapshot({ demonstrationOrders: true })).demonstrationOrders).toBe(true);
+    for (const value of [undefined, "true", 1, null]) {
+      expect(() => parseCatalogSnapshot({ ...fixtureSnapshot(), demonstrationOrders: value }, ["demo"])).toThrow(/demonstration orders/);
+    }
+  });
+
   it("carries each product's return rule and the catalog's return terms, rejecting unknown or missing ones", () => {
     const snapshot = fixtureSnapshot({ products: [{ ...linenShirt, returnRule: "UNOPENED_OR_FAULT" }] });
     const parsed = parseCatalogSnapshot(snapshot, ["demo"]);

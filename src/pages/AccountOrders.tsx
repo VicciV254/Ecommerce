@@ -9,23 +9,26 @@ import { formatDateTime, formatKES } from "../utils/format";
 import { DELIVERY_LABELS } from "../store/checkoutModel";
 import { OrderFormatError, parseCustomerOrder, parseCustomerOrderPage } from "../store/orderModel";
 import {
+  REFUND_METHOD_LABELS,
   REFUND_SOURCE_TEXT,
   RETURN_REASON_LABELS,
-  RETURN_STATUS_TEXT,
   cancellationNotice,
   cancellationRequestsRefund,
   customerName,
   deliveryAddress,
   paymentLabel,
   refundStatusText,
+  returnFaultText,
   returnNotice,
   returnRuleText,
+  returnStatusText,
   returnWindowText,
 } from "../store/orderCopy";
 import { withPaymentSummary } from "../store/paymentModel";
 import { printReceipt } from "../utils/printReceipt";
 import { useStorefront } from "../store/StorefrontContext";
 import CancelOrderModal from "../components/CancelOrderModal";
+import DemonstrationControls from "../components/DemonstrationControls";
 import ReturnOrderModal from "../components/ReturnOrderModal";
 import { ConfirmModal, ModalDialog } from "../components/Modal";
 import { ResponsiveImage } from "../components/ui";
@@ -84,7 +87,7 @@ function orderNotes(order: CustomerOrder): string[] {
   const refund = order.refunds.find((item) => item.status !== "CANCELLED");
   if (refund) notes.push(`Refund of ${formatKES(refund.amount)}: ${refundStatusText(refund)}.`);
   const open = order.returns.find((item) => item.status === "REQUESTED" || item.status === "APPROVED");
-  if (open) notes.push(`Return ${open.number}: ${RETURN_STATUS_TEXT[open.status]}.`);
+  if (open) notes.push(`Return ${open.number}: ${returnStatusText(open.status, order)}.`);
   if (order.status === "DELIVERED") {
     const windowNote = returnWindowText(order.returnEligibility);
     if (windowNote) notes.push(windowNote);
@@ -183,14 +186,20 @@ function OrderCard({ order, onDetails, onReceipt, onCancel, onReturn }: {
   );
 }
 
-function CustomerReturns({ returns, onWithdraw }: { returns: OrderReturn[]; onWithdraw: (item: OrderReturn) => void }) {
+/** Records are rows of their disclosure's list, divided by hairlines, not cards inside its box. */
+const recordListClass = "divide-y divide-divider";
+const recordClass = "py-3 first:pt-0 last:pb-0";
+
+/** A sample order's returns are approved and received in the demonstration, so their wording says so. */
+function CustomerReturns({ order, onWithdraw }: { order: Pick<CustomerOrder, "returns" | "isDemo">; onWithdraw: (item: OrderReturn) => void }) {
   return (
-    <ul className="space-y-3">
-      {returns.map((item) => (
-        <li key={item.id} className="rounded-md border border-divider p-3">
+    <ul className={recordListClass}>
+      {order.returns.map((item) => (
+        <li key={item.id} className={recordClass}>
           <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
             <p className="font-mono text-sm font-bold text-navy-900">{item.number}</p>
-            <p className="text-sm font-semibold text-navy-900">{RETURN_STATUS_TEXT[item.status]}</p>
+            {/* "…in the demonstration" can't fit a phone column at 200% text; it breaks at a syllable instead. */}
+            <p className="text-sm font-semibold text-navy-900 hyphenate-long-words">{returnStatusText(item.status, order)}</p>
           </div>
           <p className="text-sm text-muted">
             Requested {formatDateTime(item.requestedAt)} · {RETURN_REASON_LABELS[item.reason]}{item.unopenedDeclared ? " · declared unopened" : ""}
@@ -207,7 +216,7 @@ function CustomerReturns({ returns, onWithdraw }: { returns: OrderReturn[]; onWi
           {item.decisionNote && <p className="mt-2 text-sm">Note from staff: {item.decisionNote}</p>}
           {item.inspectionNote && <p className="mt-2 text-sm">Inspection note: {item.inspectionNote}</p>}
           {item.status === "RECEIVED" && item.merchantFaultConfirmed !== null && (
-            <p className="mt-2 text-sm">{item.merchantFaultConfirmed ? "Staff confirmed the item was faulty, damaged or wrong." : "Staff did not find a fault."}</p>
+            <p className="mt-2 text-sm">{returnFaultText(item.merchantFaultConfirmed, order)}</p>
           )}
           {item.status === "REQUESTED" && (
             <button type="button" onClick={() => onWithdraw(item)} className={`mt-3 ${quietButton}`}>
@@ -222,14 +231,15 @@ function CustomerReturns({ returns, onWithdraw }: { returns: OrderReturn[]; onWi
 
 function CustomerRefunds({ order }: { order: CustomerOrder }) {
   return (
-    <ul className="space-y-3">
+    <ul className={recordListClass}>
       {order.refunds.map((refund) => (
-        <li key={refund.id} className="rounded-md border border-divider p-3">
+        <li key={refund.id} className={recordClass}>
           <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
             <p className="font-semibold tabular-nums text-navy-900">{formatKES(refund.amount)}</p>
             <p className="text-sm text-muted">{REFUND_SOURCE_TEXT[refund.source]}</p>
           </div>
           <p className="mt-1 text-sm">{refundStatusText(refund)}</p>
+          {refund.method === "DEMONSTRATION" && <p className="text-sm text-muted">{REFUND_METHOD_LABELS.DEMONSTRATION}</p>}
           <p className="text-sm text-muted">
             Requested {formatDateTime(refund.requestedAt)}{refund.includesDeliveryFee ? " · includes the delivery fee" : ""}
           </p>
@@ -240,7 +250,7 @@ function CustomerRefunds({ order }: { order: CustomerOrder }) {
 }
 
 /** Receipt with summary, payment and the next permitted action first; history, returns and refunds are disclosed. */
-function OrderDetails({ order, user, notice, closeRef, onClose, onCancel, onReturn, onWithdraw, onPaymentSummary, onPrint }: {
+function OrderDetails({ order, user, notice, closeRef, onClose, onCancel, onReturn, onWithdraw, onPaymentSummary, onOrderChange, onRefresh, onPrint }: {
   order: CustomerOrder;
   user: User | null;
   notice: Notice | null;
@@ -250,6 +260,10 @@ function OrderDetails({ order, user, notice, closeRef, onClose, onCancel, onRetu
   onReturn: () => void;
   onWithdraw: (item: OrderReturn) => void;
   onPaymentSummary: (summary: PaymentOrderSummary) => void;
+  /** Shows the order a demonstration step returned. */
+  onOrderChange: (order: CustomerOrder) => void;
+  /** Reloads this order; resolves `false` when it could not be reloaded. */
+  onRefresh: () => Promise<boolean>;
   onPrint: () => void;
 }) {
   const { policy } = order.returnEligibility;
@@ -286,9 +300,14 @@ function OrderDetails({ order, user, notice, closeRef, onClose, onCancel, onRetu
         {/* Only quote-based orders can be paid online; one panel, for the open receipt only, at full width. */}
         {order.quoteId && (
           <div className="mt-5">
-            <PaymentPanel key={order.status} orderId={order.id} onOrderChange={onPaymentSummary} headingLevel={4} />
+            <PaymentPanel key={order.status} orderId={order.id} onOrderChange={onPaymentSummary} headingLevel={4} framed={false} />
           </div>
         )}
+
+        {/* Shown only while the server lists steps, or to report the last one; the wrapper collapses when it is not. */}
+        <div className="mt-5 empty:hidden">
+          <DemonstrationControls key={order.id} order={order} onOrderChange={onOrderChange} onRefresh={onRefresh} />
+        </div>
 
         <div className="mt-5 grid gap-5 md:grid-cols-2 md:items-start">
           <section aria-label="Order details" className="space-y-4">
@@ -328,7 +347,7 @@ function OrderDetails({ order, user, notice, closeRef, onClose, onCancel, onRetu
             </Disclosure>
             {order.returns.length > 0 && (
               <Disclosure title="Returns" summary={String(order.returns.length)}>
-                <CustomerReturns returns={order.returns} onWithdraw={onWithdraw} />
+                <CustomerReturns order={order} onWithdraw={onWithdraw} />
               </Disclosure>
             )}
             {order.refunds.length > 0 && (
@@ -561,6 +580,8 @@ function AccountOrdersContent({ user, requestedId }: { user: User | null; reques
           onReturn={() => setReturnId(selected.id)}
           onWithdraw={(item) => setWithdrawal({ orderId: selected.id, item })}
           onPaymentSummary={applyPaymentSummary}
+          onOrderChange={applyUpdatedOrder}
+          onRefresh={() => refreshOrder(selected.id)}
           onPrint={() => printReceipt(selected, user, brandName)}
         />
       )}

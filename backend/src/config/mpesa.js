@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { isIP } from 'node:net';
 import { decimal } from '../utils/money.js';
+import { demonstrationStore } from './checkoutPolicy.js';
 
 export function paymentError(statusCode, code, message) {
   return Object.assign(new Error(message), { statusCode, code });
@@ -34,6 +35,10 @@ function secret(env, name) {
 }
 
 export function readMpesaConfig(env = process.env) {
+  const demonstration = demonstrationStore(env);
+  if (demonstration && env.MPESA_ENVIRONMENT === 'production') {
+    throw paymentError(503, 'MPESA_CONFIGURATION', 'A demonstration store uses the M-Pesa sandbox only.');
+  }
   if (!flag(env, 'ENABLE_MPESA')) throw paymentError(503, 'MPESA_DISABLED', 'M-Pesa payments are not enabled yet.');
   if (flag(env, 'MPESA_SANDBOX_SIMULATE')) throw paymentError(503, 'MPESA_CONFIGURATION', 'The legacy M-Pesa success simulator is disabled.');
   const environment = env.MPESA_ENVIRONMENT ?? 'sandbox';
@@ -73,7 +78,9 @@ export function readMpesaConfig(env = process.env) {
     baseUrl: environment === 'production' ? 'https://api.safaricom.co.ke' : 'https://sandbox.safaricom.co.ke',
     merchantIdentity: createHash('sha256').update(`${environment}|${shortcode}|${transactionType}`).digest('hex'),
     maxAmount: Number(max), allowedPhones,
-    allowDemo: environment === 'sandbox' && ['development', 'test'].includes(env.NODE_ENV) && flag(env, 'MPESA_ALLOW_DEMO_SANDBOX'),
+    // Sample orders may use the sandbox on a demonstration store, or with the explicit development/test opt-in.
+    allowDemo: environment === 'sandbox' &&
+      (demonstration || (['development', 'test'].includes(env.NODE_ENV) && flag(env, 'MPESA_ALLOW_DEMO_SANDBOX'))),
   };
 }
 

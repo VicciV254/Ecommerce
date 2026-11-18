@@ -1,6 +1,6 @@
 import prisma from '../config/database.js';
 import { storefrontSchema, STOREFRONT_KEY } from '../utils/catalogValidation.js';
-import { checkoutPolicy, offeredDelivery } from '../config/checkoutPolicy.js';
+import { checkoutPolicy, demoOrdersEnabled, demonstrationStore, offeredDelivery } from '../config/checkoutPolicy.js';
 import { effectiveReturnRule, policySnapshot, returnPolicy } from '../config/returnPolicy.js';
 import { unitPrice } from './pricingService.js';
 
@@ -12,7 +12,13 @@ export const availableStock = (stock) => {
   }
   return stock.quantity - stock.reserved;
 };
-export const demoCatalogEnabled = () => process.env.NODE_ENV !== 'production' && process.env.ALLOW_DEMO_CATALOG === 'true';
+export const demoCatalogEnabled = () =>
+  demonstrationStore() || (process.env.NODE_ENV !== 'production' && process.env.ALLOW_DEMO_CATALOG === 'true');
+/** The storefront's sample rule: only samples on a demonstration store, both in a development preview, else live only. */
+const storefrontDemoWhere = () => (demonstrationStore() ? { isDemo: true } : demoCatalogEnabled() ? {} : { isDemo: false });
+export const storefrontShows = (record) => (demonstrationStore() ? record.isDemo === true : demoCatalogEnabled() || !record.isDemo);
+/** Records staff create on a demonstration store are samples, whatever the request says. */
+export const createsSamples = () => demonstrationStore();
 
 export function serializable(operation) {
   return prisma.$transaction(operation, { isolationLevel: 'Serializable', maxWait: 5000, timeout: 20_000 })
@@ -66,7 +72,7 @@ export function productWhere(context, admin = false) {
     deletedAt: null,
     isActive: true,
     categoryId: { in: [...context.visible] },
-    ...(!demoCatalogEnabled() && { isDemo: false }),
+    ...storefrontDemoWhere(),
     variants: { some: { isActive: true } },
     OR: [
       { designerId: null },
@@ -173,6 +179,8 @@ export async function catalogSnapshot(db, admin = false) {
   const products = rows.map((product) => productDto(product, context, admin));
   return {
     version: 2, mode: admin ? 'admin' : demoCatalogEnabled() ? 'demo' : 'live',
+    // Whether sample orders can be placed and paid with a demonstration payment; public wording follows it.
+    demonstrationOrders: demoOrdersEnabled(),
     products, categories: categoryDtos(context, products, admin),
     designers: designers.map(designerDto), discounts: discounts.map(discountDto),
     returnPolicy: (({ hash, ...terms }) => terms)(policySnapshot(returnPolicy())),

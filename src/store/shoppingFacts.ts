@@ -11,6 +11,13 @@ export const SHOPPING_FACTS = {
   payment: "Pay by M-Pesa, approving the payment in the prompt on your phone.",
 } as const;
 
+/**
+ * Payment, by the catalog's `demonstrationOrders`: where sample orders take demonstration payments, that, otherwise
+ * (or until the catalog has loaded) the store's M-Pesa set-up.
+ */
+export const paymentFact = (demonstrationOrders: boolean | null) =>
+  demonstrationOrders === true ? "Sample orders are paid with a demonstration payment; no money is taken." : SHOPPING_FACTS.payment;
+
 /** Delivery, from the methods checkout offers once the catalog has loaded them. */
 export function deliveryFact(delivery: readonly CatalogDelivery[] | null) {
   if (!delivery?.length) return "Delivery fees appear in your total before you reserve the order.";
@@ -23,8 +30,9 @@ export function deliveryFact(delivery: readonly CatalogDelivery[] | null) {
 }
 
 /** Returns, using the window from the published return policy when the catalog has loaded it. */
-export function returnsFact(windowDays: number | null) {
+export function returnsFact(windowDays: number | null, demonstrationOrders: boolean | null = null) {
+  const refunds = demonstrationOrders === true ? "Refunds of demonstration payments move no money." : "Refunds are sent by M-Pesa.";
   return windowDays === null
-    ? "Each product page shows its return rule and window. Refunds are sent by M-Pesa."
-    : `Most items can be returned within ${windowDays} days of delivery; some only if unopened, or if faulty, damaged or wrong. Refunds are sent by M-Pesa.`;
+    ? `Each product page shows its return rule and window. ${refunds}`
+    : `Most items can be returned within ${windowDays} days of delivery; some only if unopened, or if faulty, damaged or wrong. ${refunds}`;
 }

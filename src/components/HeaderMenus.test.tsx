@@ -22,7 +22,7 @@ const categories: CatalogCategory[] = [
 beforeEach(() => {
   state.catalog = {
     status: "ready", error: null, mode: "live", products: [], productsById: new Map(),
-    categories: buildCategoryTree(categories), designers: [], discounts: [], returnPolicy: fixtureReturnPolicy, delivery: fixtureDelivery, reload: vi.fn(),
+    categories: buildCategoryTree(categories), designers: [], discounts: [], returnPolicy: fixtureReturnPolicy, delivery: fixtureDelivery, demonstrationOrders: false, reload: vi.fn(),
   };
   window.location.hash = "#/";
 });

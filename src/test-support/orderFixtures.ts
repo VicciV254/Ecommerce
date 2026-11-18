@@ -54,6 +54,7 @@ export function fixtureCustomerOrder(order: Order, overrides: Partial<CustomerOr
     refunds: [],
     returnEligibility: fixtureEligibility(order),
     customerActions: order.status === "PENDING" || order.status === "PROCESSING" ? ["CANCEL"] : [],
+    demonstrationActions: [],
     ...overrides,
   };
 }
@@ -156,7 +157,9 @@ function staffActionsFor(order: Pick<Order, "status" | "paymentStatus" | "reserv
 }
 
 export function fixtureStaffOrder(order: Order, overrides: Partial<StaffOrder> = {}): StaffOrder {
-  const { trackingHistory: _events, returns: _returns, refunds: _refunds, ...customerView } = fixtureCustomerOrder(order);
+  const {
+    trackingHistory: _events, returns: _returns, refunds: _refunds, demonstrationActions: _ownerSteps, ...customerView
+  } = fixtureCustomerOrder(order);
   return {
     ...customerView,
     user: { id: "customer-1", firstName: "Ada", lastName: "Customer", email: "ada@example.test", phone: null },

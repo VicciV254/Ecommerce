@@ -534,7 +534,8 @@ model TrackingEvent {
   status      OrderStatus
   description String
   location    String?
-  /// CUSTOMER, STAFF, SYSTEM or PROVIDER; staff identity is visible only to staff.
+  /// CUSTOMER, STAFF, SYSTEM, PROVIDER or DEMONSTRATION (a visitor playing the store's part for their own sample
+  /// order); staff identity is visible only to staff.
   actorType   String?
   actorId     String?
   reason      String?
@@ -555,6 +556,8 @@ enum PaymentMethod {
   CARD
   BANK_TRANSFER
   COD
+  /// A sample order paid with a demonstration payment: no money, no provider and no M-Pesa record.
+  DEMONSTRATION
 }
 
 enum PaymentStatus {
@@ -674,6 +677,8 @@ model Refund {
   amount              Decimal        @db.Decimal(14, 2)
   requestedAmount     Decimal        @db.Decimal(14, 2)
   includesDeliveryFee Boolean        @default(false)
+  /// MPESA_MANUAL, or DEMONSTRATION for a refund of a demonstration payment, which moves no money and is confirmed
+  /// without a provider reference (see "Refund_confirmation_check").
   method              String         @default("MPESA_MANUAL")
   reason              String?
   requestedByType     String

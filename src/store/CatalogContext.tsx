@@ -36,10 +36,17 @@ export type CatalogValue = {
   returnPolicy: CatalogReturnPolicy | null;
   /** The delivery methods new orders can use, in order; `null` until the snapshot has loaded. */
   delivery: CatalogDelivery[] | null;
+  /**
+   * Whether sample orders can be placed and paid with a demonstration payment; `null` until the snapshot has loaded.
+   * Public wording about ordering and payment uses the demonstration variant only when this is `true`.
+   */
+  demonstrationOrders: boolean | null;
   reload: () => void;
 };
 
-const EMPTY: Omit<CatalogSnapshot, "returnPolicy" | "delivery"> = { version: 2, mode: "live", products: [], categories: [], designers: [], discounts: [] };
+const EMPTY: Omit<CatalogSnapshot, "returnPolicy" | "delivery" | "demonstrationOrders"> = {
+  version: 2, mode: "live", products: [], categories: [], designers: [], discounts: [],
+};
 
 const CatalogContext = createContext<CatalogValue | null>(null);
 
@@ -63,6 +70,7 @@ function useCatalogValue(state: LoadState, reload: () => void): CatalogValue {
     discounts: snapshot.discounts,
     returnPolicy: state.status === "ready" ? state.snapshot.returnPolicy : null,
     delivery: state.status === "ready" ? state.snapshot.delivery : null,
+    demonstrationOrders: state.status === "ready" ? state.snapshot.demonstrationOrders : null,
     reload,
   }), [state, snapshot, productsById, categories, reload]);
 }

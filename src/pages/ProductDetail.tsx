@@ -153,7 +153,9 @@ export function ProductView({ product, detail, retry, preview }: {
   const specifications = Object.entries(product.specifications);
   const related = catalog.products.filter((item) => item.id !== product.id && inCategory(item, product.categoryId)).slice(0, RELATED_LIMIT);
   const categoryPath = catalog.categories.path(product.categoryId);
-  const returnFact = catalog.returnPolicy ? productReturnFact(product.returnRule, catalog.returnPolicy) : null;
+  const returnFact = catalog.returnPolicy
+    ? productReturnFact(product.returnRule, catalog.returnPolicy, catalog.demonstrationOrders === true && product.isDemo)
+    : null;
   const incomplete = selection.status.kind === "incomplete";
   const hasChoices = selection.options.some((option) => option.kind === "choice");
 

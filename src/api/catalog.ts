@@ -148,6 +148,8 @@ export type CatalogDelivery = {
 export type CatalogSnapshot = {
   version: 2;
   mode: "live" | "demo" | "admin";
+  /** Whether sample orders can be placed and paid with a demonstration payment; public wording follows it. */
+  demonstrationOrders: boolean;
   products: CatalogProduct[];
   categories: CatalogCategory[];
   designers: CatalogDesigner[];

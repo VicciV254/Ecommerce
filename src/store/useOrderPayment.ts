@@ -9,6 +9,7 @@ import {
   type PaymentOverview,
 } from "../api/mpesa";
 import { newIdempotencyKey } from "./checkoutModel";
+import { parseCustomerOrder } from "./orderModel";
 import {
   AUTO_CHECK_HORIZON_MS,
   PHONE_HINT,
@@ -31,7 +32,7 @@ import {
 } from "./paymentModel";
 
 /** `watching` is an automatic check: it blocks other requests but is not announced. */
-export type PaymentBusy = "loading" | "sending" | "checking" | "watching";
+export type PaymentBusy = "loading" | "sending" | "checking" | "watching" | "paying";
 /** Errors are announced as alerts; warnings and information are polite status updates. */
 export type PaymentNotice = { tone: "info" | "warning" | "error"; text: string };
 
@@ -56,6 +57,8 @@ const LOAD_FAILED = "Payment status could not be loaded.";
 const CHECK_FAILED = "The payment status could not be checked.";
 const CHECKED = "Payment status checked just now.";
 const PROMPT_SENT = "M-Pesa prompt requested. Check your phone and enter your PIN there.";
+const DEMONSTRATION_PAID = "Demonstration payment recorded. No money was taken.";
+const DEMONSTRATION_FAILED = "The demonstration payment could not be recorded.";
 const UNSAVED_MESSAGE =
   "This browser could not save your payment request, so no prompt was sent. Check that site storage is available and try again.";
 
@@ -158,7 +161,7 @@ function usePaymentRecord(gateway: Gateway, orderId: string, onLoaded: (overview
     void refresh();
   }, [refresh]);
 
-  return { overview, loadError, busy, notice, setNotice, alive, busyRef, overviewRef, show, reload, exclusive, refresh, check };
+  return { overview, loadError, busy, notice, setNotice, alive, busyRef, overviewRef, show, reload, report, exclusive, refresh, check };
 }
 
 const subscribeVisibility = (onChange: () => void) => {
@@ -211,7 +214,7 @@ export function useCustomerPayment(ownerId: string, orderId: string, onOrderChan
     orderChanged.current?.(data.order);
   }, [remember]);
 
-  const { overview, loadError, busy, notice, setNotice, alive, busyRef, overviewRef, show, reload, exclusive, refresh, check } =
+  const { overview, loadError, busy, notice, setNotice, alive, busyRef, overviewRef, show, reload, report, exclusive, refresh, check } =
     usePaymentRecord(customerGateway, orderId, settleIntent);
 
   /** Sends a saved request; returns "phone" when the server refused the number. */
@@ -287,6 +290,24 @@ export function useCustomerPayment(ownerId: string, orderId: string, onOrderChan
     await exclusive("sending", () => submit(active));
   }, [exclusive, intentChecked, submit]);
 
+  /**
+   * Pays the sample order with a demonstration payment, only while the server offers one. The server makes a repeat
+   * harmless; a refusal shows its own message. Either way the record is reloaded, so the panel shows what happened.
+   */
+  const payWithDemonstration = useCallback(() => exclusive("paying", async () => {
+    const current = overviewRef.current;
+    const view = current ? paymentView(current, intentRef.current ? { checked: false } : null) : null;
+    if (!view || !(view.kind === "payable" || view.kind === "unavailable") || !view.demonstration) return;
+    setNotice(null);
+    try {
+      const order = parseCustomerOrder((await paymentsAPI.payWithDemonstration(orderId)).data, orderId);
+      if (alive.current && order.paymentMethod === "DEMONSTRATION") setNotice({ tone: "info", text: DEMONSTRATION_PAID });
+    } catch (error) {
+      report(error, DEMONSTRATION_FAILED);
+    }
+    if (alive.current) await reload();
+  }), [alive, exclusive, orderId, overviewRef, reload, report, setNotice]);
+
   const editPhone = useCallback(() => setPhoneError(null), []);
 
   // Bounded automatic checks: one at a time, only while the page is visible, for a limited time per attempt.
@@ -329,6 +350,6 @@ export function useCustomerPayment(ownerId: string, orderId: string, onOrderChan
   return {
     overview, view, loadError, busy, notice, phoneError,
     autoStopped: shown !== null && autoStopped === shown.id,
-    send, retry, refresh, check, editPhone,
+    send, retry, refresh, check, editPhone, payWithDemonstration,
   };
 }

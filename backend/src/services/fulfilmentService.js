@@ -1,6 +1,8 @@
 import prisma from '../config/database.js';
 import { httpError } from './catalogService.js';
-import { customerOrderWhere, lockOrderInventory, orderTransaction, releaseOrderStock } from './inventoryService.js';
+import {
+  actorLocation, customerOrderWhere, demonstrationOrderWhere, lockOrderInventory, orderTransaction, releaseOrderStock,
+} from './inventoryService.js';
 import { dispatchNotifications, enqueueNotification } from './notificationService.js';
 import { SETTLED_PAYMENT_STATUSES, createRefundInTransaction, openPaymentReviews } from './refundService.js';
 import { orderInclude } from '../utils/orderDto.js';
@@ -95,13 +97,16 @@ export async function cancelOrderForCustomer(userId, orderId, reason) {
   return result;
 }
 
-/** Applies one validated staff fulfilment action; a stale expectedStatus is rejected rather than replayed. */
-export async function applyStaffAction(orderId, { action, expectedStatus, reason, trackingNumber }, actor) {
+/**
+ * Applies one validated fulfilment action; a stale expectedStatus is rejected rather than replayed. `where` narrows the
+ * orders it may act on (a demonstration control binds the caller's own sample order).
+ */
+export async function applyStaffAction(orderId, { action, expectedStatus, reason, trackingNumber }, actor, where = {}) {
   const rule = STAFF_ACTIONS[action];
   if (!rule) throw httpError(400, 'Unknown order action.', 'ACTION_UNKNOWN');
   const result = await orderTransaction(async (db) => {
     await lockOrderInventory(db, orderId);
-    const order = await db.order.findFirst({ where: { id: orderId, ...customerOrderWhere() }, include: orderInclude });
+    const order = await db.order.findFirst({ where: { AND: [{ id: orderId, ...customerOrderWhere() }, where] }, include: orderInclude });
     if (!order) throw httpError(404, 'Order not found', 'ORDER_NOT_FOUND');
     if (order.status !== expectedStatus) throw httpError(409, 'This order changed. Reload it before acting.', 'ORDER_CHANGED');
     const reviewOpen = (await openPaymentReviews(db, [order.id])).has(order.id);
@@ -119,7 +124,7 @@ export async function applyStaffAction(orderId, { action, expectedStatus, reason
       ...(action === 'CONFIRM_PICKUP' && { pickedUpAt: now }),
       ...(action === 'DISPATCH' && trackingNumber && { trackingNumber }),
       trackingHistory: { create: {
-        status: rule.to, description: rule.description, location: 'Staff portal',
+        status: rule.to, description: rule.description, location: actorLocation(actor, 'Staff portal'),
         actorType: actor.type, actorId: actor.id, reason: reason || null,
       } },
     };
@@ -131,6 +136,17 @@ export async function applyStaffAction(orderId, { action, expectedStatus, reason
   });
   await dispatchNotifications(result.notificationIds);
   return result;
+}
+
+/** Store-side steps a visitor may play for their own sample order: each staff step except cancelling. */
+export const DEMONSTRATION_ORDER_ACTIONS = Object.keys(STAFF_ACTIONS).filter((action) => action !== 'CANCEL');
+
+/** A visitor's store-side step for their own paid sample order, exactly as staff could take it, never cancelling. */
+export function applyDemonstrationAction(userId, orderId, { action, expectedStatus }) {
+  if (!DEMONSTRATION_ORDER_ACTIONS.includes(action)) throw httpError(400, 'Unknown order action.', 'ACTION_UNKNOWN');
+  const scope = demonstrationOrderWhere(userId);
+  if (!scope) throw httpError(404, 'Order not found', 'ORDER_NOT_FOUND');
+  return applyStaffAction(orderId, { action, expectedStatus }, { type: 'DEMONSTRATION', id: userId }, scope);
 }
 
 export async function orderReviewState(orderIds) {

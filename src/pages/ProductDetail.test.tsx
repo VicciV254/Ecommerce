@@ -41,6 +41,7 @@ function catalogWith(products: CatalogProduct[], status: CatalogValue["status"] 
     designers: [],
     discounts: fixtureDiscounts,
     returnPolicy: status === "ready" ? fixtureReturnPolicy : null, delivery: status === "ready" ? fixtureDelivery : null,
+    demonstrationOrders: status === "ready" ? false : null,
     reload: vi.fn(),
   };
 }
@@ -87,6 +88,18 @@ describe("ProductDetail", () => {
     expect(fact?.textContent).toBe(`Returns: ${window} Refunds by M-Pesa; delivery fee refunded only for faulty, damaged or wrong items.`);
     // Phone order: options, quantity and Add come first, then the delivery and returns facts.
     expect(fact && fact.compareDocumentPosition(addButton()) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+  });
+
+  it("says a sample product's refunds move no money where sample orders take demonstration payments", () => {
+    const sample = { ...poloShirt, returnRule: "STANDARD" as const, isDemo: true };
+    mocks.catalog = { ...catalogWith([sample, { ...linenShirt, returnRule: "STANDARD" as const }]), demonstrationOrders: true };
+    mocks.getProduct.mockImplementation(pending);
+    const fact = () => screen.getByText(/^Returns:/).closest("p")?.textContent;
+    const view = render(<ProductDetail id={sample.id} />);
+    expect(fact()).toBe("Returns: Returns within 7 days of delivery. Refunds of demonstration payments move no money; delivery fee refunded only for faulty, damaged or wrong items.");
+    view.unmount();
+    render(<ProductDetail id={linenShirt.id} />);
+    expect(fact()).toBe("Returns: Returns within 7 days of delivery. Refunds by M-Pesa; delivery fee refunded only for faulty, damaged or wrong items.");
   });
 
   it("reports an unknown product as not found instead of showing another product", async () => {

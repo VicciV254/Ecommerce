@@ -275,7 +275,7 @@ export default function ReturnOrderModal({ order, ownerId, onClose, onReturned, 
             <h3 id={`${id}-terms`} className="font-semibold text-navy-900">Return terms</h3>
             <ul className="mt-2 list-disc space-y-1 pl-4">
               {windowText && <li>{windowText}</li>}
-              {returnPolicyTerms(eligibility.policy).map((line) => <li key={line}>{line}</li>)}
+              {returnPolicyTerms(eligibility.policy, order.paymentMethod).map((line) => <li key={line}>{line}</li>)}
             </ul>
           </section>
         </div>

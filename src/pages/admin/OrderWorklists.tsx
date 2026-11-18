@@ -302,7 +302,10 @@ export function RefundsQueue({ reloadToken, canWrite, onOpen, onChanged, showToa
           </Field>
         </div>
       </div>
-      <p className="mt-2 text-xs text-charcoal">Refunds are sent manually by M-Pesa. Only a recorded M-Pesa reference marks a refund as sent.</p>
+      <p className="mt-2 text-xs text-charcoal">
+        Refunds are sent manually by M-Pesa. Only a recorded M-Pesa reference marks a refund as sent. Demonstration refunds move
+        no money; the customer records them from their order.
+      </p>
       <ListStatus state={state} onRetry={retry} loadingText="Loading refunds…" />
       {failure && <div className="mt-3"><Feedback message={failure} tone="error" /></div>}
       {data && !data.refunds.length && <p className="mt-3 text-sm text-gray-600">No refunds match this filter.</p>}

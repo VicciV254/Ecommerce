@@ -18,7 +18,7 @@ import {
   officeAddress,
   poloLine,
 } from "../test-support/checkoutFixtures";
-import { fixtureConfirmedAttempt, fixturePaymentOverview } from "../test-support/paymentFixtures";
+import { fixtureConfirmedAttempt, fixtureDemonstrationPaidOverview, fixturePaymentOverview } from "../test-support/paymentFixtures";
 import { STORAGE_KEYS, shopperStateKey } from "../utils/storage";
 import { GuestCartMerge } from "../components/GuestCartMerge";
 import Cart from "./Cart";
@@ -90,7 +90,7 @@ beforeEach(() => {
   mocks.catalog = {
     status: "ready", error: null, mode: "live", products: snapshot.products,
     productsById: new Map(snapshot.products.map((product) => [product.id, product])),
-    categories: buildCategoryTree(snapshot.categories), designers: [], discounts: [], returnPolicy: snapshot.returnPolicy, delivery: snapshot.delivery, reload: vi.fn(),
+    categories: buildCategoryTree(snapshot.categories), designers: [], discounts: [], returnPolicy: snapshot.returnPolicy, delivery: snapshot.delivery, demonstrationOrders: false, reload: vi.fn(),
   };
   for (const fn of [...Object.values(mocks.orders), ...Object.values(mocks.payments)]) fn.mockReset();
   mocks.orders.createQuote.mockResolvedValue({ data: fixtureQuote() });
@@ -169,6 +169,45 @@ describe("checkout reservation", () => {
     expect(screen.queryByText(/No payment has been taken/)).toBeNull();
     expect(screen.queryByRole("button", { name: /Send/ })).toBeNull();
     expect(mocks.payments.requestPrompt).not.toHaveBeenCalled();
+  });
+
+  it("shows a sample order paid with a demonstration payment as paid, with no money taken and no M-Pesa receipt", async () => {
+    seed("customer-a", [linen]);
+    const placed = fixturePendingOrder(fixtureQuote({ mode: "demo" }), { isDemo: true });
+    mocks.orders.placeOrder.mockResolvedValue({ data: placed });
+    mocks.payments.getOverview.mockResolvedValue({ data: fixtureDemonstrationPaidOverview(placed) });
+    render(tree(<Checkout />));
+    fireEvent.click(await reserveButton());
+    expect(await screen.findByRole("heading", { name: "Order paid" }, WAIT)).toBeTruthy();
+    expect(await screen.findAllByText("Paid with a demonstration payment", undefined, WAIT)).toHaveLength(2);
+    expect(screen.getByText("This order is paid with a demonstration payment; no money was taken. Its details and next steps are shown below.")).toBeTruthy();
+    expect(screen.getByText("Thank you. Your receipt is ready.")).toBeTruthy();
+    for (const absent of [/Payment received/, /M-Pesa receipt/, /Payment has been received/]) expect(document.body.textContent).not.toMatch(absent);
+  });
+
+  it("says how a sample order will be paid before it is reserved, only where sample orders take demonstration payments", async () => {
+    const DEMONSTRATION = "You then pay with a demonstration payment (no money), or with M-Pesa from an approved test number.";
+    const MPESA = "You then pay with M-Pesa, after confirming the amount and your phone number.";
+    seed("customer-a", [linen]);
+    mocks.orders.createQuote.mockResolvedValue({ data: fixtureQuote({ mode: "demo" }) });
+    mocks.catalog = { ...mocks.catalog!, demonstrationOrders: true };
+    const sample = render(tree(<Checkout />));
+    await reserveButton();
+    expect(within(screen.getByRole("region", { name: "Order total" })).getByText(DEMONSTRATION)).toBeTruthy();
+    expect(screen.queryByText(MPESA)).toBeNull();
+    sample.unmount();
+    // A live quote is paid by M-Pesa wherever it is.
+    mocks.orders.createQuote.mockResolvedValue({ data: fixtureQuote() });
+    const live = render(tree(<Checkout />));
+    await reserveButton();
+    expect(screen.getByText(MPESA)).toBeTruthy();
+    live.unmount();
+    mocks.orders.createQuote.mockResolvedValue({ data: fixtureQuote({ mode: "demo" }) });
+    mocks.catalog = { ...mocks.catalog!, demonstrationOrders: false };
+    render(tree(<Checkout />));
+    await reserveButton();
+    expect(screen.getByText(MPESA)).toBeTruthy();
+    expect(screen.queryByText(DEMONSTRATION)).toBeNull();
   });
 
   it("does not claim no money was taken when received funds still need order attribution review", async () => {

@@ -4,7 +4,7 @@ import { Container } from "./ui";
 import { BrandLogo } from "./Brand";
 import { useCatalog } from "../store/CatalogContext";
 import { useStorefront } from "../store/StorefrontContext";
-import { SHOPPING_FACTS, deliveryFact, returnsFact } from "../store/shoppingFacts";
+import { SHOPPING_FACTS, deliveryFact, paymentFact, returnsFact } from "../store/shoppingFacts";
 import { STORE_FACTS } from "../store/storeFacts";
 import { subscriptionsAPI } from "../api/subscriptions";
 import { describeApiError } from "../api/errors";
@@ -32,7 +32,7 @@ const BOTTOM_LINKS = [
 ];
 
 export function Footer() {
-  const { categories, returnPolicy, delivery } = useCatalog();
+  const { categories, returnPolicy, delivery, demonstrationOrders } = useCatalog();
   const { brandName } = useStorefront();
   const { user, refreshUser } = useAuth();
   const emailId = useId();
@@ -148,9 +148,9 @@ export function Footer() {
               <h2 id="footer-facts" className={columnHeading}>Shopping here</h2>
               <ul className="space-y-2 leading-relaxed">
                 <li>{SHOPPING_FACTS.vat}</li>
-                <li>{SHOPPING_FACTS.payment}</li>
+                <li>{paymentFact(demonstrationOrders)}</li>
                 <li>{deliveryFact(delivery)}</li>
-                <li>{returnsFact(returnPolicy?.windowDays ?? null)}</li>
+                <li>{returnsFact(returnPolicy?.windowDays ?? null, demonstrationOrders)}</li>
               </ul>
             </section>
           </div>

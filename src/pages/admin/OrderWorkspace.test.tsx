@@ -136,6 +136,83 @@ describe("staff order workspace", () => {
     expect(buttonNames(view.container)).toEqual(["← Back to orders", "Reload order", `M-Pesa payments for ${base.orderNumber}`]);
   });
 
+  it("tells staff that cancelling or re-requesting for a demonstration-paid order records a demonstration refund", async () => {
+    const demonstration = { ...paid, paymentMethod: "DEMONSTRATION", isDemo: true };
+    for (const [paymentStatus, recorded] of [["PAID", "It is paid, so a refund request for the full KES 1,244 (including delivery) is recorded."],
+      ["PARTIALLY_REFUNDED", "Part of the payment was already refunded, so a refund request for the remaining paid balance is recorded."]] as const) {
+      admin.orders.get.mockResolvedValue({ data: fixtureStaffOrder({ ...demonstration, status: "PROCESSING", paymentStatus }) });
+      const { view } = renderWorkspace();
+      fireEvent.click(within(await nextStep()).getByRole("button", { name: "Cancel order" }));
+      const dialog = screen.getByRole("dialog", { name: `Cancel order · ${base.orderNumber}` });
+      expect(within(dialog).getByText(`Cancel this order and release or restock its items. ${recorded} Its refund will be a demonstration refund: no money is sent.`)).toBeTruthy();
+      expect(dialog.textContent).not.toMatch(/until that refund is confirmed/);
+      view.unmount();
+    }
+
+    const cancelled = fixtureStaffOrder({ ...demonstration, status: "CANCELLED", reservationStatus: "RELEASED" }, {
+      allowedActions: [], refundRequestOptions: [{ source: "CANCELLATION", maxAmount: 1244 }],
+    });
+    admin.orders.get.mockResolvedValue({ data: cancelled });
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole("button", { name: "Request remaining refund (up to KES 1,244)" }, WAIT));
+    expect(screen.getByText("This only records a new refund request. It will be a demonstration refund: no money is sent.")).toBeTruthy();
+    expect(screen.queryByText(/No money is sent until it is approved, sent and confirmed/)).toBeNull();
+  });
+
+  it("reads demonstration refunds as moving no money and offers staff only cancelling them", async () => {
+    const now = new Date().toISOString();
+    const sample = fixtureStaffOrder({ ...paid, status: "CANCELLED", reservationStatus: "RELEASED", paymentMethod: "DEMONSTRATION", isDemo: true }, {
+      allowedActions: [],
+      refunds: [
+        fixtureStaffRefund(base.id, { id: "refund-2", number: "RF-APX-QUOTE-1-2", method: "DEMONSTRATION", status: "REQUESTED", allowedActions: ["cancel"] }),
+        fixtureStaffRefund(base.id, { method: "DEMONSTRATION", status: "CONFIRMED", approvedAt: now, processingAt: now, confirmedAt: now, allowedActions: [] }),
+      ],
+    });
+    admin.orders.get.mockResolvedValue({ data: sample });
+    renderWorkspace();
+    const requested = (await screen.findByRole("heading", { name: "RF-APX-QUOTE-1-2" }, WAIT)).closest("li")!;
+    const recorded = screen.getByRole("heading", { name: "RF-APX-QUOTE-1-1" }).closest("li")!;
+    const note = "No money is to be sent for a demonstration refund. The customer records it from their order.";
+    expect(within(requested).getByText("Requested — no money is to be sent")).toBeTruthy();
+    expect(within(requested).getByText("Demonstration refund (no money sent)")).toBeTruthy();
+    expect(within(requested).getByText(note)).toBeTruthy();
+    expect(buttonNames(requested)).toEqual(["Cancel refund RF-APX-QUOTE-1-2"]);
+    expect(requested.textContent).not.toMatch(/M-Pesa|Approval does not send money/);
+    expect(within(recorded).getByText("Recorded — no money was sent")).toBeTruthy();
+    expect(within(recorded).getByText("Recorded")).toBeTruthy();
+    expect(recorded.textContent).not.toMatch(/Confirmed sent|Sending started|M-Pesa/);
+  });
+
+  it("tells staff that a demonstration-paid order's receipt and re-requested refunds move no money", async () => {
+    const demonstration = { ...paid, status: "DELIVERED" as const, paymentMethod: "DEMONSTRATION", isDemo: true };
+    const approved = fixtureStaffReturn(demonstration, { status: "APPROVED" });
+    admin.orders.get.mockResolvedValue({ data: fixtureStaffOrder(demonstration, { returns: [approved] }) });
+    const refund = fixtureStaffRefund(base.id, { source: "RETURN", returnRequestId: approved.id, method: "DEMONSTRATION", amount: 900 });
+    admin.returns.receive.mockResolvedValue({
+      data: fixtureStaffOrder(demonstration, { returns: [fixtureStaffReturn(demonstration, { status: "RECEIVED" })], refunds: [refund] }),
+    });
+    const receipt = renderWorkspace();
+    fireEvent.change(await screen.findByLabelText(/^Refundable/, undefined, WAIT), { target: { value: "1" } });
+    expect(screen.getByText("1 refundable unit: a refund request is created for them. It will be a demonstration refund: no money is sent.")).toBeTruthy();
+    expect(screen.queryByText(/confirmed with an M-Pesa reference/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Record receipt/ }));
+    await vi.waitFor(() => expect(receipt.showToast).toHaveBeenCalledWith(
+      `Return ${approved.number} received. Demonstration refund ${refund.number} of KES 900 requested; no money will be sent.`), WAIT);
+    receipt.view.unmount();
+
+    const cancelled = fixtureStaffOrder({ ...demonstration, status: "CANCELLED", reservationStatus: "RELEASED" }, {
+      allowedActions: [], refundRequestOptions: [{ source: "CANCELLATION", maxAmount: 1244 }],
+    });
+    const requested = fixtureStaffRefund(base.id, { source: "CANCELLATION", amount: 1244, method: "DEMONSTRATION" });
+    admin.orders.get.mockResolvedValue({ data: cancelled });
+    admin.refunds.requestOwed.mockResolvedValue({ status: 201, data: { refund: requested, order: { ...cancelled, refundRequestOptions: [], refunds: [requested] } } });
+    const { showToast } = renderWorkspace();
+    fireEvent.click(await screen.findByRole("button", { name: "Request remaining refund (up to KES 1,244)" }, WAIT));
+    fireEvent.change(screen.getByRole("textbox", { name: "Reason (required)" }), { target: { value: "Refund was withdrawn in error" } });
+    fireEvent.click(screen.getByRole("button", { name: "Record refund request" }));
+    await vi.waitFor(() => expect(showToast).toHaveBeenCalledWith(`Demonstration refund ${requested.number} of KES 1,244 requested; no money will be sent.`), WAIT);
+  });
+
   it("offers owed refunds again only when the server lists them, requires a reason and posts the exact request", async () => {
     const delivered = fixtureStaffOrder({ ...paid, status: "DELIVERED" }, { returns: [fixtureStaffReturn(paid, { status: "RECEIVED" })] });
     admin.orders.get.mockResolvedValue({ data: delivered });

@@ -12,7 +12,10 @@ const contact = vi.hoisted(() => ({ send: vi.fn() }));
 const subscriptions = vi.hoisted(() => ({ subscribe: vi.fn() }));
 const auth = vi.hoisted(() => ({ value: { user: null as { id: string } | null, refreshUser: vi.fn() } }));
 const catalog = vi.hoisted(() => ({
-  value: { returnPolicy: null as { windowDays: number } | null, delivery: null as CatalogDelivery[] | null },
+  value: {
+    returnPolicy: null as { windowDays: number } | null, delivery: null as CatalogDelivery[] | null,
+    demonstrationOrders: false as boolean | null,
+  },
 }));
 const titles = vi.hoisted(() => [] as string[]);
 vi.mock("../api/contact", () => ({ contactAPI: contact }));
@@ -25,6 +28,7 @@ vi.mock("../store/StorefrontContext", () => ({
 vi.mock("../store/CatalogContext", () => ({
   useCatalog: () => ({
     categories: { roots: [{ slug: "fashion", name: "Fashion" }] }, returnPolicy: catalog.value.returnPolicy, delivery: catalog.value.delivery,
+    demonstrationOrders: catalog.value.demonstrationOrders,
   }),
 }));
 
@@ -57,7 +61,7 @@ function expectNoContactDetails() {
 
 beforeEach(() => {
   const { returnPolicy, delivery } = fixtureSnapshot();
-  catalog.value = { returnPolicy, delivery };
+  catalog.value = { returnPolicy, delivery, demonstrationOrders: false };
   auth.value = { user: null, refreshUser: vi.fn().mockResolvedValue(undefined) };
   subscriptions.subscribe.mockReset();
   titles.length = 0;
@@ -95,7 +99,7 @@ describe("About", () => {
   });
 
   it("names no return window or delivery methods until the catalog has loaded them", () => {
-    catalog.value = { returnPolicy: null, delivery: null };
+    catalog.value = { returnPolicy: null, delivery: null, demonstrationOrders: null };
     render(<About />);
     expect(screen.getByText("Each product page shows its return rule and window. Refunds are sent by M-Pesa.")).toBeTruthy();
     expect(screen.getByText("Delivery fees appear in your total before you reserve the order.")).toBeTruthy();
@@ -103,7 +107,7 @@ describe("About", () => {
   });
 
   it("states delivery from whatever methods the catalog offers, in its order", () => {
-    catalog.value = { returnPolicy: null, delivery: [
+    catalog.value = { returnPolicy: null, demonstrationOrders: false, delivery: [
       { method: "SAME_DAY", fee: 450, freeAbove: null, counties: ["Nairobi", "Kiambu", "Machakos"] },
       { method: "STORE_PICKUP", fee: 0, freeAbove: null, counties: [] },
     ] };
@@ -166,6 +170,34 @@ describe("Contact", () => {
     fireEvent.submit(screen.getByRole("button", { name: "Send message" }));
     await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("Your message could not be sent. Please try again."));
     expect((screen.getByLabelText("Message") as HTMLTextAreaElement).value).toBe("A question about delivery");
+  });
+});
+
+describe("payment and refund facts where sample orders take demonstration payments", () => {
+  const PAID = "Sample orders are paid with a demonstration payment; no money is taken.";
+  const REFUNDS = "Refunds of demonstration payments move no money.";
+
+  for (const [name, view] of [["About", () => render(<About />)], ["the footer", () => render(<Footer />)]] as const) {
+    it(`${name} states them only when the catalog says sample orders take demonstration payments`, () => {
+      catalog.value = { ...catalog.value, demonstrationOrders: true };
+      const on = view();
+      expect(screen.getByText(PAID)).toBeTruthy();
+      expect(screen.getByText(/returned within 7 days of delivery; some/).textContent).toMatch(new RegExp(`${REFUNDS}$`));
+      expect(document.body.textContent).not.toMatch(/Pay by M-Pesa|Refunds are sent by M-Pesa/);
+      on.unmount();
+      catalog.value = { ...catalog.value, demonstrationOrders: false };
+      view();
+      expect(screen.getByText("Pay by M-Pesa, approving the payment in the prompt on your phone.")).toBeTruthy();
+      expect(screen.getByText(/returned within 7 days of delivery; some/).textContent).toMatch(/Refunds are sent by M-Pesa\.$/);
+      expect(document.body.textContent).not.toContain("demonstration payment");
+    });
+  }
+
+  it("keeps today's wording before the catalog has loaded", () => {
+    catalog.value = { returnPolicy: null, delivery: null, demonstrationOrders: null };
+    render(<About />);
+    expect(screen.getByText("Pay by M-Pesa, approving the payment in the prompt on your phone.")).toBeTruthy();
+    expect(screen.getByText("Each product page shows its return rule and window. Refunds are sent by M-Pesa.")).toBeTruthy();
   });
 });
 

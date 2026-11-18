@@ -5,8 +5,13 @@ export type OrderStatus = "PENDING" | "PROCESSING" | "SHIPPED" | "READY_FOR_PICK
 /** `REFUNDED`/`PARTIALLY_REFUNDED` follow only refunds confirmed as sent. */
 export type PaymentStatus = "PENDING" | "PAID" | "FAILED" | "REFUNDED" | "PARTIALLY_REFUNDED";
 export type DeliveryMethod = "STORE_PICKUP" | "SAME_DAY" | "STANDARD";
-/** Who recorded a tracking event; `null` on events recorded before actors were kept. */
-export type ActorType = "CUSTOMER" | "STAFF" | "SYSTEM" | "PROVIDER";
+/** How an order was paid; `DEMONSTRATION` is a sample order's demonstration payment, which takes no money. */
+export type PaymentMethod = "MPESA" | "CARD" | "BANK_TRANSFER" | "COD" | "DEMONSTRATION";
+/**
+ * Who recorded a tracking event; `DEMONSTRATION` is the customer playing the store's part for their own sample order.
+ * `null` on events recorded before actors were kept.
+ */
+export type ActorType = "CUSTOMER" | "STAFF" | "SYSTEM" | "PROVIDER" | "DEMONSTRATION";
 /** Stock hold for an order; legacy orders report COMMITTED with no expiry. */
 export type ReservationStatus = "HELD" | "COMMITTED" | "RELEASED" | "EXPIRED";
 
@@ -62,6 +67,7 @@ export interface Order {
   shippingCost: number;
   total: number;
   status: OrderStatus;
+  /** A `PaymentMethod`; older or future values are shown as they are. */
   paymentMethod: string;
   paymentStatus: PaymentStatus;
   deliveryMethod: DeliveryMethod;
@@ -99,6 +105,8 @@ export type ReturnReason = "CHANGED_MIND" | "FAULTY" | "DAMAGED" | "WRONG_ITEM" 
 export type ReturnStatus = "REQUESTED" | "APPROVED" | "REJECTED" | "CANCELLED" | "RECEIVED";
 export type RefundStatus = "REQUESTED" | "APPROVED" | "PROCESSING" | "CONFIRMED" | "FAILED" | "UNRESOLVED" | "CANCELLED";
 export type RefundSource = "CANCELLATION" | "RETURN" | "PAYMENT_REVIEW";
+/** `DEMONSTRATION` refunds a demonstration payment: no money moves and there is never an M-Pesa reference. */
+export type RefundMethod = "MPESA_MANUAL" | "DEMONSTRATION";
 export type DeliveryFeeRefund = "MERCHANT_FAULT_ONLY" | "ALWAYS" | "NEVER";
 export type CustomerAction = "CANCEL" | "REQUEST_RETURN";
 export type ReturnIneligibility = "NOT_DELIVERED" | "NOT_PAID" | "WINDOW_CLOSED" | "NOTHING_RETURNABLE";
@@ -152,7 +160,7 @@ export interface OrderRefund {
   status: RefundStatus;
   amount: number;
   includesDeliveryFee: boolean;
-  method: string;
+  method: RefundMethod;
   requestedAt: string;
   approvedAt: string | null;
   confirmedAt: string | null;
@@ -186,6 +194,16 @@ export interface ReturnEligibility {
   lines: ReturnEligibilityLine[];
 }
 
+/** Store-side order steps the owner of a paid sample order may play: every staff step except cancelling. */
+export type DemonstrationOrderStep = "START_PROCESSING" | "DISPATCH" | "CONFIRM_DELIVERY" | "MARK_READY_FOR_PICKUP" | "CONFIRM_PICKUP";
+
+/** One demonstration control the server would accept now, with the status it expects (a stale one is refused). */
+export type DemonstrationAction =
+  | { action: DemonstrationOrderStep; expectedStatus: OrderStatus }
+  | { action: "APPROVE"; returnId: string; expectedStatus: "REQUESTED" }
+  | { action: "RECEIVE"; returnId: string; expectedStatus: "APPROVED" }
+  | { action: "COMPLETE_REFUND"; refundId: string; expectedStatus: "REQUESTED" | "APPROVED" | "PROCESSING" };
+
 /** `GET /orders` and `GET /orders/:id`: the order with the actions the server would accept now. */
 export interface CustomerOrder extends Order {
   trackingHistory: TrackingEvent[];
@@ -194,6 +212,8 @@ export interface CustomerOrder extends Order {
   refunds: OrderRefund[];
   returnEligibility: ReturnEligibility;
   customerActions: CustomerAction[];
+  /** The store's part the owner may play for a sample order; empty when none applies. */
+  demonstrationActions: DemonstrationAction[];
 }
 
 /** Body of `POST /orders/:id/returns`; the server rejects unknown keys. */
@@ -306,5 +326,20 @@ export const ordersAPI = {
   /** Withdraws a return that is still awaiting review. */
   cancelReturn: (orderId: string, returnId: string) =>
     api.post<unknown>(`${orderPath(orderId)}/returns/${encodeURIComponent(returnId)}/cancel`, {}),
+  /** Plays one listed store-side step for the customer's own sample order; the server reads only these fields. */
+  playDemonstration: (orderId: string, step: DemonstrationAction) => {
+    const path = orderPath(orderId);
+    const body = { expectedStatus: step.expectedStatus };
+    switch (step.action) {
+      case "APPROVE":
+        return api.post<unknown>(`${path}/returns/${encodeURIComponent(step.returnId)}/demonstration-approve`, body);
+      case "RECEIVE":
+        return api.post<unknown>(`${path}/returns/${encodeURIComponent(step.returnId)}/demonstration-receive`, body);
+      case "COMPLETE_REFUND":
+        return api.post<unknown>(`${path}/refunds/${encodeURIComponent(step.refundId)}/demonstration-complete`, body);
+      default:
+        return api.post<unknown>(`${path}/demonstration-actions`, { action: step.action, ...body });
+    }
+  },
   track: (orderNumber: string) => api.get<OrderTracking>(`/orders/track/${encodeURIComponent(orderNumber)}`),
 };

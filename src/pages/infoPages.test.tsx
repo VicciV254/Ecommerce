@@ -24,12 +24,13 @@ function readyCatalog(overrides: Partial<CatalogValue> = {}, categories: Catalog
   return {
     status: "ready", error: null, mode: "demo", products: snapshot.products,
     productsById: new Map(snapshot.products.map((product) => [product.id, product])), categories: buildCategoryTree(categories),
-    designers: [], discounts: [], returnPolicy: snapshot.returnPolicy, delivery: snapshot.delivery, reload: vi.fn(), ...overrides,
+    designers: [], discounts: [], returnPolicy: snapshot.returnPolicy, delivery: snapshot.delivery, demonstrationOrders: snapshot.demonstrationOrders,
+    reload: vi.fn(), ...overrides,
   };
 }
 
-const loadingCatalog = () => readyCatalog({ status: "loading", mode: null, returnPolicy: null, delivery: null }, []);
-const failedCatalog = () => readyCatalog({ status: "error", error: "The catalog could not be loaded. Try again later.", mode: null, returnPolicy: null, delivery: null }, []);
+const loadingCatalog = () => readyCatalog({ status: "loading", mode: null, returnPolicy: null, delivery: null, demonstrationOrders: null }, []);
+const failedCatalog = () => readyCatalog({ status: "error", error: "The catalog could not be loaded. Try again later.", mode: null, returnPolicy: null, delivery: null, demonstrationOrders: null }, []);
 
 const text = () => document.body.textContent ?? "";
 const block = (name: string) => screen.getByRole("heading", { level: 2, name }).closest("li")!;
@@ -300,6 +301,82 @@ describe("Terms of use", () => {
     expect(links(setUp)).toEqual([["Delivery", "#/delivery"], ["Returns and refunds", "#/returns"], ["FAQ", "#/faq"]]);
     const contact = screen.getByRole("heading", { level: 2, name: "Contact" }).parentElement!;
     expect(contact.textContent).toBe(`Contact${STORE_FACTS.email} · ${STORE_FACTS.phone.display} · ${STORE_FACTS.hours}.`);
+  });
+});
+
+describe("wording where sample orders take demonstration payments", () => {
+  /** A FAQ answer, read whether or not its question is open. */
+  const faqAnswer = (question: string) => {
+    const disclosure = [...document.querySelectorAll("details")]
+      .find((details) => details.querySelector(":scope > summary")?.textContent === question);
+    if (!disclosure) throw new Error(`No question "${question}"`);
+    return (disclosure.querySelector(":scope > div")?.textContent ?? "").replace(/\s+/g, " ").trim();
+  };
+  const flat = () => text().replace(/\s+/g, " ");
+  const OFF = {
+    tryIt: "You can browse and search the products, fill a cart and a wishlist, create an account, save addresses and see the delivery options at checkout. The products are samples, so on this site checkout stops before an order is placed.",
+    charged: "No. Nothing can be bought here, and the site takes no real payments.",
+    payment: "The store is set up for M-Pesa: the customer approves a prompt on their phone, so the store never sees an M-Pesa PIN.",
+    terms: "Nothing is sold or delivered, and the site takes no real payments: on this site, checkout stops before an order is placed.",
+    checkout: "The sample products can't be ordered on this site, so checkout saves none of these here.",
+    safaricom: "the phone number, amount and an order reference, if a payment is requested. That can't happen on this site.",
+    security: "Payments are approved on the customer's phone in M-Pesa, so the store never sees an M-Pesa PIN. Staff tools need a staff account.",
+  };
+  const ON = {
+    tryIt: "You can browse and search the products, fill a cart and a wishlist, create an account, save addresses, and order sample products with a demonstration payment, which takes no money. You can then play the store's part for your own order: dispatch, delivery, a return and its refund.",
+    charged: "No. A demonstration payment takes no money and sends no phone prompt. M-Pesa is set up in Safaricom's test sandbox, and its prompts can only be sent to the owner's approved test numbers.",
+    payment: `${OFF.payment} On this site, sample orders are paid with a demonstration payment, unless an approved test number is used.`,
+    terms: "Nothing is sold or delivered, and the site takes no real payments: sample orders are paid with a demonstration payment that takes no money.",
+    checkout: "Orders for sample products are kept like any order. A demonstration payment records the method, amount and time, but no mobile-money or provider details.",
+    safaricom: "the phone number, amount and an order reference, if a payment is requested. On this site, prompts can only be sent to the owner's approved test numbers.",
+    security: "Payments are approved on the customer's phone in M-Pesa, so the store never sees an M-Pesa PIN. A demonstration payment involves no M-Pesa at all. Staff tools need a staff account.",
+    refunds: "Refunds of demonstration payments are recorded without moving money.",
+  };
+
+  it("answers the FAQ for demonstration payments only when the catalog says sample orders take them", () => {
+    state.catalog = readyCatalog({ demonstrationOrders: true });
+    render(<Faq />);
+    expect([faqAnswer("What can I try?"), faqAnswer("Will I be charged?"), faqAnswer("How does payment work?")])
+      .toEqual([ON.tryIt, ON.charged, ON.payment]);
+  });
+
+  for (const [name, catalog] of [["off", () => readyCatalog({ demonstrationOrders: false })], ["loading", loadingCatalog]] as const) {
+    it(`keeps today's FAQ, Terms and Privacy wording while demonstration orders are ${name}`, () => {
+      state.catalog = catalog();
+      const faq = render(<Faq />);
+      expect([faqAnswer("What can I try?"), faqAnswer("Will I be charged?"), faqAnswer("How does payment work?")])
+        .toEqual([OFF.tryIt, OFF.charged, OFF.payment]);
+      faq.unmount();
+      const terms = render(<Terms />);
+      expect(flat()).toContain(OFF.terms);
+      terms.unmount();
+      render(<Privacy />);
+      for (const statement of [OFF.checkout, OFF.safaricom, OFF.security]) expect(flat()).toContain(statement);
+      expect(flat()).not.toContain("demonstration payment");
+    });
+  }
+
+  it("states demonstration payments in the Terms and the Privacy notice", () => {
+    state.catalog = readyCatalog({ demonstrationOrders: true });
+    const terms = render(<Terms />);
+    expect(flat()).toContain(ON.terms);
+    expect(flat()).not.toContain("checkout stops before an order is placed");
+    terms.unmount();
+    render(<Privacy />);
+    for (const statement of [ON.checkout, ON.safaricom, ON.security]) expect(flat()).toContain(statement);
+    for (const statement of [OFF.checkout, "That can't happen on this site."]) expect(flat()).not.toContain(statement);
+  });
+
+  it("adds that demonstration refunds move no money to the Returns page only when sample orders take demonstration payments", () => {
+    state.catalog = readyCatalog({ demonstrationOrders: true });
+    const on = render(<Returns />);
+    const refunds = () => [...screen.getByRole("heading", { level: 2, name: "Refunds" }).nextElementSibling!.children].map((item) => item.textContent);
+    expect(refunds()).toContain(ON.refunds);
+    expect(refunds().indexOf(ON.refunds)).toBe(refunds().findIndex((item) => item?.startsWith("Staff check returned items")) + 1);
+    on.unmount();
+    state.catalog = readyCatalog({ demonstrationOrders: false });
+    render(<Returns />);
+    expect(refunds()).not.toContain(ON.refunds);
   });
 });
 

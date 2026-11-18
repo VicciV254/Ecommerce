@@ -135,6 +135,17 @@ describe("return request", () => {
     expect(mocks.requestReturn).not.toHaveBeenCalled();
   });
 
+  it("says how the refund is paid back by the order's payment method", () => {
+    const terms = () => within(screen.getByRole("region", { name: "Return terms" })).getAllByRole("listitem").map((item) => item.textContent);
+    const mpesa = renderModal();
+    expect(terms()).toContain("Refunds are sent by M-Pesa after staff receive and check the items. We will email you when your refund is sent.");
+    mpesa.view.unmount();
+
+    renderModal({ ...delivered, paymentMethod: "DEMONSTRATION" });
+    expect(terms()).toContain("Refunds of demonstration payments are recorded without moving money.");
+    expect(terms().join(" ")).not.toMatch(/M-Pesa|email/);
+  });
+
   it("retries a request whose answer was lost with the same key and body, even after a reload", async () => {
     mocks.requestReturn.mockRejectedValueOnce(apiError(undefined))
       .mockImplementation(async (_id: string, body: ReturnRequestBody) => accepted(body));

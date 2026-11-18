@@ -339,6 +339,7 @@ function CheckoutContent({ user }: { user: User }) {
           quote={quote}
           blocker={blocker}
           onRefreshAvailability={catalog.reload}
+          demonstration={catalog.demonstrationOrders === true}
           changeDelivery={<button type="button" onClick={() => goTo("delivery")} className={textLinkClass}>Change delivery details</button>}
           review={reviewNeeded && current && previousTotal !== null
             ? { previousTotal, total: current.total, confirm: () => setReviewed({ quoteId: current.id, rejection }) }
@@ -598,12 +599,14 @@ function ReviewStep({
 
 /**
  * The server's total for the reviewed cart with the conditions of reserving, and the Reserve action. Expired prices
- * and a changed total are dealt with here before anything is reserved.
+ * and a changed total are dealt with here before anything is reserved. `demonstration`: sample orders are paid with
+ * a demonstration payment here, so a sample-product quote says so.
  */
-function OrderTotal({ quote, blocker, onRefreshAvailability, changeDelivery, review, sending, canReserve, blockedReason, onReserve }: {
+function OrderTotal({ quote, blocker, onRefreshAvailability, demonstration, changeDelivery, review, sending, canReserve, blockedReason, onReserve }: {
   quote: CheckoutQuote;
   blocker: string | null;
   onRefreshAvailability: () => void;
+  demonstration: boolean;
   changeDelivery: ReactNode;
   review: { previousTotal: number; total: number; confirm: () => void } | null;
   sending: boolean;
@@ -636,7 +639,11 @@ function OrderTotal({ quote, blocker, onRefreshAvailability, changeDelivery, rev
       <ul id="reserve-help" className="mt-4 list-disc space-y-1 pl-5 text-sm text-navy-800">
         <li>Reserving creates an unpaid order and charges nothing.</li>
         <li>Your items are held for a limited time; the exact time is shown once the order is reserved.</li>
-        <li>You then pay with M-Pesa, after confirming the amount and your phone number.</li>
+        <li>
+          {demonstration && quote.quote?.mode === "demo"
+            ? "You then pay with a demonstration payment (no money), or with M-Pesa from an approved test number."
+            : "You then pay with M-Pesa, after confirming the amount and your phone number."}
+        </li>
       </ul>
       <button
         type="button"

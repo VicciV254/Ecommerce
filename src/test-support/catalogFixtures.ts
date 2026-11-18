@@ -160,7 +160,7 @@ export const fixtureDelivery: CatalogDelivery[] = [
 
 export function fixtureSnapshot(overrides: Partial<CatalogSnapshot> = {}): CatalogSnapshot {
   return {
-    version: 2, mode: "demo",
+    version: 2, mode: "demo", demonstrationOrders: false,
     products: [linenShirt, poloShirt, imagelessShirt, demoPhone],
     categories: fixtureCategories, designers: fixtureDesigners, discounts: fixtureDiscounts, returnPolicy: fixtureReturnPolicy,
     delivery: fixtureDelivery,

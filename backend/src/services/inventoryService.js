@@ -4,6 +4,19 @@ import { availableStock, httpError, stockStatus } from './catalogService.js';
 import { orderInclude } from '../utils/orderDto.js';
 
 export const customerOrderWhere = () => demoOrdersEnabled() ? {} : { isDemo: false };
+
+/** Where a visitor's demonstration steps are recorded, in place of the staff portal. */
+export const DEMONSTRATION_LOCATION = 'Demonstration';
+
+/**
+ * A demonstration control's binding: the caller's own sample orders, or null where sample orders are off (then the
+ * control answers not found). Each control combines it with its own lookup inside its transaction.
+ */
+export const demonstrationOrderWhere = (userId) => (demoOrdersEnabled() ? { userId, isDemo: true } : null);
+
+/** Where a step was taken: staff in the staff portal, a visitor's demonstration step in the demonstration. */
+export const actorLocation = (actor, otherwise) =>
+  actor.type === 'STAFF' ? 'Staff portal' : actor.type === 'DEMONSTRATION' ? DEMONSTRATION_LOCATION : otherwise;
 export const isInventoryConflict = (error) => error.code === 'P2034' ||
   (error.code === 'P2010' && ['40001', '40P01'].includes(error.meta?.code));
 

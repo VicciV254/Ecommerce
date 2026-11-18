@@ -1,17 +1,24 @@
 import prisma from "../config/database.js";
 import { httpError } from "../services/catalogService.js";
 import { createPendingOrder, createQuote, getQuote } from "../services/checkoutService.js";
-import { applyStaffAction, cancelOrderForCustomer, orderReviewState } from "../services/fulfilmentService.js";
+import { applyDemonstrationAction, applyStaffAction, cancelOrderForCustomer, orderReviewState } from "../services/fulfilmentService.js";
 import { customerOrderWhere, expireReservations } from "../services/inventoryService.js";
 import { dispatchNotifications } from "../services/notificationService.js";
 import { customerOrderView, staffOrderView } from "../services/orderViews.js";
 import { requestOwedRefund } from "../services/owedRefundService.js";
-import { createPaymentReviewRefund, listRefunds, refundDto, transitionRefund } from "../services/refundService.js";
-import { cancelReturn, decideReturn, listReturns, receiveReturn, requestReturn, returnDto } from "../services/returnService.js";
+import { payWithDemonstration } from "../services/paymentService.js";
+import {
+  completeDemonstrationRefund, createPaymentReviewRefund, listRefunds, refundDto, transitionRefund,
+} from "../services/refundService.js";
+import {
+  approveDemonstrationReturn, cancelReturn, decideReturn, listReturns, receiveDemonstrationReturn, receiveReturn, requestReturn,
+  returnDto,
+} from "../services/returnService.js";
 import { cancellationSchema, idempotencyKeySchema, orderInputSchema } from "../utils/checkoutValidation.js";
 import {
-  RETURN_STATUSES, REFUND_STATUSES, listQuerySchema, owedRefundSchema, paymentRefundSchema, refundActionSchema,
-  returnDecisionSchema, returnReceiptSchema, returnRequestSchema, staffActionSchema,
+  RETURN_STATUSES, REFUND_STATUSES, demonstrationActionSchema, demonstrationRefundSchema, demonstrationReturnSchema,
+  listQuerySchema, owedRefundSchema, paymentRefundSchema, refundActionSchema, returnDecisionSchema, returnReceiptSchema,
+  returnRequestSchema, staffActionSchema,
 } from "../utils/operationsValidation.js";
 import { orderInclude, publicTrackingTimeline } from "../utils/orderDto.js";
 import { nairobiDaySpan } from "../utils/nairobiTime.js";
@@ -90,6 +97,53 @@ export const cancelOrder = async (req, res, next) => {
   }
 };
 
+/** Pays the customer's own sample order with a demonstration payment; the body is not read. */
+export const payWithDemonstrationPayment = async (req, res, next) => {
+  try {
+    await payWithDemonstration(req.user.id, req.params.id);
+    res.json(await customerOrder(req.user.id, req.params.id));
+  } catch (error) {
+    next(error);
+  }
+};
+
+/* Demonstration controls: the owner plays the store's part for their own sample order; each answers with the order. */
+export const applyOrderDemonstrationAction = async (req, res, next) => {
+  try {
+    await applyDemonstrationAction(req.user.id, req.params.id, demonstrationActionSchema.parse(req.body));
+    res.json(await customerOrder(req.user.id, req.params.id));
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const approveOrderDemonstrationReturn = async (req, res, next) => {
+  try {
+    await approveDemonstrationReturn(req.user.id, req.params.id, req.params.returnId, demonstrationReturnSchema.parse(req.body));
+    res.json(await customerOrder(req.user.id, req.params.id));
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const receiveOrderDemonstrationReturn = async (req, res, next) => {
+  try {
+    await receiveDemonstrationReturn(req.user.id, req.params.id, req.params.returnId, demonstrationReturnSchema.parse(req.body));
+    res.json(await customerOrder(req.user.id, req.params.id));
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const completeOrderDemonstrationRefund = async (req, res, next) => {
+  try {
+    await completeDemonstrationRefund(req.user.id, req.params.id, req.params.refundId, demonstrationRefundSchema.parse(req.body));
+    res.json(await customerOrder(req.user.id, req.params.id));
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const requestOrderReturn = async (req, res, next) => {
   try {
     const input = returnRequestSchema.parse(req.body);
@@ -118,8 +172,9 @@ export const cancelOrderReturn = async (req, res, next) => {
 export const trackOrder = async (req, res, next) => {
   try {
     await expireReservations();
+    // Sample orders are tracked publicly only where they are enabled; the timeline is fixed phrases either way.
     const order = await prisma.order.findUnique({
-      where: { orderNumber: req.params.number, isDemo: false },
+      where: { orderNumber: req.params.number, ...customerOrderWhere() },
       include: { trackingHistory: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] } },
     });
     if (!order) return res.status(404).json({ error: "Order not found" });

@@ -1,6 +1,6 @@
 import prisma from '../config/database.js';
 import { httpError } from './catalogService.js';
-import { customerOrderWhere, lockOrderInventory, orderTransaction } from './inventoryService.js';
+import { actorLocation, customerOrderWhere, demonstrationOrderWhere, lockOrderInventory, orderTransaction } from './inventoryService.js';
 import { dispatchNotifications, enqueueNotification } from './notificationService.js';
 import { Decimal, decimal, moneyNumber, sumMoney } from '../utils/money.js';
 
@@ -12,9 +12,13 @@ const REFERENCE = /^[A-Z0-9]{8,32}$/;
 
 const formatKes = (amount) => `KES ${moneyNumber(amount).toLocaleString('en-KE')}`;
 const tracking = (order, description, actor, reason = null) => ({
-  status: order.status, description, location: actor.type === 'STAFF' ? 'Staff portal' : 'Refund service',
+  status: order.status, description, location: actorLocation(actor, 'Refund service'),
   actorType: actor.type, actorId: actor.id ?? null, reason,
 });
+
+/** Refunds of a demonstration payment move no money; money M-Pesa reported (a payment-review refund) is M-Pesa's. */
+const refundMethod = (order, source) =>
+  (order.paymentMethod === 'DEMONSTRATION' && ['CANCELLATION', 'RETURN'].includes(source) ? 'DEMONSTRATION' : 'MPESA_MANUAL');
 
 /** Refunds against the order's settled payment share one pool; other confirmed payments have their own. */
 export function inOrderPool(order, refund) {
@@ -54,11 +58,14 @@ export async function createRefundInTransaction(db, order, {
   const refund = await db.refund.create({ data: {
     number: await nextRefundNumber(db, order), orderId: order.id,
     paymentId: paymentId ?? order.settledPaymentId ?? null, returnRequestId, dedupeKey, source,
+    method: refundMethod(order, source),
     amount: value, requestedAmount: value, includesDeliveryFee, reason,
     requestedByType: actor.type, requestedById: actor.id ?? null,
   } });
   await db.trackingEvent.create({ data: {
-    orderId: order.id, ...tracking(order, `Refund ${refund.number} of ${formatKes(value)} requested; no money has been sent yet.`, actor, reason),
+    orderId: order.id, ...tracking(order, refund.method === 'DEMONSTRATION'
+      ? `Demonstration refund ${refund.number} of ${formatKes(value)} requested; no money will be sent.`
+      : `Refund ${refund.number} of ${formatKes(value)} requested; no money has been sent yet.`, actor, reason),
   } });
   return refund;
 }
@@ -73,9 +80,22 @@ const TRANSITIONS = {
   cancel: { from: ['REQUESTED', 'APPROVED', 'FAILED'], to: 'CANCELLED' },
 };
 export const REFUND_ACTIONS = Object.keys(TRANSITIONS);
+/** A demonstration refund moves no money, so staff may only withdraw it; the visitor records it. */
+const DEMONSTRATION_STAFF_ACTIONS = ['cancel'];
 
 export function allowedRefundActions(refund) {
-  return REFUND_ACTIONS.filter((action) => TRANSITIONS[action].from.includes(refund.status));
+  return REFUND_ACTIONS.filter((action) => TRANSITIONS[action].from.includes(refund.status) &&
+    (refund.method !== 'DEMONSTRATION' || DEMONSTRATION_STAFF_ACTIONS.includes(action)));
+}
+
+/** Locks the refund's order and reads the refund; `where` narrows which refunds qualify (combined, never replacing). */
+async function lockRefund(db, refundId, where = {}) {
+  const located = await db.refund.findFirst({
+    where: { AND: [{ id: refundId, order: { is: customerOrderWhere() } }, where] }, select: { orderId: true },
+  });
+  if (!located) throw httpError(404, 'Refund not found.', 'REFUND_NOT_FOUND');
+  await lockOrderInventory(db, located.orderId);
+  return db.refund.findUnique({ where: { id: refundId } });
 }
 
 async function updateOrderPaymentStatus(db, order) {
@@ -92,13 +112,13 @@ export async function transitionRefund(refundId, action, input, actor) {
   if (!rule) throw httpError(404, 'Unknown refund action.', 'REFUND_ACTION_UNKNOWN');
   const notifications = [];
   const refund = await orderTransaction(async (db) => {
-    const located = await db.refund.findFirst({ where: { id: refundId, order: { is: customerOrderWhere() } }, select: { orderId: true } });
-    if (!located) throw httpError(404, 'Refund not found.', 'REFUND_NOT_FOUND');
-    await lockOrderInventory(db, located.orderId);
-    const current = await db.refund.findUnique({ where: { id: refundId } });
+    const current = await lockRefund(db, refundId);
     const order = await db.order.findUnique({ where: { id: current.orderId }, include: { user: { select: { email: true } } } });
     if (current.status !== input.expectedStatus) throw httpError(409, 'This refund changed. Reload it before acting.', 'REFUND_CHANGED');
     if (!rule.from.includes(current.status)) throw httpError(409, 'That refund action is not allowed now.', 'REFUND_ACTION_NOT_ALLOWED');
+    if (current.method === 'DEMONSTRATION' && !DEMONSTRATION_STAFF_ACTIONS.includes(action)) {
+      throw httpError(409, 'A demonstration refund moves no money; staff can only cancel it.', 'REFUND_ACTION_NOT_ALLOWED');
+    }
     const now = new Date();
     const data = { status: rule.to };
     let description;
@@ -151,6 +171,37 @@ export async function transitionRefund(refundId, action, input, actor) {
   });
   await dispatchNotifications(notifications);
   return refund;
+}
+
+/** States from which the visitor can record a demonstration refund; staff tools could have left it part-way. */
+const DEMONSTRATION_COMPLETABLE = ['REQUESTED', 'APPROVED', 'PROCESSING'];
+
+/**
+ * The visitor records a demonstration refund on their own sample order: only its remaining steps run (approval of the
+ * full requested amount from REQUESTED; an approved amount and earlier stamps are kept), and it is confirmed with no
+ * provider reference and no refund email, since no money moves.
+ */
+export async function completeDemonstrationRefund(userId, orderId, refundId, { expectedStatus }) {
+  const scope = demonstrationOrderWhere(userId);
+  if (!scope) throw httpError(404, 'Refund not found.', 'REFUND_NOT_FOUND');
+  return orderTransaction(async (db) => {
+    const current = await lockRefund(db, refundId, { orderId, order: { is: scope } });
+    if (current.method !== 'DEMONSTRATION') {
+      throw httpError(409, 'Only a refund of a demonstration payment can be recorded here.', 'REFUND_NOT_DEMONSTRATION');
+    }
+    if (current.status !== expectedStatus) throw httpError(409, 'This refund changed. Reload it before acting.', 'REFUND_CHANGED');
+    if (!DEMONSTRATION_COMPLETABLE.includes(current.status)) throw httpError(409, 'That refund action is not allowed now.', 'REFUND_ACTION_NOT_ALLOWED');
+    const order = await db.order.findUnique({ where: { id: current.orderId } });
+    const now = new Date();
+    const data = { status: 'CONFIRMED', providerReference: null, confirmedAt: now, confirmedById: userId };
+    if (current.status === 'REQUESTED') Object.assign(data, { amount: current.requestedAmount, approvedAt: now, approvedById: userId });
+    if (current.status !== 'PROCESSING') Object.assign(data, { processingAt: now, processingById: userId });
+    const updated = await db.refund.update({ where: { id: current.id }, data });
+    const description = `Demonstration refund ${current.number} of ${formatKes(updated.amount)} recorded; no money was sent.`;
+    await db.trackingEvent.create({ data: { orderId: order.id, ...tracking(order, description, { type: 'DEMONSTRATION', id: userId }) } });
+    await updateOrderPaymentStatus(db, order);
+    return updated;
+  });
 }
 
 /** Staff create a refund for money verified on a payment that is under review. */

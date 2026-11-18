@@ -149,6 +149,15 @@
   scroll-padding-block: calc(var(--focus-ring-width) + var(--focus-ring-offset) + 0.25rem);
 }
 
+/*
+ * Enlarged text in a narrow column: a long word that can't fit breaks at a syllable with a hyphen instead of at any
+ * letter; words under 10 letters stay whole. Chromium hyphenates lowercase words only, not capitalised or all-caps ones.
+ */
+@utility hyphenate-long-words {
+  hyphens: auto;
+  hyphenate-limit-chars: 10 4 4;
+}
+
 @layer base {
   /* Form controls never drop below the 16px body size (also stops iOS zooming on focus); size utilities read these. */
   input, select, textarea {

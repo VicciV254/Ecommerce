@@ -116,7 +116,7 @@ export const discoveryCategories: CatalogCategory[] = nodes.map((node) => ({
 
 export function discoverySnapshot(): CatalogSnapshot {
   return {
-    version: 2, mode: "demo", products: discoveryProducts, categories: discoveryCategories,
+    version: 2, mode: "demo", demonstrationOrders: false, products: discoveryProducts, categories: discoveryCategories,
     designers: fixtureDesigners, discounts: fixtureDiscounts, returnPolicy: fixtureReturnPolicy, delivery: fixtureDelivery,
   };
 }

@@ -28,7 +28,7 @@ function RuleLine({ rule, groups }: { rule: string; groups: ReturnRuleGroup[] })
 
 /** The return rules and refund terms new orders get, from the catalog's return policy and category rules. */
 export default function Returns() {
-  const { status, error, categories, returnPolicy, reload } = useCatalog();
+  const { status, error, categories, returnPolicy, demonstrationOrders, reload } = useCatalog();
   const groups = useMemo(() => returnRuleGroups([...categories.byId.values()]), [categories]);
 
   let terms;
@@ -50,6 +50,7 @@ export default function Returns() {
         <ul className={infoList}>
           <li>Returns are refunded; exchanges and store credit aren't offered.</li>
           <li>Staff check returned items when they arrive. Accepted items are refunded by M-Pesa, which staff send by hand.</li>
+          {demonstrationOrders === true && <li>Refunds of demonstration payments are recorded without moving money.</li>}
           <li>{DELIVERY_FEE_TERMS[returnPolicy.deliveryFeeRefund]}</li>
           <li>Refunds are rounded up to the nearest whole shilling and never exceed what was paid.</li>
           <li>

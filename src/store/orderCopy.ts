@@ -7,11 +7,14 @@ import type {
   ActorType,
   CustomerOrder,
   DeliveryFeeRefund,
+  DemonstrationAction,
+  DemonstrationOrderStep,
   Order,
   OrderRefund,
   OrderReturn,
   OrderStatus,
   PaymentStatus,
+  RefundMethod,
   RefundSource,
   RefundStatus,
   ReturnEligibility,
@@ -90,10 +93,16 @@ export function deliveryAddress(order: Pick<Order, "address">) {
   return order.address ? `${order.address.street}, ${order.address.city}, ${order.address.county}` : "Not provided";
 }
 
+/** Payment methods by name; any other method is shown as the server names it. */
+const PAYMENT_METHOD_LABELS = new Map([["MPESA", "M-Pesa"], ["DEMONSTRATION", "Demonstration payment"]]);
+export const paymentMethodLabel = (method: string) => PAYMENT_METHOD_LABELS.get(method) ?? method.replace(/_/g, " ").toLowerCase();
+
 export function paymentLabel(order: Pick<Order, "paymentMethod" | "paymentStatus">) {
-  const method = order.paymentMethod === "MPESA" ? "M-Pesa" : order.paymentMethod.replace(/_/g, " ").toLowerCase();
-  return `${method} (${PAYMENT_STATUS_LABELS[order.paymentStatus]})`;
+  return `${paymentMethodLabel(order.paymentMethod)} (${PAYMENT_STATUS_LABELS[order.paymentStatus]})`;
 }
+
+/** Paid with a demonstration payment: its refunds move no money and it sends no emails. */
+export const isDemonstrationOrder = (order: Pick<Order, "paymentMethod">) => order.paymentMethod === "DEMONSTRATION";
 
 /**
  * What cancelling does with money received: the server requests whatever was paid and not yet refunded.
@@ -115,6 +124,7 @@ export const ACTOR_LABELS: Record<ActorType, string> = {
   STAFF: "Staff",
   SYSTEM: "Automatic",
   PROVIDER: "M-Pesa",
+  DEMONSTRATION: "Demonstration",
 };
 
 /* ------------------------------------------------------------------ */
@@ -151,13 +161,17 @@ const DELIVERY_FEE_FACT: Record<DeliveryFeeRefund, string> = {
   NEVER: "delivery fee not refunded on returns",
 };
 
-/** The product page's short returns fact, from the product's rule and the catalog's current terms. */
-export function productReturnFact(rule: ReturnRule, policy: Pick<CatalogReturnPolicy, "windowDays" | "deliveryFeeRefund">) {
+/**
+ * The product page's short returns fact, from the product's rule and the catalog's current terms. `demonstration`: the
+ * product is a sample where sample orders take demonstration payments, so its refunds move no money.
+ */
+export function productReturnFact(rule: ReturnRule, policy: Pick<CatalogReturnPolicy, "windowDays" | "deliveryFeeRefund">, demonstration = false) {
   const days = policy.windowDays;
   const window = rule === "FAULT_ONLY" ? `Returnable only if faulty, damaged or wrong — within ${days} days.`
     : rule === "UNOPENED_OR_FAULT" ? `Returnable within ${days} days if unopened, or if faulty, damaged or wrong.`
     : `Returns within ${days} days of delivery.`;
-  return { window, refunds: `Refunds by M-Pesa; ${DELIVERY_FEE_FACT[policy.deliveryFeeRefund]}.` };
+  const refunds = demonstration ? "Refunds of demonstration payments move no money" : "Refunds by M-Pesa";
+  return { window, refunds: `${refunds}; ${DELIVERY_FEE_FACT[policy.deliveryFeeRefund]}.` };
 }
 
 /** How a return refund treats the delivery fee, per rule; also stated on the Returns and refunds page. */
@@ -167,12 +181,20 @@ export const DELIVERY_FEE_TERMS: Record<DeliveryFeeRefund, string> = {
   NEVER: "The delivery fee is not refunded for returns.",
 };
 
-/** The order's return terms, as recorded when it was bought. */
-export function returnPolicyTerms(policy: ReturnPolicyTerms): string[] {
+/** A demonstration-paid order's fault is recorded in the demonstration, not confirmed by staff. */
+const DEMONSTRATION_DELIVERY_FEE_TERMS: Partial<Record<DeliveryFeeRefund, string>> = {
+  MERCHANT_FAULT_ONLY: "The delivery fee is refunded only for a faulty, damaged or wrong item.",
+};
+
+/** The order's return terms, as recorded when it was bought; refunds of a demonstration payment move no money. */
+export function returnPolicyTerms(policy: ReturnPolicyTerms, paymentMethod?: string): string[] {
+  const demonstration = paymentMethod === "DEMONSTRATION";
   return [
     "Returns are refunded; exchanges and store credit are not offered.",
-    "Refunds are sent by M-Pesa after staff receive and check the items. We will email you when your refund is sent.",
-    DELIVERY_FEE_TERMS[policy.deliveryFeeRefund],
+    demonstration
+      ? "Refunds of demonstration payments are recorded without moving money."
+      : "Refunds are sent by M-Pesa after staff receive and check the items. We will email you when your refund is sent.",
+    (demonstration ? DEMONSTRATION_DELIVERY_FEE_TERMS[policy.deliveryFeeRefund] : undefined) ?? DELIVERY_FEE_TERMS[policy.deliveryFeeRefund],
     "Refund amounts are rounded up to the nearest whole shilling and never exceed what you paid.",
   ];
 }
@@ -194,13 +216,30 @@ export function returnWindowText(eligibility: ReturnEligibility): string | null 
   }
 }
 
-export const RETURN_STATUS_TEXT: Record<ReturnStatus, string> = {
+const RETURN_STATUS_TEXT: Record<ReturnStatus, string> = {
   REQUESTED: "Awaiting review",
   APPROVED: "Approved — staff will arrange the return",
   REJECTED: "Not approved",
   CANCELLED: "Withdrawn",
   RECEIVED: "Received and checked",
 };
+
+/** A sample order's returns are approved and received in the demonstration, whoever paid for it and however. */
+const SAMPLE_RETURN_STATUS_TEXT: Partial<Record<ReturnStatus, string>> = {
+  APPROVED: "Approved in the demonstration",
+  RECEIVED: "Marked as received in the demonstration",
+};
+
+/** The customer's words for a return's status; a sample order's (`isDemo`) say what the demonstration did. */
+export function returnStatusText(status: ReturnStatus, order: Pick<Order, "isDemo">) {
+  return (order.isDemo === true ? SAMPLE_RETURN_STATUS_TEXT[status] : undefined) ?? RETURN_STATUS_TEXT[status];
+}
+
+/** What a receipt found about the store's fault: staff inspect a live order's return; a sample order's is played. */
+export function returnFaultText(merchantFaultConfirmed: boolean, order: Pick<Order, "isDemo">) {
+  if (order.isDemo === true) return merchantFaultConfirmed ? "Fault confirmed in the demonstration." : "No fault was recorded in the demonstration.";
+  return merchantFaultConfirmed ? "Staff confirmed the item was faulty, damaged or wrong." : "Staff did not find a fault.";
+}
 
 export const STAFF_RETURN_STATUS: Record<ReturnStatus, string> = {
   REQUESTED: "Awaiting decision",
@@ -230,10 +269,29 @@ export const REFUND_SOURCE_TEXT: Record<RefundSource, string> = {
   PAYMENT_REVIEW: "Payment under review",
 };
 
+/** How each refund is paid back; a demonstration refund moves no money. */
+export const REFUND_METHOD_LABELS: Record<RefundMethod, string> = {
+  MPESA_MANUAL: "M-Pesa",
+  DEMONSTRATION: "Demonstration refund (no money sent)",
+};
+
+/** A demonstration refund is recorded, never sent; its wording never mentions M-Pesa or a reference. */
+const DEMONSTRATION_REFUND_STATUS_TEXT: Partial<Record<RefundStatus, string>> = {
+  REQUESTED: "Requested — not recorded yet",
+  APPROVED: "Approved — not recorded yet",
+  PROCESSING: "In progress — not recorded yet",
+  FAILED: "Not recorded",
+  UNRESOLVED: "Being checked — not recorded yet",
+};
+
 /** Customer wording; the M-Pesa reference appears only once the refund is confirmed as sent. */
-export function refundStatusText(refund: Pick<OrderRefund, "status" | "confirmedAt" | "providerReference">) {
-  if (refund.status !== "CONFIRMED") return REFUND_STATUS_TEXT[refund.status];
+export function refundStatusText(refund: Pick<OrderRefund, "status" | "confirmedAt" | "providerReference"> & { method?: RefundMethod }) {
   const when = refund.confirmedAt ? ` on ${formatDateTime(refund.confirmedAt)}` : "";
+  if (refund.method === "DEMONSTRATION") {
+    if (refund.status === "CONFIRMED") return `Recorded${when}; no money was sent`;
+    return DEMONSTRATION_REFUND_STATUS_TEXT[refund.status] ?? REFUND_STATUS_TEXT[refund.status];
+  }
+  if (refund.status !== "CONFIRMED") return REFUND_STATUS_TEXT[refund.status];
   const reference = refund.providerReference ? ` · M-Pesa reference ${refund.providerReference}` : "";
   return `${REFUND_STATUS_TEXT.CONFIRMED}${when}${reference}`;
 }
@@ -244,10 +302,10 @@ const refundLine = (refund: OrderRefund) => `Refund of ${formatKES(refund.amount
  * The customer's confirmation after cancelling, from the records the server returned. A replayed
  * cancellation returns the order as it is now, so its refund may already have moved on or been sent.
  */
-export function cancellationNotice(order: Pick<CustomerOrder, "orderNumber" | "refunds">): string {
+export function cancellationNotice(order: Pick<CustomerOrder, "orderNumber" | "refunds" | "paymentMethod">): string {
   const refund = order.refunds.find((item) => item.source === "CANCELLATION" && item.status !== "CANCELLED");
   if (!refund) return `Order ${order.orderNumber} cancelled.`;
-  const followUp = refund.status === "CONFIRMED" ? "" : " We will email you when it is sent.";
+  const followUp = refund.status === "CONFIRMED" || isDemonstrationOrder(order) ? "" : " We will email you when it is sent.";
   return `Order ${order.orderNumber} cancelled. ${refundLine(refund)}${followUp}`;
 }
 
@@ -257,11 +315,12 @@ const hasRefundableUnits = (request: OrderReturn) => request.lines.some((line) =
  * The customer's confirmation after a return request, from the request's current status: a retry with the
  * saved key returns the request as staff have handled it since, not as it was first sent.
  */
-export function returnNotice(request: OrderReturn, order: Pick<CustomerOrder, "returns" | "refunds">): string {
+export function returnNotice(request: OrderReturn, order: Pick<CustomerOrder, "returns" | "refunds" | "paymentMethod" | "isDemo">): string {
   if (request.status === "REQUESTED") {
-    return `Return ${request.number} requested. We will email you when staff have reviewed it. Nothing is refunded until the items are received and checked.`;
+    const email = isDemonstrationOrder(order) ? "" : " We will email you when staff have reviewed it.";
+    return `Return ${request.number} requested.${email} Nothing is refunded until the items are received and checked.`;
   }
-  const status = `Return ${request.number}: ${RETURN_STATUS_TEXT[request.status]}.`;
+  const status = `Return ${request.number}: ${returnStatusText(request.status, order)}.`;
   if (request.status !== "RECEIVED") return status;
   if (!hasRefundableUnits(request)) return `${status} No refund is due for it.`;
   // Customer refunds do not name their return, so one is described only when it cannot belong to another return.
@@ -269,6 +328,51 @@ export function returnNotice(request: OrderReturn, order: Pick<CustomerOrder, "r
   const refunds = order.refunds.filter((item) => item.source === "RETURN" && item.status !== "CANCELLED");
   if (refundable.length === 1 && refunds.length === 1) return `${status} ${refundLine(refunds[0])}`;
   return `${status} Its refund is listed under Refunds with its current status.`;
+}
+
+/* ------------------------------------------------------------------ */
+/* Demonstration controls: the store's part, played by the customer    */
+/* ------------------------------------------------------------------ */
+
+export const DEMONSTRATION_ACTION_LABELS: Record<DemonstrationAction["action"], string> = {
+  START_PROCESSING: "Mark as being prepared",
+  DISPATCH: "Mark as dispatched",
+  CONFIRM_DELIVERY: "Mark as delivered",
+  MARK_READY_FOR_PICKUP: "Mark as ready for pickup",
+  CONFIRM_PICKUP: "Mark as collected",
+  APPROVE: "Approve the return",
+  RECEIVE: "Mark the return as received",
+  COMPLETE_REFUND: "Record the demonstration refund",
+};
+
+const DEMONSTRATION_ORDER_RESULTS: Record<DemonstrationOrderStep, string> = {
+  START_PROCESSING: "is marked as being prepared",
+  DISPATCH: "is marked as dispatched",
+  CONFIRM_DELIVERY: "is marked as delivered",
+  MARK_READY_FOR_PICKUP: "is marked as ready for pickup",
+  CONFIRM_PICKUP: "is marked as collected",
+};
+
+/** The return or refund a demonstration step acts on; order steps name none. */
+export function demonstrationRecord(step: DemonstrationAction, order: Pick<CustomerOrder, "returns" | "refunds">): { number: string; amount?: number } | undefined {
+  if (step.action === "APPROVE" || step.action === "RECEIVE") return order.returns.find((item) => item.id === step.returnId);
+  if (step.action === "COMPLETE_REFUND") return order.refunds.find((item) => item.id === step.refundId);
+  return undefined;
+}
+
+/** What a played step recorded, read from the order the server returned. */
+export function demonstrationOutcome(step: DemonstrationAction, order: Pick<CustomerOrder, "orderNumber" | "returns" | "refunds">): string {
+  const record = demonstrationRecord(step, order);
+  switch (step.action) {
+    case "APPROVE":
+      return `${record ? `Return ${record.number}` : "The return"} is approved.`;
+    case "RECEIVE":
+      return `${record ? `Return ${record.number}` : "The return"} is marked as received.`;
+    case "COMPLETE_REFUND":
+      return `${record?.amount === undefined ? "The demonstration refund" : `Demonstration refund ${record.number} of ${formatKES(record.amount)}`} is recorded; no money was sent.`;
+    default:
+      return `Order ${order.orderNumber} ${DEMONSTRATION_ORDER_RESULTS[step.action]}.`;
+  }
 }
 
 export const STAFF_REFUND_STATUS: Record<RefundStatus, string> = {
@@ -280,6 +384,20 @@ export const STAFF_REFUND_STATUS: Record<RefundStatus, string> = {
   UNRESOLVED: "Unresolved — check M-Pesa before acting",
   CANCELLED: "Cancelled — not sent",
 };
+
+/** A demonstration refund is recorded by the customer; staff never send money for it. */
+const STAFF_DEMONSTRATION_REFUND_STATUS: Record<RefundStatus, string> = {
+  REQUESTED: "Requested — no money is to be sent",
+  APPROVED: "Approved — no money is to be sent",
+  PROCESSING: "In progress — no money is to be sent",
+  CONFIRMED: "Recorded — no money was sent",
+  FAILED: "Failed — no money was sent",
+  UNRESOLVED: "Unresolved — no money was sent",
+  CANCELLED: "Cancelled — no money was sent",
+};
+
+export const staffRefundStatus = (refund: Pick<OrderRefund, "status" | "method">) =>
+  (refund.method === "DEMONSTRATION" ? STAFF_DEMONSTRATION_REFUND_STATUS : STAFF_REFUND_STATUS)[refund.status];
 
 /* ------------------------------------------------------------------ */
 /* Staff actions                                                       */

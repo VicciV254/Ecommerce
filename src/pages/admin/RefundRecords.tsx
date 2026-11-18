@@ -2,7 +2,9 @@ import { useId, useRef, useState, type ReactNode } from "react";
 import { adminAPI, type OwedRefundInput, type RefundAction, type RefundRequestOption, type StaffOrder, type StaffRefund } from "../../api/admin";
 import type { PaymentAttempt } from "../../api/mpesa";
 import { StaffPaymentPanel } from "../../components/PaymentPanel";
-import { REFUND_ACTION_LABELS, REFUND_SOURCE_TEXT, STAFF_REFUND_STATUS, describeStaffFailure } from "../../store/orderCopy";
+import {
+  REFUND_ACTION_LABELS, REFUND_METHOD_LABELS, REFUND_SOURCE_TEXT, STAFF_REFUND_STATUS, describeStaffFailure, isDemonstrationOrder, staffRefundStatus,
+} from "../../store/orderCopy";
 import { OrderFormatError, parseRefundResult } from "../../store/orderModel";
 import { formatDateTime, formatKES } from "../../utils/format";
 import type { ActionOutcome } from "./OperationDialogs";
@@ -11,8 +13,13 @@ import { Feedback, inputClass } from "./shared";
 const actionClass = "min-h-11 rounded-sm border border-brand-primary px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-brand-primary hover:bg-brand-primary hover:text-white";
 const cautionClass = "min-h-11 rounded-sm border border-error/50 px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-error hover:bg-error hover:text-white";
 const DESTRUCTIVE: readonly RefundAction[] = ["fail", "cancel"];
+/** A demonstration refund the customer can still record. */
+const RECORDABLE: readonly StaffRefund["status"][] = ["REQUESTED", "APPROVED", "PROCESSING"];
 
-/** One refund with its history; steps offered are exactly the refund's `allowedActions` for staff who may write. */
+/**
+ * One refund with its history; steps offered are exactly the refund's `allowedActions` for staff who may write. A
+ * demonstration refund moves no money, so it carries no instruction to send any.
+ */
 export function StaffRefundCard({ refund, canWrite, onAction, header, anchorId }: {
   refund: StaffRefund;
   canWrite: boolean;
@@ -22,14 +29,16 @@ export function StaffRefundCard({ refund, canWrite, onAction, header, anchorId }
   /** Lets the order workspace move focus to this refund; list copies have none, so ids stay unique. */
   anchorId?: string;
 }) {
+  const demonstration = refund.method === "DEMONSTRATION";
   const rows: [string, string][] = [
     ["Source", REFUND_SOURCE_TEXT[refund.source]],
+    ["Method", REFUND_METHOD_LABELS[refund.method]],
     ["Requested", `${formatDateTime(refund.requestedAt)} by ${refund.requestedByType.toLowerCase()}`],
     ...(refund.amount !== refund.requestedAmount ? [["Requested amount", formatKES(refund.requestedAmount)] as [string, string]] : []),
     ...(refund.reason ? [["Reason", refund.reason] as [string, string]] : []),
     ...(refund.approvedAt ? [["Approved", formatDateTime(refund.approvedAt)] as [string, string]] : []),
-    ...(refund.processingAt ? [["Sending started", formatDateTime(refund.processingAt)] as [string, string]] : []),
-    ...(refund.confirmedAt ? [["Confirmed sent", formatDateTime(refund.confirmedAt)] as [string, string]] : []),
+    ...(refund.processingAt ? [[demonstration ? "In progress" : "Sending started", formatDateTime(refund.processingAt)] as [string, string]] : []),
+    ...(refund.confirmedAt ? [[demonstration ? "Recorded" : "Confirmed sent", formatDateTime(refund.confirmedAt)] as [string, string]] : []),
     ...(refund.providerReference ? [["M-Pesa reference", refund.providerReference] as [string, string]] : []),
     ...(refund.failedAt ? [["Failed", `${formatDateTime(refund.failedAt)}${refund.failureReason ? ` · ${refund.failureReason}` : ""}`] as [string, string]] : []),
     ...(refund.unresolvedAt ? [["Unresolved", `${formatDateTime(refund.unresolvedAt)}${refund.unresolvedNote ? ` · ${refund.unresolvedNote}` : ""}`] as [string, string]] : []),
@@ -41,7 +50,7 @@ export function StaffRefundCard({ refund, canWrite, onAction, header, anchorId }
       {header}
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <h4 id={anchorId} tabIndex={-1} className="font-mono text-sm font-bold text-brand-primary">{refund.number}</h4>
-        <p className="text-sm font-semibold">{STAFF_REFUND_STATUS[refund.status]}</p>
+        <p className="text-sm font-semibold">{staffRefundStatus(refund)}</p>
       </div>
       <p className="mt-1 text-lg font-semibold tabular-nums text-navy-900">
         {formatKES(refund.amount)}
@@ -56,11 +65,18 @@ export function StaffRefundCard({ refund, canWrite, onAction, header, anchorId }
           </div>
         ))}
       </dl>
+      {demonstration && RECORDABLE.includes(refund.status) && (
+        <p className="mt-3 text-xs font-semibold text-charcoal">
+          No money is to be sent for a demonstration refund. The customer records it from their order.
+        </p>
+      )}
       {actions.length > 0 && (
         <>
-          <p className="mt-3 text-xs font-semibold text-charcoal">
-            Approval does not send money. Record the M-Pesa reference only after the refund has been sent.
-          </p>
+          {!demonstration && (
+            <p className="mt-3 text-xs font-semibold text-charcoal">
+              Approval does not send money. Record the M-Pesa reference only after the refund has been sent.
+            </p>
+          )}
           <div className="mt-2 flex flex-wrap gap-2">
             {actions.map((action) => (
               <button key={action} type="button" onClick={() => onAction(action)} className={DESTRUCTIVE.includes(action) ? cautionClass : actionClass}>
@@ -181,7 +197,10 @@ function OwedRefundRequest({ order, option, onOutcome }: {
     try {
       const { data } = await adminAPI.refunds.requestOwed(order.id, input);
       const result = parseRefundResult(data);
-      onOutcome({ kind: "done", order: result.order, message: `Refund ${result.refund.number} of ${formatKES(result.refund.amount)} requested. It has not been sent yet.` });
+      const { number, amount, method } = result.refund;
+      onOutcome({ kind: "done", order: result.order, message: method === "DEMONSTRATION"
+        ? `Demonstration refund ${number} of ${formatKES(amount)} requested; no money will be sent.`
+        : `Refund ${number} of ${formatKES(amount)} requested. It has not been sent yet.` });
     } catch (failure) {
       const outcome = failure instanceof OrderFormatError
         ? { message: "The request was sent, but the updated order could not be read. It has been reloaded.", reload: true }
@@ -206,7 +225,10 @@ function OwedRefundRequest({ order, option, onOutcome }: {
       <div id={`${id}-form`}>
         {open && (
           <div className="mt-3 space-y-3">
-            <p>This only records a new refund request. No money is sent until it is approved, sent and confirmed.</p>
+            <p>
+              This only records a new refund request.{" "}
+              {isDemonstrationOrder(order) ? "It will be a demonstration refund: no money is sent." : "No money is sent until it is approved, sent and confirmed."}
+            </p>
             <div>
               <label htmlFor={`${id}-reason`} className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-600">Reason (required)</label>
               <textarea ref={reasonRef} id={`${id}-reason`} rows={2} maxLength={500} value={reason}

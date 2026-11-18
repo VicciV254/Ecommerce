@@ -5,7 +5,7 @@
 import type { PaymentAttempt, PaymentOverview } from "../api/mpesa";
 import type { Order } from "../api/orders";
 
-type OverviewOrder = Pick<Order, "id" | "orderNumber" | "total" | "status" | "paymentStatus" | "reservationStatus" | "reservationExpiresAt" | "isDemo">;
+type OverviewOrder = Pick<Order, "id" | "orderNumber" | "total" | "status" | "paymentStatus" | "paymentMethod" | "reservationStatus" | "reservationExpiresAt" | "isDemo">;
 
 export const PAYMENT_MESSAGES = {
   disabled: "M-Pesa payments are not enabled yet.",
@@ -20,6 +20,7 @@ export const PAYMENT_MESSAGES = {
   exists: "Check the existing payment attempt. Do not send another prompt.",
   cooldown: "Wait before requesting another M-Pesa prompt.",
   fractional: "M-Pesa requires a positive whole-KES total. This order will not be rounded or charged.",
+  notPayable: "This order is not awaiting payment on an active reservation.",
 } as const;
 
 /** What the server reports when a new prompt may be requested. */
@@ -32,11 +33,33 @@ export function fixturePaymentOverview(order: OverviewOrder, overrides: Partial<
   return {
     order: {
       id: order.id, orderNumber: order.orderNumber, total: order.total, status: order.status, paymentStatus: order.paymentStatus,
+      paymentMethod: order.paymentMethod === "DEMONSTRATION" ? "DEMONSTRATION" : "MPESA",
       reservationStatus: order.reservationStatus ?? "COMMITTED", reservationExpiresAt: order.reservationExpiresAt ?? null,
       isDemo: order.isDemo ?? false,
     },
     available: false, environment: null, reasonCode: "MPESA_DISABLED", message: PAYMENT_MESSAGES.disabled, attempts: [],
+    demonstration: null,
     ...overrides,
+  };
+}
+
+/**
+ * The overview of an unpaid sample order on a demonstration store: the demonstration payment is available, and M-Pesa
+ * is the sandbox, for approved test numbers.
+ */
+export function fixtureDemonstrationOverview(order: OverviewOrder, overrides: Partial<PaymentOverview> = {}): PaymentOverview {
+  return fixturePaymentOverview({ ...order, isDemo: true }, {
+    available: true, environment: "sandbox", reasonCode: null, message: null,
+    demonstration: { available: true, reasonCode: null }, ...overrides,
+  });
+}
+
+/** The overview once a sample order was paid with a demonstration payment: nothing more to pay. */
+export function fixtureDemonstrationPaidOverview(order: OverviewOrder, overrides: Partial<PaymentOverview> = {}): PaymentOverview {
+  const paid = fixturePaymentOverview({ ...order, isDemo: true, paymentStatus: "PAID", paymentMethod: "DEMONSTRATION", reservationStatus: "COMMITTED" });
+  return {
+    ...paid, environment: "sandbox", reasonCode: "ORDER_NOT_PAYABLE", message: PAYMENT_MESSAGES.notPayable,
+    demonstration: { available: false, reasonCode: "ORDER_NOT_PAYABLE" }, ...overrides,
   };
 }
 

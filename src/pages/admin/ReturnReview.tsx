@@ -1,7 +1,7 @@
 import { useId, useRef, useState } from "react";
 import { adminAPI, type StaffOrder, type StaffReturn, type StaffReturnLine } from "../../api/admin";
 import type { DeliveryFeeRefund } from "../../api/orders";
-import { RETURN_REASON_LABELS, STAFF_RETURN_STATUS, describeStaffFailure, returnRuleText } from "../../store/orderCopy";
+import { RETURN_REASON_LABELS, STAFF_RETURN_STATUS, describeStaffFailure, isDemonstrationOrder, returnRuleText } from "../../store/orderCopy";
 import { OrderFormatError, parseStaffOrder } from "../../store/orderModel";
 import { formatDateTime, formatKES } from "../../utils/format";
 import type { ActionOutcome } from "./OperationDialogs";
@@ -145,7 +145,9 @@ function ReceiptForm({ order, item, onOutcome }: { order: StaffOrder; item: Staf
         kind: "done",
         order: updated,
         message: refund
-          ? `Return ${item.number} received. Refund ${refund.number} of ${formatKES(refund.amount)} requested; it has not been sent yet.`
+          ? `Return ${item.number} received. ${refund.method === "DEMONSTRATION"
+            ? `Demonstration refund ${refund.number} of ${formatKES(refund.amount)} requested; no money will be sent.`
+            : `Refund ${refund.number} of ${formatKES(refund.amount)} requested; it has not been sent yet.`}`
           : `Return ${item.number} received. No refund is due.`,
       });
     } catch (failure) {
@@ -194,7 +196,9 @@ function ReceiptForm({ order, item, onOutcome }: { order: StaffOrder; item: Staf
       </div>
       <p className="text-xs text-charcoal">
         {refundableUnits > 0
-          ? `${refundableUnits} refundable ${refundableUnits === 1 ? "unit" : "units"}: a refund request is created for them. No money is sent until that refund is confirmed with an M-Pesa reference.`
+          ? `${refundableUnits} refundable ${refundableUnits === 1 ? "unit" : "units"}: a refund request is created for them. ${isDemonstrationOrder(order)
+            ? "It will be a demonstration refund: no money is sent."
+            : "No money is sent until that refund is confirmed with an M-Pesa reference."}`
           : "No refundable units: no refund will be requested."}
       </p>
       <Feedback message={error} tone="error" />

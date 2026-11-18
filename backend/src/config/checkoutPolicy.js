@@ -61,14 +61,31 @@ export const offeredDelivery = (policy) => DELIVERY_METHODS.flatMap((method) => 
   return rule ? [{ method, fee: rule.fee, freeAbove: rule.freeAbove, counties: rule.counties }] : [];
 });
 
-function flag(name) {
-  const value = process.env[name] ?? 'false';
-  if (!['true', 'false'].includes(value)) {
-    throw Object.assign(new Error(`${name} must be true or false`), { statusCode: 503, code: 'CHECKOUT_CONFIGURATION_INVALID' });
-  }
+const configurationError = (message) =>
+  Object.assign(new Error(message), { statusCode: 503, code: 'CHECKOUT_CONFIGURATION_INVALID' });
+
+function flag(name, env = process.env) {
+  const value = env[name] ?? 'false';
+  if (!['true', 'false'].includes(value)) throw configurationError(`${name} must be true or false`);
   return value === 'true';
 }
 
 export const reservationsEnabled = () => flag('ENABLE_ORDER_RESERVATIONS');
+
+/**
+ * The public demonstration store's switch, valid in any NODE_ENV: every orderable product is a sample, sample orders
+ * are paid with a demonstration payment, and M-Pesa may use only Safaricom's sandbox. Read first by every rule that
+ * uses it, so an invalid value is always refused.
+ */
+export const demonstrationStore = (env = process.env) => flag('DEMONSTRATION_STORE', env);
 export const demoOrdersEnabled = () =>
-  ['development', 'test'].includes(process.env.NODE_ENV) && flag('ALLOW_DEMO_ORDERS');
+  demonstrationStore() || (['development', 'test'].includes(process.env.NODE_ENV) && flag('ALLOW_DEMO_ORDERS'));
+
+const DEFAULT_DEMO_ORDER_DAILY_LIMIT = 10;
+/** Most sample orders one account may create in 24 hours: `DEMO_ORDER_DAILY_LIMIT`, a positive whole number. */
+export function demoOrderDailyLimit(env = process.env) {
+  const value = env.DEMO_ORDER_DAILY_LIMIT;
+  if (value === undefined) return DEFAULT_DEMO_ORDER_DAILY_LIMIT;
+  if (!/^[1-9]\d{0,8}$/.test(value)) throw configurationError('DEMO_ORDER_DAILY_LIMIT must be a positive whole number');
+  return Number(value);
+}

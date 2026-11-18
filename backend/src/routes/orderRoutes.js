@@ -1,9 +1,12 @@
 import express from 'express';
 import {
   applyOrderAction,
+  applyOrderDemonstrationAction,
   applyRefundAction,
+  approveOrderDemonstrationReturn,
   cancelOrder,
   cancelOrderReturn,
+  completeOrderDemonstrationRefund,
   createCheckoutOrder,
   createOrder,
   createPaymentRefund,
@@ -15,7 +18,9 @@ import {
   getReturns,
   getStaffOrder,
   getUserOrders,
+  payWithDemonstrationPayment,
   quoteOrder,
+  receiveOrderDemonstrationReturn,
   receiveOrderReturn,
   requestOrderRefund,
   requestOrderReturn,
@@ -52,7 +57,12 @@ router.post('/', createOrder);
 router.get('/', getUserOrders);
 router.get('/:id', getOrderById);
 router.post('/:id/cancel', cancelOrder);
+router.post('/:id/demonstration-payment', payWithDemonstrationPayment);
+router.post('/:id/demonstration-actions', applyOrderDemonstrationAction);
 router.post('/:id/returns', requestOrderReturn);
 router.post('/:id/returns/:returnId/cancel', cancelOrderReturn);
+router.post('/:id/returns/:returnId/demonstration-approve', approveOrderDemonstrationReturn);
+router.post('/:id/returns/:returnId/demonstration-receive', receiveOrderDemonstrationReturn);
+router.post('/:id/refunds/:refundId/demonstration-complete', completeOrderDemonstrationRefund);
 
 export default router;

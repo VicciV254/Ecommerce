@@ -4,6 +4,7 @@ import { idSchema } from './catalogValidation.js';
 
 const ORDER_STATUSES = ['PENDING', 'PROCESSING', 'SHIPPED', 'READY_FOR_PICKUP', 'DELIVERED', 'CANCELLED'];
 const REFUND_STATUSES = ['REQUESTED', 'APPROVED', 'PROCESSING', 'CONFIRMED', 'FAILED', 'UNRESOLVED', 'CANCELLED'];
+export const RETURN_STATUSES = ['REQUESTED', 'APPROVED', 'REJECTED', 'CANCELLED', 'RECEIVED'];
 const note = (max) => z.string().trim().min(1).max(max);
 
 export const staffActionSchema = z.object({
@@ -45,6 +46,17 @@ export const refundActionSchema = z.object({
 }).strict();
 
 export const paymentRefundSchema = z.object({ reason: note(500) }).strict();
+
+/*
+ * Demonstration controls read only the step and the status the visitor saw. Not strict on purpose: anything else in the
+ * body (amounts, references, quantities, fault flags, actors) is dropped unread, never applied.
+ */
+export const demonstrationActionSchema = z.object({
+  action: z.enum(['START_PROCESSING', 'MARK_READY_FOR_PICKUP', 'DISPATCH', 'CONFIRM_DELIVERY', 'CONFIRM_PICKUP']),
+  expectedStatus: z.enum(ORDER_STATUSES),
+});
+export const demonstrationReturnSchema = z.object({ expectedStatus: z.enum(RETURN_STATUSES) });
+export const demonstrationRefundSchema = z.object({ expectedStatus: z.enum(REFUND_STATUSES) });
 export const owedRefundSchema = z.object({
   source: z.enum(['CANCELLATION', 'RETURN']),
   returnId: idSchema.optional(),
@@ -59,5 +71,4 @@ export const listQuerySchema = (statuses) => z.object({
   page: z.coerce.number().int().min(1).max(10_000).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
-export const RETURN_STATUSES = ['REQUESTED', 'APPROVED', 'REJECTED', 'CANCELLED', 'RECEIVED'];
 export { REFUND_STATUSES };

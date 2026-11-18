@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
+import type { DemonstrationAction } from "../api/orders";
 import { fixturePendingOrder, fixtureQuote } from "../test-support/checkoutFixtures";
-import { fixtureDeliveredOrder, fixtureRefund, fixtureStaffOrder, fixtureStaffRefund } from "../test-support/orderFixtures";
+import {
+  fixtureCustomerOrder, fixtureDeliveredOrder, fixtureRefund, fixtureReturn, fixtureStaffOrder, fixtureStaffRefund,
+} from "../test-support/orderFixtures";
 import { OrderFormatError, parseCustomerOrder, parseOrderTracking, parseStaffOrder } from "./orderModel";
 
 const order = fixturePendingOrder(fixtureQuote());
@@ -34,6 +37,49 @@ describe("order view validation", () => {
     ];
     for (const [data, detail] of invalidStaff) expect(() => parseStaffOrder(data)).toThrow(detail);
     expect(() => parseStaffOrder(null)).toThrow(OrderFormatError);
+  });
+});
+
+describe("demonstration records", () => {
+  const sample = fixturePendingOrder(fixtureQuote(), { isDemo: true, paymentMethod: "DEMONSTRATION", paymentStatus: "PAID" });
+  const requested = fixtureReturn(sample);
+  const refund = fixtureRefund({ method: "DEMONSTRATION" });
+  const steps: DemonstrationAction[] = [
+    { action: "START_PROCESSING", expectedStatus: "PENDING" },
+    { action: "APPROVE", returnId: requested.id, expectedStatus: "REQUESTED" },
+    { action: "COMPLETE_REFUND", refundId: refund.id, expectedStatus: "REQUESTED" },
+  ];
+  const view = fixtureCustomerOrder(sample, {
+    returns: [requested], refunds: [refund], demonstrationActions: steps,
+    trackingHistory: [{ id: "event-1", status: "PENDING", description: "Demonstration payment recorded; no money was taken. Awaiting fulfilment.",
+      location: "Demonstration", createdAt: "2026-11-18T09:00:00.000Z", actorType: "DEMONSTRATION" }],
+  });
+
+  it("accepts the controls the server lists, demonstration events and demonstration refunds", () => {
+    const parsed = parseCustomerOrder(JSON.parse(JSON.stringify(view)), sample.id);
+    expect(parsed.demonstrationActions).toEqual(steps);
+    expect(parsed.trackingHistory[0].actorType).toBe("DEMONSTRATION");
+    expect(parsed.refunds[0].method).toBe("DEMONSTRATION");
+    // Staff views carry no owner controls.
+    expect(parseStaffOrder(fixtureStaffOrder(sample), sample.id)).not.toHaveProperty("demonstrationActions");
+  });
+
+  it("refuses controls that the order cannot have, unknown refund methods and unknown actors", () => {
+    const invalid: [unknown, RegExp][] = [
+      [{ ...view, demonstrationActions: undefined }, /demonstration actions/],
+      [{ ...view, demonstrationActions: [{ action: "CANCEL", expectedStatus: "PENDING" }] }, /demonstration actions/],
+      [{ ...view, demonstrationActions: [{ action: "DISPATCH", expectedStatus: "PROCESSING" }] }, /demonstration actions/],
+      [{ ...view, demonstrationActions: [{ action: "APPROVE", returnId: "another-return", expectedStatus: "REQUESTED" }] }, /demonstration actions/],
+      [{ ...view, demonstrationActions: [{ action: "RECEIVE", returnId: requested.id, expectedStatus: "APPROVED" }] }, /demonstration actions/],
+      [{ ...view, demonstrationActions: [{ action: "COMPLETE_REFUND", refundId: refund.id, expectedStatus: "CONFIRMED" }] }, /demonstration actions/],
+      [{ ...view, demonstrationActions: [steps[0], steps[0]] }, /demonstration actions/],
+      [{ ...view, refunds: [{ ...refund, method: "CASH" }] }, /refunds/],
+      [{ ...view, trackingHistory: [{ ...view.trackingHistory[0], actorType: "VISITOR" }] }, /tracking history/],
+    ];
+    for (const [data, detail] of invalid) expect(() => parseCustomerOrder(data)).toThrow(detail);
+    // A refund step only for a demonstration refund the order has.
+    const mpesa = { ...view, refunds: [{ ...refund, method: "MPESA_MANUAL" }] };
+    expect(() => parseCustomerOrder(mpesa)).toThrow(/demonstration actions/);
   });
 });
 

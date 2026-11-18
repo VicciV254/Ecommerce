@@ -30,6 +30,7 @@ function catalogWith(products: CatalogProduct[], status: CatalogValue["status"] 
     designers: [],
     discounts: [],
     returnPolicy: status === "ready" ? fixtureReturnPolicy : null, delivery: status === "ready" ? fixtureDelivery : null,
+    demonstrationOrders: status === "ready" ? false : null,
     reload: vi.fn(),
   };
 }

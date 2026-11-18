@@ -54,8 +54,10 @@ function DeliveryAnswer({ delivery }: { delivery: readonly CatalogDelivery[] | n
 
 /** Answers to common questions about this demonstration store; catalog facts fill in delivery and returns. */
 export default function Faq() {
-  const { status, delivery, returnPolicy } = useCatalog();
+  const { status, delivery, returnPolicy, demonstrationOrders } = useCatalog();
   const { operator } = STORE_FACTS;
+  // Where sample orders take demonstration payments the answers say so; otherwise (or until the catalog loads) today's.
+  const demonstration = demonstrationOrders === true;
 
   const sections: InfoSection[] = [
     {
@@ -70,14 +72,29 @@ export default function Faq() {
             </p>
           </Question>
           <Question question="What can I try?">
-            <p className={infoParagraph}>
-              You can browse and search the products, fill a cart and a wishlist, create an account, save addresses and see
-              the delivery options at checkout. The products are samples, so on this site checkout stops before an order is
-              placed.
-            </p>
+            {demonstration ? (
+              <p className={infoParagraph}>
+                You can browse and search the products, fill a cart and a wishlist, create an account, save addresses, and
+                order sample products with a demonstration payment, which takes no money. You can then play the store's part
+                for your own order: dispatch, delivery, a return and its refund.
+              </p>
+            ) : (
+              <p className={infoParagraph}>
+                You can browse and search the products, fill a cart and a wishlist, create an account, save addresses and see
+                the delivery options at checkout. The products are samples, so on this site checkout stops before an order is
+                placed.
+              </p>
+            )}
           </Question>
           <Question question="Will I be charged?">
-            <p className={infoParagraph}>No. Nothing can be bought here, and the site takes no real payments.</p>
+            {demonstration ? (
+              <p className={infoParagraph}>
+                No. A demonstration payment takes no money and sends no phone prompt. M-Pesa is set up in Safaricom's test
+                sandbox, and its prompts can only be sent to the owner's approved test numbers.
+              </p>
+            ) : (
+              <p className={infoParagraph}>No. Nothing can be bought here, and the site takes no real payments.</p>
+            )}
           </Question>
         </Questions>
       ),
@@ -102,6 +119,7 @@ export default function Faq() {
             <p className={infoParagraph}>
               The store is set up for M-Pesa: the customer approves a prompt on their phone, so the store never sees an
               M-Pesa PIN.
+              {demonstration && " On this site, sample orders are paid with a demonstration payment, unless an approved test number is used."}
             </p>
           </Question>
           <Question question="Where does the store deliver?">

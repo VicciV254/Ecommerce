@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { DeliveryMethod, OrderStatus, PaymentStatus, RefundStatus } from "../api/orders";
+import { fixturePendingOrder, fixtureQuote } from "../test-support/checkoutFixtures";
+import { fixtureDeliveredOrder, fixtureRefund, fixtureReturn } from "../test-support/orderFixtures";
 import { REFUND_STATUSES } from "./orderModel";
-import { ORDER_STATUS_LABELS, STAFF_REFUND_STATUS, cancellationRefund, orderStatusLabel, refundStatusText, shopperOrderStatusLabel } from "./orderCopy";
+import {
+  ACTOR_LABELS, ORDER_STATUS_LABELS, REFUND_METHOD_LABELS, STAFF_REFUND_STATUS, cancellationNotice, cancellationRefund,
+  orderStatusLabel, paymentLabel, productReturnFact, refundStatusText, returnNotice, returnPolicyTerms, returnStatusText,
+  shopperOrderStatusLabel,
+} from "./orderCopy";
 
 const PAYMENT_STATUSES: PaymentStatus[] = ["PENDING", "PAID", "FAILED", "REFUNDED", "PARTIALLY_REFUNDED"];
 const ORDER_STATUSES = Object.keys(ORDER_STATUS_LABELS) as OrderStatus[];
@@ -70,5 +76,76 @@ describe("refund wording", () => {
   it("describes what a cancellation does with money received for every payment state", () => {
     const statuses: PaymentStatus[] = ["PENDING", "FAILED", "PAID", "PARTIALLY_REFUNDED", "REFUNDED"];
     expect(statuses.map(cancellationRefund)).toEqual([null, null, "full", "remaining", "settled"]);
+  });
+});
+
+describe("demonstration labels and wording", () => {
+  const sample = fixturePendingOrder(fixtureQuote(), { isDemo: true });
+  const paidByDemonstration = { ...sample, paymentMethod: "DEMONSTRATION", paymentStatus: "PAID" as const };
+
+  it("names the demonstration payment, its refunds and its actor, and never shows an M-Pesa reference for them", () => {
+    expect(paymentLabel(paidByDemonstration)).toBe("Demonstration payment (paid)");
+    expect(paymentLabel({ ...sample, paymentStatus: "PAID" })).toBe("M-Pesa (paid)");
+    expect(paymentLabel({ ...sample, paymentMethod: "BANK_TRANSFER" })).toBe("bank transfer (pending)");
+    expect(paymentLabel({ ...sample, paymentMethod: "constructor" })).toBe("constructor (pending)");
+    expect(REFUND_METHOD_LABELS).toEqual({ MPESA_MANUAL: "M-Pesa", DEMONSTRATION: "Demonstration refund (no money sent)" });
+    expect(ACTOR_LABELS.DEMONSTRATION).toBe("Demonstration");
+    const recorded = refundStatusText({ status: "CONFIRMED", confirmedAt: CONFIRMED_AT, providerReference: null, method: "DEMONSTRATION" });
+    expect(recorded).toMatch(/^Recorded on .+; no money was sent$/);
+    expect(recorded).not.toMatch(/M-Pesa|reference/);
+    for (const status of REFUND_STATUSES.filter((value) => value !== "CONFIRMED")) {
+      const text = refundStatusText({ status, confirmedAt: null, providerReference: null, method: "DEMONSTRATION" });
+      expect(text.replace(/not sent/gi, ""), status).not.toMatch(/M-Pesa|reference|sent/i);
+    }
+  });
+
+  it("promises no email and describes refunds without money for a demonstration-paid order", () => {
+    const refund = fixtureRefund({ source: "CANCELLATION", amount: 1244, method: "DEMONSTRATION" });
+    const cancelled = { orderNumber: sample.orderNumber, refunds: [refund] };
+    expect(cancellationNotice({ ...cancelled, paymentMethod: "DEMONSTRATION" })).not.toMatch(/email/i);
+    expect(cancellationNotice({ ...cancelled, paymentMethod: "MPESA", refunds: [{ ...refund, method: "MPESA_MANUAL" }] }))
+      .toMatch(/We will email you when it is sent\.$/);
+    const requested = fixtureReturn(sample);
+    expect(returnNotice(requested, { returns: [requested], refunds: [], paymentMethod: "DEMONSTRATION" }))
+      .toBe(`Return ${requested.number} requested. Nothing is refunded until the items are received and checked.`);
+    expect(returnNotice(requested, { returns: [requested], refunds: [], paymentMethod: "MPESA" })).toMatch(/We will email you/);
+    const policy = fixtureDeliveredOrder(sample).returnEligibility.policy;
+    const terms = returnPolicyTerms(policy, "DEMONSTRATION");
+    expect(terms).toContain("Refunds of demonstration payments are recorded without moving money.");
+    expect(terms.join(" ")).not.toMatch(/M-Pesa|email/);
+    expect(returnPolicyTerms(policy, "MPESA")).toContain(
+      "Refunds are sent by M-Pesa after staff receive and check the items. We will email you when your refund is sent.");
+  });
+
+  it("reads a sample order's returns as played in the demonstration, however it was paid", () => {
+    expect(returnStatusText("APPROVED", { isDemo: true })).toBe("Approved in the demonstration");
+    expect(returnStatusText("RECEIVED", { isDemo: true })).toBe("Marked as received in the demonstration");
+    expect(returnStatusText("REQUESTED", { isDemo: true })).toBe("Awaiting review");
+    expect(returnStatusText("APPROVED", { isDemo: false })).toBe("Approved — staff will arrange the return");
+    expect(returnStatusText("RECEIVED", {})).toBe("Received and checked");
+    const received = fixtureReturn(sample, { status: "RECEIVED", receivedAt: CONFIRMED_AT, merchantFaultConfirmed: false });
+    expect(returnNotice(received, { returns: [received], refunds: [], paymentMethod: "MPESA", isDemo: true }))
+      .toBe(`Return ${received.number}: Marked as received in the demonstration. No refund is due for it.`);
+    expect(returnNotice(received, { returns: [received], refunds: [], paymentMethod: "MPESA", isDemo: false }))
+      .toBe(`Return ${received.number}: Received and checked. No refund is due for it.`);
+  });
+
+  it("states the delivery-fee term without staff for a demonstration-paid order, and keeps it for M-Pesa", () => {
+    const policy = fixtureDeliveredOrder(sample).returnEligibility.policy;
+    expect(policy.deliveryFeeRefund).toBe("MERCHANT_FAULT_ONLY");
+    const demonstration = returnPolicyTerms(policy, "DEMONSTRATION");
+    expect(demonstration).toContain("The delivery fee is refunded only for a faulty, damaged or wrong item.");
+    expect(demonstration.join(" ")).not.toMatch(/staff/i);
+    expect(returnPolicyTerms(policy, "MPESA")).toContain("The delivery fee is refunded only if staff confirm an item was faulty, damaged or wrong.");
+    expect(returnPolicyTerms({ ...policy, deliveryFeeRefund: "ALWAYS" }, "DEMONSTRATION"))
+      .toContain("The delivery fee is included in your first accepted return refund.");
+  });
+
+  it("says a sample product's refunds move no money only where sample orders take demonstration payments", () => {
+    const terms = { windowDays: 7, deliveryFeeRefund: "MERCHANT_FAULT_ONLY" as const };
+    const fee = "delivery fee refunded only for faulty, damaged or wrong items.";
+    expect(productReturnFact("STANDARD", terms, true).refunds).toBe(`Refunds of demonstration payments move no money; ${fee}`);
+    expect(productReturnFact("STANDARD", terms, false).refunds).toBe(`Refunds by M-Pesa; ${fee}`);
+    expect(productReturnFact("FAULT_ONLY", terms).refunds).toBe(`Refunds by M-Pesa; ${fee}`);
   });
 });

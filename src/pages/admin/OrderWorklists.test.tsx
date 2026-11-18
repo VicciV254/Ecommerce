@@ -138,6 +138,16 @@ describe("worklist paging", () => {
   });
 });
 
+describe("refunds list wording", () => {
+  it("says how M-Pesa refunds are sent and that demonstration refunds move no money", async () => {
+    admin.refunds.getAll.mockImplementation(servePages(() => [listedRefund(1)], "refunds"));
+    render(<RefundsQueue canWrite onOpen={vi.fn()} onChanged={vi.fn()} showToast={vi.fn()} reloadToken={0} filters={{ status: null, page: 1 }} onFilters={vi.fn()} />);
+    expect(await screen.findAllByRole("button", { name: /^Open order/ }, WAIT)).toHaveLength(1);
+    expect(screen.getByText("Refunds are sent manually by M-Pesa. Only a recorded M-Pesa reference marks a refund as sent. "
+      + "Demonstration refunds move no money; the customer records them from their order.")).toBeTruthy();
+  });
+});
+
 describe("opening a record from a worklist", () => {
   it("focuses the refund in the opened order, not its copy in the hidden Refunds list", async () => {
     const order = paidOrder(1);

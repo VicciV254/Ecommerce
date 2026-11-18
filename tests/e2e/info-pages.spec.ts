@@ -198,6 +198,29 @@ test("FAQ answers stay closed until their question is opened by keyboard or tap,
   await expect(main.locator("details[open]")).toHaveCount(2);
 });
 
+test("with sample orders on, the FAQ, footer, Terms and Privacy notice describe the demonstration payment instead", async ({ page }) => {
+  await page.route("**/api/catalog", (route) => route.fulfill({ json: { ...publicSnapshot, demonstrationOrders: true } }));
+  await page.goto("/#/faq");
+  const main = page.getByRole("main");
+  const disclosure = (question: string) => main.locator("details").filter({ has: page.locator("summary", { hasText: question }) });
+  await disclosure("What can I try?").locator("summary").click();
+  await expect(main.getByText("order sample products with a demonstration payment, which takes no money.", { exact: false })).toBeVisible();
+  await disclosure("Will I be charged?").locator("summary").click();
+  await expect(main.getByText("No. A demonstration payment takes no money and sends no phone prompt.", { exact: false })).toBeVisible();
+  await expect(main.getByText(/checkout stops before an order is placed|the site takes no real payments/)).toHaveCount(0);
+  await expect(page.getByRole("contentinfo").getByText("Sample orders are paid with a demonstration payment; no money is taken.")).toBeVisible();
+
+  await page.goto("/#/terms");
+  await expect(page.getByRole("main").getByText("sample orders are paid with a demonstration payment that takes no money.", { exact: false })).toBeVisible();
+  await expect(page.getByText("checkout stops before an order is placed", { exact: false })).toHaveCount(0);
+
+  await page.goto("/#/privacy");
+  const privacy = page.getByRole("main");
+  await expect(privacy.getByText("Orders for sample products are kept like any order.", { exact: false })).toBeVisible();
+  await expect(privacy.getByText("On this site, prompts can only be sent to the owner's approved test numbers.", { exact: false })).toBeVisible();
+  await expect(privacy.getByText(/can't be ordered on this site|That can't happen on this site/)).toHaveCount(0);
+});
+
 test("an unknown address shows the not-found page with working links, and the footer's Privacy and Terms links navigate", async ({ page }) => {
   await page.goto("/#/does-not-exist");
   const main = page.getByRole("main");

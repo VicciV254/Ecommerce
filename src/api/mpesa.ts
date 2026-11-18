@@ -1,5 +1,5 @@
 import api from "./client";
-import { IDEMPOTENCY_HEADER, type OrderStatus, type PaymentStatus, type ReservationStatus } from "./orders";
+import { IDEMPOTENCY_HEADER, type OrderStatus, type PaymentMethod, type PaymentStatus, type ReservationStatus } from "./orders";
 import { staffRequest } from "./staffSession";
 
 export type PaymentAttemptStatus = "INITIATING" | "PENDING" | "UNKNOWN" | "REVIEW" | "SUCCEEDED" | "FAILED";
@@ -38,9 +38,17 @@ export interface PaymentOrderSummary {
   total: number;
   status: OrderStatus;
   paymentStatus: PaymentStatus;
+  /** `DEMONSTRATION` once a sample order was paid with a demonstration payment. */
+  paymentMethod: PaymentMethod;
   reservationStatus: ReservationStatus;
   reservationExpiresAt: string | null;
   isDemo: boolean;
+}
+
+/** Whether a sample order can be paid with a demonstration payment now; otherwise `reasonCode` says why. */
+export interface DemonstrationPayment {
+  available: boolean;
+  reasonCode: string | null;
 }
 
 export interface PaymentOverview {
@@ -53,12 +61,14 @@ export interface PaymentOverview {
   message: string | null;
   /** Newest first. */
   attempts: PaymentAttempt[];
+  /** Present only for a sample order where sample orders are enabled; `null` otherwise. */
+  demonstration: DemonstrationPayment | null;
 }
 
 const orderPayments = (orderId: string) => `orders/${encodeURIComponent(orderId)}/payments`;
 const attemptPath = (id: string) => `payments/${encodeURIComponent(id)}`;
 
-/** Customer payment calls. Responses are validated by `paymentModel` before use. */
+/** Customer payment calls. Responses are validated by `paymentModel` (and `orderModel` for orders) before use. */
 export const paymentsAPI = {
   getOverview: (orderId: string) => api.get<unknown>(`/mpesa/${orderPayments(orderId)}`),
   /** Asks M-Pesa to prompt the phone for the saved order total; the key binds retries to one attempt. */
@@ -66,6 +76,11 @@ export const paymentsAPI = {
     api.post<unknown>("/mpesa/stk-push", { orderId, phone }, { headers: { [IDEMPOTENCY_HEADER]: idempotencyKey } }),
   /** Asks the server to check this attempt with M-Pesa; it never starts a payment. */
   checkAttempt: (id: string) => api.post<unknown>(`/mpesa/${attemptPath(id)}/query`),
+  /**
+   * Pays a sample order with a demonstration payment: no money, no phone prompt and no M-Pesa record. Repeating it
+   * changes nothing. Answers with the customer's order.
+   */
+  payWithDemonstration: (orderId: string) => api.post<unknown>(`/orders/${encodeURIComponent(orderId)}/demonstration-payment`, {}),
 };
 
 /** Staff reads and reconciliation, sent only with staff credentials. Staff cannot start payments. */

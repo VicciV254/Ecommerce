@@ -3,7 +3,9 @@ import prisma from '../config/database.js';
 import { checkoutPolicy } from '../config/checkoutPolicy.js';
 import { returnPolicy, reasonAllowed, allowedReasons } from '../config/returnPolicy.js';
 import { httpError } from './catalogService.js';
-import { customerOrderWhere, lockOrderInventory, orderTransaction, restockReturnedItems } from './inventoryService.js';
+import {
+  actorLocation, customerOrderWhere, demonstrationOrderWhere, lockOrderInventory, orderTransaction, restockReturnedItems,
+} from './inventoryService.js';
 import { dispatchNotifications, enqueueNotification } from './notificationService.js';
 import { ACTIVE_REFUND_STATUSES, createRefundInTransaction } from './refundService.js';
 import { Decimal, decimal, moneyNumber, sumMoney } from '../utils/money.js';
@@ -72,9 +74,21 @@ async function nextReturnNumber(db, order) {
 }
 
 const trackingEvent = (order, description, actor, reason = null) => ({
-  orderId: order.id, status: order.status, description, location: actor.type === 'STAFF' ? 'Staff portal' : 'Customer self-service',
+  orderId: order.id, status: order.status, description, location: actorLocation(actor, 'Customer self-service'),
   actorType: actor.type, actorId: actor.id ?? null, reason,
 });
+
+/** What the stored history says a decision or receipt did; the demonstration's own steps say they were played. */
+const playedInDemonstration = (actor) => actor.type === 'DEMONSTRATION';
+const approvalText = (number, actor) => (playedInDemonstration(actor)
+  ? `Return ${number} approved in the demonstration.`
+  : `Return ${number} approved; staff will arrange the return.`);
+function receiptText(number, refund, actor) {
+  const outcome = refund ? `refund of KES ${moneyNumber(refund.amount).toLocaleString('en-KE')} requested` : 'no refund is due';
+  return playedInDemonstration(actor)
+    ? `Return ${number} marked as received in the demonstration; ${outcome}.`
+    : `Return ${number} received and inspected; ${outcome}.`;
+}
 
 /** Creates or replays one customer return request for selected items. */
 export async function requestReturn(userId, orderId, input, idempotencyKey) {
@@ -138,8 +152,11 @@ export async function requestReturn(userId, orderId, input, idempotencyKey) {
   }
 }
 
+/** Locks the return's order and reads the return; `where` narrows which returns qualify (combined, never replacing). */
 async function lockReturn(db, returnId, where = {}) {
-  const located = await db.returnRequest.findFirst({ where: { id: returnId, order: { is: customerOrderWhere() }, ...where }, select: { orderId: true } });
+  const located = await db.returnRequest.findFirst({
+    where: { AND: [{ id: returnId, order: { is: customerOrderWhere() } }, where] }, select: { orderId: true },
+  });
   if (!located) throw httpError(404, 'Return request not found.', 'RETURN_NOT_FOUND');
   await lockOrderInventory(db, located.orderId);
   return db.returnRequest.findUnique({ where: { id: returnId }, include: { lines: { include: { orderItem: true } } } });
@@ -155,10 +172,10 @@ export async function cancelReturn(userId, orderId, returnId) {
   });
 }
 
-export async function decideReturn(returnId, { decision, expectedStatus, note }, actor) {
+export async function decideReturn(returnId, { decision, expectedStatus, note }, actor, where = {}) {
   let notificationIds = [];
   const result = await orderTransaction(async (db) => {
-    const request = await lockReturn(db, returnId);
+    const request = await lockReturn(db, returnId, where);
     if (request.status !== expectedStatus || request.status !== 'REQUESTED') throw httpError(409, 'This return changed. Reload it before acting.', 'RETURN_CHANGED');
     if (decision === 'REJECT' && !note) throw httpError(400, 'Explain why the return is not approved.', 'REASON_REQUIRED');
     const approved = decision === 'APPROVE';
@@ -167,7 +184,7 @@ export async function decideReturn(returnId, { decision, expectedStatus, note },
     } });
     const order = await db.order.findUnique({ where: { id: request.orderId }, include: { user: { select: { email: true } } } });
     await db.trackingEvent.create({ data: trackingEvent(order, approved
-      ? `Return ${request.number} approved; staff will arrange the return.`
+      ? approvalText(request.number, actor)
       : `Return ${request.number} was not approved.`, actor, note ?? null) });
     const notification = await enqueueNotification(db, {
       type: approved ? 'RETURN_APPROVED' : 'RETURN_REJECTED', order, returnRequestId: returnId, dedupeKey: `return-decision:${returnId}`,
@@ -205,10 +222,15 @@ export async function returnRefundTerms(db, order, received, merchantFaultConfir
   return { includeDeliveryFee, amount: returnRefundAmount(order, received, { includeDeliveryFee }) };
 }
 
-export async function receiveReturn(returnId, { expectedStatus, merchantFaultConfirmed, note, lines }, actor) {
+/**
+ * Records what arrived for an approved return, restocks it and requests its refund. `receipt` derives the inspection
+ * from the locked request (a demonstration receipt is the server's, not the body's); `where` narrows the returns.
+ */
+export async function receiveReturn(returnId, input, actor, { where = {}, receipt = (_request, given) => given } = {}) {
   let notificationIds = [];
   const result = await orderTransaction(async (db) => {
-    const request = await lockReturn(db, returnId);
+    const request = await lockReturn(db, returnId, where);
+    const { expectedStatus, merchantFaultConfirmed, note, lines } = receipt(request, input);
     if (request.status !== expectedStatus || request.status !== 'APPROVED') throw httpError(409, 'This return changed. Reload it before acting.', 'RETURN_CHANGED');
     const inputs = new Map(lines.map((line) => [line.returnLineId, line]));
     if (inputs.size !== lines.length || inputs.size !== request.lines.length || request.lines.some((line) => !inputs.has(line.id))) {
@@ -241,9 +263,7 @@ export async function receiveReturn(returnId, { expectedStatus, merchantFaultCon
     const updated = await db.returnRequest.update({ where: { id: returnId }, data: {
       status: 'RECEIVED', receivedAt: new Date(), receivedById: actor.id, merchantFaultConfirmed, inspectionNote: note ?? null,
     } });
-    await db.trackingEvent.create({ data: trackingEvent(order, refund
-      ? `Return ${request.number} received and inspected; refund of KES ${moneyNumber(refund.amount).toLocaleString('en-KE')} requested.`
-      : `Return ${request.number} received and inspected; no refund is due.`, actor, note ?? null) });
+    await db.trackingEvent.create({ data: trackingEvent(order, receiptText(request.number, refund, actor), actor, note ?? null) });
     const notification = await enqueueNotification(db, {
       type: 'RETURN_RECEIVED', order, returnRequestId: returnId, refundId: refund?.id ?? null, dedupeKey: `return-received:${returnId}`,
     });
@@ -252,6 +272,44 @@ export async function receiveReturn(returnId, { expectedStatus, merchantFaultCon
   });
   await dispatchNotifications(notificationIds);
   return result;
+}
+
+/** Reasons that put the fault with the store, and those whose items cannot go back on sale. */
+const STORE_FAULT_REASONS = ['FAULTY', 'DAMAGED', 'WRONG_ITEM'];
+const NOT_RESELLABLE_REASONS = ['FAULTY', 'DAMAGED'];
+
+/**
+ * The demonstration's inspection, from the request alone: every requested unit arrives and is refundable; it goes back
+ * on sale unless faulty or damaged; the store is at fault for faulty, damaged or wrong items.
+ */
+export function demonstrationReceipt(request, { expectedStatus }) {
+  return {
+    expectedStatus,
+    merchantFaultConfirmed: STORE_FAULT_REASONS.includes(request.reason),
+    lines: request.lines.map((line) => ({
+      returnLineId: line.id, receivedQuantity: line.quantity, refundableQuantity: line.quantity,
+      restockQuantity: NOT_RESELLABLE_REASONS.includes(request.reason) ? 0 : line.quantity,
+    })),
+  };
+}
+
+/** Binds a demonstration control to a return on the caller's own sample order named in the address. */
+function demonstrationReturnWhere(userId, orderId) {
+  const scope = demonstrationOrderWhere(userId);
+  if (!scope) throw httpError(404, 'Return request not found.', 'RETURN_NOT_FOUND');
+  return { orderId, order: { is: scope } };
+}
+
+/** The visitor approves a return on their own sample order, as staff would. */
+export function approveDemonstrationReturn(userId, orderId, returnId, { expectedStatus }) {
+  const where = demonstrationReturnWhere(userId, orderId);
+  return decideReturn(returnId, { decision: 'APPROVE', expectedStatus }, { type: 'DEMONSTRATION', id: userId }, where);
+}
+
+/** The visitor marks a return on their own sample order as received; what arrived is derived, never taken from the body. */
+export function receiveDemonstrationReturn(userId, orderId, returnId, { expectedStatus }) {
+  const where = demonstrationReturnWhere(userId, orderId);
+  return receiveReturn(returnId, { expectedStatus }, { type: 'DEMONSTRATION', id: userId }, { where, receipt: demonstrationReceipt });
 }
 
 export function returnDto(request, staff = false) {

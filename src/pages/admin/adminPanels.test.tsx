@@ -61,7 +61,7 @@ function publicCatalog(products: CatalogProduct[]): CatalogValue {
   return {
     status: "ready", error: null, mode: "live", products,
     productsById: new Map(products.map((product) => [product.id, product])),
-    categories: buildCategoryTree(snapshot.categories), designers: [], discounts: [], returnPolicy: snapshot.returnPolicy, delivery: snapshot.delivery, reload: vi.fn(),
+    categories: buildCategoryTree(snapshot.categories), designers: [], discounts: [], returnPolicy: snapshot.returnPolicy, delivery: snapshot.delivery, demonstrationOrders: false, reload: vi.fn(),
   };
 }
 

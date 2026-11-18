@@ -1,13 +1,14 @@
 import { isAxiosError, isCancel } from "axios";
 import { apiErrorCode, apiStatus, describeApiError } from "../api/errors";
 import type {
+  DemonstrationPayment,
   PaymentAttempt,
   PaymentAttemptStatus,
   PaymentEnvironment,
   PaymentOrderSummary,
   PaymentOverview,
 } from "../api/mpesa";
-import type { Order } from "../api/orders";
+import type { Order, PaymentMethod } from "../api/orders";
 import { STORAGE_NAMESPACE, isRecord, readStoredJson, writeStoredJson } from "../utils/storage";
 import { isMoney } from "./catalogModel";
 import { isIdempotencyKey, isOrderStatus, isPaymentStatus, isReservationStatus } from "./checkoutModel";
@@ -37,8 +38,10 @@ const isNullableTimestamp = (value: unknown): value is string | null => value ==
 
 const ATTEMPT_STATUSES: readonly PaymentAttemptStatus[] = ["INITIATING", "PENDING", "UNKNOWN", "REVIEW", "SUCCEEDED", "FAILED"];
 const ENVIRONMENTS: readonly PaymentEnvironment[] = ["sandbox", "production"];
+const PAYMENT_METHODS: readonly PaymentMethod[] = ["MPESA", "CARD", "BANK_TRANSFER", "COD", "DEMONSTRATION"];
 const isAttemptStatus = (value: unknown): value is PaymentAttemptStatus => ATTEMPT_STATUSES.some((status) => status === value);
 const isEnvironment = (value: unknown): value is PaymentEnvironment => ENVIRONMENTS.some((environment) => environment === value);
+const isPaymentMethod = (value: unknown): value is PaymentMethod => PAYMENT_METHODS.some((method) => method === value);
 
 function isAttempt(value: unknown): value is PaymentAttempt {
   return isRecord(value) && isId(value.id) && isId(value.orderId) && isAttemptStatus(value.status) &&
@@ -60,8 +63,12 @@ export function parsePaymentAttempt(data: unknown, expected: { id?: string; orde
 
 function isOrderSummary(value: unknown): value is PaymentOrderSummary {
   return isRecord(value) && isId(value.id) && isText(value.orderNumber, MAX_CODE) && isMoney(value.total) &&
-    isOrderStatus(value.status) && isPaymentStatus(value.paymentStatus) && isReservationStatus(value.reservationStatus) &&
-    isNullableTimestamp(value.reservationExpiresAt) && typeof value.isDemo === "boolean";
+    isOrderStatus(value.status) && isPaymentStatus(value.paymentStatus) && isPaymentMethod(value.paymentMethod) &&
+    isReservationStatus(value.reservationStatus) && isNullableTimestamp(value.reservationExpiresAt) && typeof value.isDemo === "boolean";
+}
+
+function isDemonstrationPayment(value: unknown): value is DemonstrationPayment | null {
+  return value === null || (isRecord(value) && typeof value.available === "boolean" && isNullableText(value.reasonCode, MAX_CODE));
 }
 
 /** Validates a payment overview, and that it describes the order that was asked about. */
@@ -71,6 +78,7 @@ export function parsePaymentOverview(data: unknown, orderId: string): PaymentOve
     !isNullableText(data.reasonCode, MAX_CODE) || !isNullableText(data.message)) {
     throw new PaymentFormatError("availability");
   }
+  if (!isDemonstrationPayment(data.demonstration)) throw new PaymentFormatError("demonstration payment");
   if (!Array.isArray(data.attempts) || data.attempts.length > MAX_ATTEMPTS ||
     !data.attempts.every((attempt: unknown) => isAttempt(attempt) && attempt.orderId === orderId)) {
     throw new PaymentFormatError("attempts");
@@ -79,6 +87,7 @@ export function parsePaymentOverview(data: unknown, orderId: string): PaymentOve
     order: data.order, available: data.available, environment: data.environment,
     reasonCode: data.reasonCode, message: data.message,
     attempts: data.attempts.map((attempt: unknown) => parsePaymentAttempt(attempt, { orderId })),
+    demonstration: data.demonstration && { available: data.demonstration.available, reasonCode: data.demonstration.reasonCode },
   };
 }
 
@@ -272,30 +281,42 @@ export function currentAttempt(overview: PaymentOverview): PaymentAttempt | null
 export type PaymentView =
   /** A request was saved but its outcome is unknown; `retryable` once the server shows no record of it. */
   | { kind: "unresolved"; retryable: boolean }
+  /** Paid with a demonstration payment; `attempt` is money M-Pesa reported later, held for staff review. */
+  | { kind: "demonstration-paid"; attempt: PaymentAttempt | null }
   | { kind: "attempt"; attempt: PaymentAttempt; stage: Exclude<AttemptStage, "failed"> }
-  /** A new prompt may be requested; `failed` is the previous attempt when it did not complete. */
-  | { kind: "payable"; failed: PaymentAttempt | null }
+  /**
+   * A new prompt may be requested; `failed` is the previous attempt when it did not complete. `demonstration` when
+   * this sample order can also be paid with a demonstration payment, which then comes first.
+   */
+  | { kind: "payable"; failed: PaymentAttempt | null; demonstration: boolean }
   /** No prompt can be requested; `waiting` when a short wait after a failure is the only reason. */
-  | { kind: "unavailable"; failed: PaymentAttempt | null; message: string; waiting: boolean };
+  | { kind: "unavailable"; failed: PaymentAttempt | null; message: string; waiting: boolean; demonstration: boolean };
 
 const UNAVAILABLE_MESSAGE = "M-Pesa payment is not available for this order right now.";
 const FRACTIONAL_MESSAGE = "This order total cannot be collected through M-Pesa without rounding, so no prompt can be sent.";
 
 const isWholeKes = (amount: number) => Number.isInteger(amount) && amount > 0;
+const DEMONSTRATION_SETTLED: readonly PaymentOrderSummary["paymentStatus"][] = ["PAID", "PARTIALLY_REFUNDED", "REFUNDED"];
+
+/** Paid with a demonstration payment, refunds of it included: there is nothing more to pay. */
+export const isDemonstrationPaid = (order: Pick<PaymentOrderSummary, "paymentMethod" | "paymentStatus">) =>
+  order.paymentMethod === "DEMONSTRATION" && DEMONSTRATION_SETTLED.includes(order.paymentStatus);
 
 export function paymentView(overview: PaymentOverview, intent: { checked: boolean } | null): PaymentView {
   if (intent) return { kind: "unresolved", retryable: intent.checked };
   const attempt = currentAttempt(overview);
+  if (isDemonstrationPaid(overview.order)) return { kind: "demonstration-paid", attempt: attempt?.confirmedAt ? attempt : null };
   const stage = attempt ? attemptStage(attempt) : null;
   if (attempt && stage && stage !== "failed") return { kind: "attempt", attempt, stage };
+  const demonstration = overview.demonstration?.available === true;
   if (overview.available) {
     return isWholeKes(overview.order.total)
-      ? { kind: "payable", failed: attempt }
-      : { kind: "unavailable", failed: attempt, message: FRACTIONAL_MESSAGE, waiting: false };
+      ? { kind: "payable", failed: attempt, demonstration }
+      : { kind: "unavailable", failed: attempt, message: FRACTIONAL_MESSAGE, waiting: false, demonstration };
   }
   return {
     kind: "unavailable", failed: attempt, message: overview.message ?? UNAVAILABLE_MESSAGE,
-    waiting: overview.reasonCode === "PAYMENT_COOLDOWN",
+    waiting: overview.reasonCode === "PAYMENT_COOLDOWN", demonstration,
   };
 }
 
@@ -309,10 +330,10 @@ export function withAttempt(overview: PaymentOverview, attempt: PaymentAttempt):
 /** The order with the payment service's latest status; the same object when nothing changed. */
 export function withPaymentSummary<T extends Order>(order: T, summary: PaymentOrderSummary): T {
   if (order.id !== summary.id) return order;
-  const { status, paymentStatus, reservationStatus, reservationExpiresAt } = summary;
-  if (order.status === status && order.paymentStatus === paymentStatus && order.reservationStatus === reservationStatus &&
-    (order.reservationExpiresAt ?? null) === reservationExpiresAt) return order;
-  return { ...order, status, paymentStatus, reservationStatus, reservationExpiresAt };
+  const { status, paymentStatus, paymentMethod, reservationStatus, reservationExpiresAt } = summary;
+  if (order.status === status && order.paymentStatus === paymentStatus && order.paymentMethod === paymentMethod &&
+    order.reservationStatus === reservationStatus && (order.reservationExpiresAt ?? null) === reservationExpiresAt) return order;
+  return { ...order, status, paymentStatus, paymentMethod, reservationStatus, reservationExpiresAt };
 }
 
 /* ------------------------------------------------------------------ */

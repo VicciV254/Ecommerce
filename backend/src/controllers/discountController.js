@@ -1,6 +1,6 @@
 import prisma from '../config/database.js';
 import { catalogDiscountSchema, catalogDiscountPatchSchema } from '../utils/catalogValidation.js';
-import { discountDto, httpError, serializable } from '../services/catalogService.js';
+import { createsSamples, discountDto, httpError, serializable } from '../services/catalogService.js';
 import { ACTIVITY, recordActivity } from '../services/activityService.js';
 
 async function validateTargets(db, discount) {
@@ -32,7 +32,7 @@ export const createDiscount = async (req, res, next) => {
   try {
     const input = catalogDiscountSchema.parse(req.body);
     const discount = await serializable(async (db) => {
-      const data = { ...input, endDate: input.endDate ?? null, isActive: input.isActive ?? true, isDemo: false };
+      const data = { ...input, endDate: input.endDate ?? null, isActive: input.isActive ?? true, isDemo: createsSamples() };
       await validateTargets(db, data);
       const discount = await db.discount.create({ data });
       await recordActivity(db, req.admin.id, { action: ACTIVITY.DISCOUNT_CREATED, targetType: 'discount', targetId: discount.id, details: discount.name });

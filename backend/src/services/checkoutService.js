@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import prisma from '../config/database.js';
-import { checkoutPolicy, demoOrdersEnabled, reservationsEnabled } from '../config/checkoutPolicy.js';
+import { checkoutPolicy, demoOrderDailyLimit, demoOrdersEnabled, reservationsEnabled } from '../config/checkoutPolicy.js';
 import { effectiveReturnRule, policySnapshot, returnPolicy } from '../config/returnPolicy.js';
 import { availableStock, httpError, loadCategories, productInclude, productWhere } from './catalogService.js';
 import { priceBasket } from './pricingService.js';
@@ -92,6 +92,21 @@ function replay(order, requestHash) {
   return { order: orderDto(order), created: false };
 }
 
+const SAMPLE_QUOTA_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Refuses a sample order beyond the account's quota for the last 24 hours. It counts inside the serializable creating
+ * transaction, so two concurrent creates cannot both see room for one more; replays never reach it.
+ */
+async function assertSampleOrderQuota(db, userId, now) {
+  const limit = demoOrderDailyLimit();
+  const since = new Date(now.getTime() - SAMPLE_QUOTA_WINDOW_MS);
+  const recent = await db.order.count({ where: { userId, isDemo: true, createdAt: { gt: since } } });
+  if (recent >= limit) {
+    throw httpError(429, `You can place up to ${limit} sample ${limit === 1 ? 'order' : 'orders'} in 24 hours. Try again later.`, 'DEMO_ORDER_LIMIT');
+  }
+}
+
 async function consumeMatchingCart(db, userId, ordered) {
   const cart = await db.cart.findUnique({ where: { userId }, include: { items: true } });
   if (!cart) return;
@@ -135,6 +150,7 @@ export async function createPendingOrder(userId, body, key) {
       }
       const now = new Date();
       if (quote.expiresAt <= now) throw httpError(409, 'This quote expired. Request and review a new quote.', 'QUOTE_EXPIRED');
+      if (current.mode === 'demo') await assertSampleOrderQuota(db, userId, now);
       const order = await db.order.create({
         data: {
           orderNumber: generateOrderNumber(), userId, quoteId: quote.id, idempotencyKey, requestHash,

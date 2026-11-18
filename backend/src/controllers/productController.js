@@ -5,7 +5,7 @@ import {
   catalogProductSchema, catalogProductPatchSchema, productQuerySchema, mediaSchema, splitVersionedEdit,
 } from '../utils/catalogValidation.js';
 import {
-  assertNoPublishedReferences, availableStock, catalogSnapshot, demoCatalogEnabled, httpError, loadCategories, loadCatalogContext,
+  assertNoPublishedReferences, availableStock, catalogSnapshot, createsSamples, demoCatalogEnabled, httpError, loadCategories, loadCatalogContext,
   mediaDto, nextVersion, productDto, productInclude, productWhere, serializable, stockStatus,
 } from '../services/catalogService.js';
 import { expireReservations } from '../services/inventoryService.js';
@@ -136,7 +136,9 @@ async function validateProductRelations(db, input, existing, context) {
   const designerId = input.designerId === undefined ? existing?.designerId : input.designerId;
   if (designerId) {
     const designer = await db.designer.findFirst({ where: { id: designerId, deletedAt: null } });
-    if (!designer || (designer.isDemo && !existing?.isDemo)) throw httpError(400, 'Select an available designer for this product');
+    // A sample designer may only present sample products; a new product is a sample on a demonstration store.
+    const sampleProduct = existing ? existing.isDemo : createsSamples();
+    if (!designer || (designer.isDemo && !sampleProduct)) throw httpError(400, 'Select an available designer for this product');
   }
 }
 
@@ -245,7 +247,7 @@ export const createProduct = async (req, res, next) => {
       if ((input.isActive ?? false) && !variants.some((item) => item.data.isActive)) throw httpError(400, 'An active product requires an active variant');
       const product = await db.product.create({ data: {
         ...fields, slug: input.slug ?? generateSlug(input.name), tags: input.tags ?? [],
-        specifications: input.specifications ?? {}, isActive: input.isActive ?? false,
+        specifications: input.specifications ?? {}, isActive: input.isActive ?? false, isDemo: createsSamples(),
       } });
       await writeVariants(db, product.id, variants, req.admin.id);
       // Variants created in this request have no client-known IDs yet, so new images cannot target one.

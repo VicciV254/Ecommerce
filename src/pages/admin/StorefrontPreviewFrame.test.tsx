@@ -16,7 +16,7 @@ function catalogWith(products: CatalogProduct[]): CatalogValue {
   return {
     status: "ready", error: null, mode: "live", products,
     productsById: new Map(products.map((product) => [product.id, product])),
-    categories: buildCategoryTree(fixtureCategories), designers: [], discounts: [], returnPolicy: fixtureReturnPolicy, delivery: fixtureDelivery, reload: vi.fn(),
+    categories: buildCategoryTree(fixtureCategories), designers: [], discounts: [], returnPolicy: fixtureReturnPolicy, delivery: fixtureDelivery, demonstrationOrders: false, reload: vi.fn(),
   };
 }
 

@@ -16,7 +16,7 @@ function catalog(status: CatalogValue["status"]): CatalogValue {
   const products = status === "ready" ? [linenShirt, poloShirt] : [];
   return {
     status, error: null, mode: "live", products, productsById: new Map(products.map((product) => [product.id, product])),
-    categories: buildCategoryTree(fixtureCategories), designers: [], discounts: [], returnPolicy: fixtureReturnPolicy, delivery: fixtureDelivery, reload: vi.fn(),
+    categories: buildCategoryTree(fixtureCategories), designers: [], discounts: [], returnPolicy: fixtureReturnPolicy, delivery: fixtureDelivery, demonstrationOrders: false, reload: vi.fn(),
   };
 }
 

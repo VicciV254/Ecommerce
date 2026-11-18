@@ -15,9 +15,11 @@ import type {
   ActorType,
   CustomerAction,
   CustomerOrder,
+  DemonstrationOrderStep,
   OrderReturn,
   OrderTracking,
   Pagination,
+  RefundMethod,
   RefundSource,
   RefundStatus,
   ReturnIneligibility,
@@ -68,8 +70,14 @@ const STAFF_ACTIONS: readonly StaffAction[] = [
 ];
 const REFUND_ACTIONS: readonly RefundAction[] = ["approve", "start", "confirm", "fail", "unresolved", "retry", "cancel"];
 const REFUND_SOURCES: readonly RefundSource[] = ["CANCELLATION", "RETURN", "PAYMENT_REVIEW"];
-const ACTOR_TYPES: readonly ActorType[] = ["CUSTOMER", "STAFF", "SYSTEM", "PROVIDER"];
+const REFUND_METHODS: readonly RefundMethod[] = ["MPESA_MANUAL", "DEMONSTRATION"];
+const ACTOR_TYPES: readonly ActorType[] = ["CUSTOMER", "STAFF", "SYSTEM", "PROVIDER", "DEMONSTRATION"];
 const CUSTOMER_ACTIONS: readonly CustomerAction[] = ["CANCEL", "REQUEST_RETURN"];
+const DEMONSTRATION_ORDER_STEPS: readonly DemonstrationOrderStep[] = [
+  "START_PROCESSING", "DISPATCH", "CONFIRM_DELIVERY", "MARK_READY_FOR_PICKUP", "CONFIRM_PICKUP",
+];
+/** Refund states the demonstration can still record. */
+const COMPLETABLE_REFUNDS: readonly RefundStatus[] = ["REQUESTED", "APPROVED", "PROCESSING"];
 const INELIGIBILITY: readonly ReturnIneligibility[] = ["NOT_DELIVERED", "NOT_PAID", "WINDOW_CLOSED", "NOTHING_RETURNABLE"];
 const ATTENTION_TYPES: readonly AttentionItem["type"][] = [
   "ORDER_AWAITING_FULFILMENT", "PAYMENT_REVIEW", "RETURN_AWAITING_DECISION", "RETURN_AWAITING_RECEIPT", "REFUND_ACTION",
@@ -85,9 +93,11 @@ export const isRefundStatus = oneOf(REFUND_STATUSES);
 const isStaffAction = oneOf(STAFF_ACTIONS);
 const isRefundAction = oneOf(REFUND_ACTIONS);
 const isRefundSource = oneOf(REFUND_SOURCES);
+const isRefundMethod = oneOf(REFUND_METHODS);
 const isActorType = oneOf(ACTOR_TYPES);
 const isCustomerAction = oneOf(CUSTOMER_ACTIONS);
 const isIneligibility = oneOf(INELIGIBILITY);
+const isDemonstrationOrderStep = oneOf(DEMONSTRATION_ORDER_STEPS);
 
 function isItem(value: unknown) {
   return isRecord(value) && isId(value.id) && isString(value.productName) && isQuantity(value.quantity) &&
@@ -123,10 +133,11 @@ function isReturn(value: unknown, staff: boolean) {
 function isRefund(value: unknown, staff: boolean) {
   if (!isRecord(value) || !isId(value.id) || !isId(value.number) || !isRefundSource(value.source) ||
     !isRefundStatus(value.status) || !isMoney(value.amount) || typeof value.includesDeliveryFee !== "boolean" ||
-    !isString(value.method) || !isTimestamp(value.requestedAt) || !isNullableTimestamp(value.approvedAt) ||
+    !isRefundMethod(value.method) || !isTimestamp(value.requestedAt) || !isNullableTimestamp(value.approvedAt) ||
     !isNullableTimestamp(value.confirmedAt) || !isNullableString(value.providerReference)) return false;
-  // A provider reference is evidence that money was sent; only a confirmed refund may carry one.
-  if (value.status !== "CONFIRMED" && value.providerReference !== null) return false;
+  // A provider reference is evidence that money was sent; only a confirmed refund may carry one, and never a
+  // demonstration refund, which moves no money.
+  if ((value.status !== "CONFIRMED" || value.method === "DEMONSTRATION") && value.providerReference !== null) return false;
   if (!staff) return true;
   return isId(value.orderId) && isNullableId(value.paymentId) && isNullableId(value.returnRequestId) &&
     isMoney(value.requestedAmount) && isNullableString(value.reason) && isString(value.requestedByType) &&
@@ -161,6 +172,30 @@ function isRefundRequestOption(value: unknown) {
   return value.source === "RETURN" && isId(value.returnId) && isId(value.returnNumber);
 }
 
+/**
+ * One listed demonstration control, consistent with the order it came with: an order step expects the order's status;
+ * a return step names one of its returns in the expected state; a refund step names one of its demonstration refunds
+ * in the expected state. Nothing else could be accepted by the server, so nothing else is shown.
+ */
+function isDemonstrationAction(value: unknown, order: Record<string, unknown>) {
+  if (!isRecord(value)) return false;
+  if (isDemonstrationOrderStep(value.action)) return value.expectedStatus === order.status;
+  const records = (key: string): Record<string, unknown>[] => (Array.isArray(order[key]) ? order[key].filter(isRecord) : []);
+  if (value.action === "APPROVE" || value.action === "RECEIVE") {
+    const expected = value.action === "APPROVE" ? "REQUESTED" : "APPROVED";
+    return value.expectedStatus === expected &&
+      records("returns").some((item) => item.id === value.returnId && item.status === expected);
+  }
+  return value.action === "COMPLETE_REFUND" && isRefundStatus(value.expectedStatus) && COMPLETABLE_REFUNDS.includes(value.expectedStatus) &&
+    records("refunds").some((item) => item.id === value.refundId && item.status === value.expectedStatus && item.method === "DEMONSTRATION");
+}
+
+function isDemonstrationActions(value: unknown, order: Record<string, unknown>) {
+  if (!listOf(value, (item) => isDemonstrationAction(item, order))) return false;
+  const keys = value.map((item) => JSON.stringify(item));
+  return new Set(keys).size === keys.length;
+}
+
 /** Checks one order view; `detail` names the first part that failed. */
 function orderProblem(value: unknown, staff: boolean): string | null {
   if (!isRecord(value) || !isId(value.id) || !isId(value.orderNumber) || !isTimestamp(value.createdAt)) return "order";
@@ -174,7 +209,7 @@ function orderProblem(value: unknown, staff: boolean): string | null {
   if (!listOf(value.refunds, (item) => isRefund(item, staff))) return "refunds";
   if (!isEligibility(value.returnEligibility)) return "return eligibility";
   if (!uniqueListOf(value.customerActions, isCustomerAction)) return "customer actions";
-  if (!staff) return null;
+  if (!staff) return isDemonstrationActions(value.demonstrationActions, value) ? null : "demonstration actions";
   if (!uniqueListOf(value.allowedActions, isStaffAction) || typeof value.paymentReviewOpen !== "boolean") return "staff actions";
   if (!listOf(value.refundRequestOptions, isRefundRequestOption)) return "refund request options";
   if (value.user !== undefined && value.user !== null &&

@@ -7,6 +7,7 @@ import {
   STAFF_ACTION_RESULTS,
   cancellationRefund,
   describeStaffFailure,
+  isDemonstrationOrder,
   type StaffFailure,
 } from "../../store/orderCopy";
 import { OrderFormatError, parseRefundResult, parseStaffOrder } from "../../store/orderModel";
@@ -104,17 +105,20 @@ function orderActionDescription(order: StaffOrder, action: StaffAction) {
       return `Confirm the customer has received the order. This starts the ${days}-day return window and emails the customer.`;
     case "CONFIRM_PICKUP":
       return `Confirm the customer collected the order at handover. This starts the ${days}-day return window and emails the customer.`;
-    default:
+    default: {
+      // A demonstration-paid order's refund is a demonstration refund, which never sends money.
+      const refundNote = isDemonstrationOrder(order) ? "Its refund will be a demonstration refund: no money is sent." : "No money is sent until that refund is confirmed.";
       switch (cancellationRefund(order.paymentStatus)) {
         case "full":
-          return `Cancel this order and release or restock its items. It is paid, so a refund request for the full ${formatKES(order.total)} (including delivery) is recorded. No money is sent until that refund is confirmed.`;
+          return `Cancel this order and release or restock its items. It is paid, so a refund request for the full ${formatKES(order.total)} (including delivery) is recorded. ${refundNote}`;
         case "remaining":
-          return "Cancel this order and release or restock its items. Part of the payment was already refunded, so a refund request for the remaining paid balance is recorded. No money is sent until that refund is confirmed.";
+          return `Cancel this order and release or restock its items. Part of the payment was already refunded, so a refund request for the remaining paid balance is recorded. ${refundNote}`;
         case "settled":
           return "Cancel this order and release or restock its items. The payment was already refunded, so no further refund is requested.";
         default:
           return "Cancel this order and release its reserved items. The customer is emailed.";
       }
+    }
   }
 }
 

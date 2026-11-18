@@ -27,6 +27,8 @@ The real `.env` is ignored by Git and excluded from container builds.
 | `ALLOW_DEMO_INITIALIZATION` | Explicit per-invocation consent for the local demo initializer |
 | `ENABLE_ORDER_RESERVATIONS` | Permit pending-order inventory holds; defaults to `false`, never enables payment |
 | `ALLOW_DEMO_ORDERS` | Additional development/test-only opt-in for demo orders, separate from catalog visibility |
+| `DEMONSTRATION_STORE` | The public demonstration store in any `NODE_ENV`: sample products only, demonstration payments and controls, M-Pesa sandbox only; `true` or `false`, defaults to `false` (see "Demonstration store") |
+| `DEMO_ORDER_DAILY_LIMIT` | Most sample orders one account may create in 24 hours; a positive whole number, defaults to `10` |
 | `CHECKOUT_POLICY_JSON` | Optional complete validated pricing profile; empty uses `src/config/checkoutPolicy.js` defaults |
 | `ENABLE_MPESA` | Enables the order-linked Daraja integration only when all merchant, callback, limit and environment checks pass |
 | `MPESA_LIVE_PAYMENTS_ENABLED` | Additional gate for the production API; defaults to `false`, but does not guarantee sandbox tests are money-free |
@@ -230,9 +232,10 @@ The seed includes 291 taxonomy nodes, 230 demo products, 231 SKUs and
 independently replaceable, licensed placeholder-media records.
 
 Set `ALLOW_DEMO_CATALOG=true` only for development previews. Production
-always excludes demo records. Demo is a server-owned property, not a
-client-controlled purchase flag. Replacing a sample photo does not silently
-convert its product into commercial inventory.
+excludes demo records unless it runs as the demonstration store
+(`DEMONSTRATION_STORE=true`), which shows only them. Demo is a server-owned
+property, not a client-controlled purchase flag. Replacing a sample photo does
+not silently convert its product into commercial inventory.
 
 Destructive resets are separate, still requiring
 `ALLOW_LOCAL_DATABASE_RESET=true` and the local-target guard. They are not
@@ -611,3 +614,59 @@ was active (an opt-out on any of them wins); the other rows are deleted, so the
 change cannot be undone by a down migration. Take a backup or a database branch
 first. It then sets each account's promotional-email preference to whether an
 active subscription exists for its address; nobody's emails change.
+
+Migrations `20261118180000_demonstration_payment_method` and
+`20261118180100_demonstration_refund_confirmation` add the `DEMONSTRATION`
+payment method, then let a confirmed refund have no M-Pesa reference only when
+it is a demonstration refund with no M-Pesa payment. Neither changes existing
+rows, and the new check accepts every row the old one did.
+
+## Demonstration store
+
+`DEMONSTRATION_STORE=true` runs the public demonstration store in any
+`NODE_ENV`, production included. It must be exactly `true` or `false` (default
+`false`); any other value answers 503 `CHECKOUT_CONFIGURATION_INVALID`. With it
+on:
+
+- The storefront shows and sells only sample (`isDemo`) products. Other
+  products are hidden: carts list them as unavailable and quotes refuse them
+  with `ITEM_UNAVAILABLE`. Products and discounts that staff create are
+  samples, whatever the request says.
+- Sample orders are enabled, as `ALLOW_DEMO_ORDERS` enables them in
+  development, and can be tracked publicly by number in the fixed wording. The
+  catalog reports `demonstrationOrders: true`, and the storefront's wording
+  about ordering and payment follows it.
+- M-Pesa may use only the sandbox, for sample orders: `MPESA_ENVIRONMENT=production`
+  is refused with 503 `MPESA_CONFIGURATION` before any other M-Pesa setting is
+  read. Prompts still go only to `MPESA_SANDBOX_ALLOWED_PHONES`.
+- Staff figures still leave out sample orders, and production sends no email
+  about them.
+
+`DEMO_ORDER_DAILY_LIMIT` (default 10) caps the sample orders one account
+creates in 24 hours, on both creation routes; the next is refused with 429
+`DEMO_ORDER_LIMIT`. A replayed request creates nothing and uses no quota. Any
+value other than a positive whole number is a configuration error.
+
+| Route (the signed-in owner of a sample order) | Contract |
+|---|---|
+| `POST /api/orders/:id/demonstration-payment` | Pays a pending sample order on an active hold with a demonstration payment: no money, no M-Pesa record, no provider call, no email. Repeating it after it succeeded changes nothing. `ORDER_NOT_PAYABLE` when the order is not awaiting payment, an item is no longer a sample, or the hold has expired (the expiry is kept); `PAYMENT_EXISTS` while an M-Pesa attempt is open |
+| `POST /api/orders/:id/demonstration-actions` | `{ action, expectedStatus }`: `START_PROCESSING`, `DISPATCH`, `CONFIRM_DELIVERY`, `MARK_READY_FOR_PICKUP` or `CONFIRM_PICKUP`, exactly as staff could take it now; never cancelling (customers cancel with `/cancel`) |
+| `POST /api/orders/:id/returns/:returnId/demonstration-approve` | `{ expectedStatus }`: approves the return |
+| `POST /api/orders/:id/returns/:returnId/demonstration-receive` | `{ expectedStatus }`: every requested unit arrives and is refundable; faulty or damaged units are not restocked; faulty, damaged or wrong items count as the store's fault |
+| `POST /api/orders/:id/refunds/:refundId/demonstration-complete` | `{ expectedStatus }`: records a demonstration refund from REQUESTED, APPROVED or PROCESSING, without a reference; `REFUND_NOT_DEMONSTRATION` for any other refund |
+
+Each control reads only those fields and ignores the rest of the body. Another
+customer's order, a live order, a return or refund that belongs to a different
+order, and sample orders switched off all answer 404. The customer's order view
+lists, in `demonstrationActions`, exactly the controls that apply now, each
+with its `expectedStatus`; a stale one answers 409. Steps are recorded with the
+actor `DEMONSTRATION` at the location "Demonstration".
+
+Refunds of a demonstration-paid order, for a cancellation or a return, have the
+method `DEMONSTRATION` and move no money: staff can only cancel them, and they
+send no email. Money M-Pesa reports for an order already paid by demonstration
+is held for review (`EXTRA_PAYMENT`) and refunded through M-Pesa as a
+payment-review refund.
+
+Deploy the backend before the storefront: the storefront requires the catalog's
+`demonstrationOrders`.

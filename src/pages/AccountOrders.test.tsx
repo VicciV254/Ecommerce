@@ -5,12 +5,16 @@ import type { User } from "../api/auth";
 import type { CustomerOrder } from "../api/orders";
 import { fixturePendingOrder, fixtureQuote } from "../test-support/checkoutFixtures";
 import { fixtureCustomerOrder, fixtureDeliveredOrder, fixtureRefund, fixtureReturn } from "../test-support/orderFixtures";
-import { PAYABLE, fixtureConfirmedAttempt, fixturePaymentOverview } from "../test-support/paymentFixtures";
+import { PAYABLE, PAYMENT_MESSAGES, fixtureConfirmedAttempt, fixturePaymentOverview } from "../test-support/paymentFixtures";
+import { named } from "../test-support/text";
+import { formatKES } from "../utils/format";
 import AccountOrders from "./AccountOrders";
 
 const mocks = vi.hoisted(() => ({
   user: null as User | null,
-  orders: { getMyOrders: vi.fn(), get: vi.fn(), cancel: vi.fn(), requestReturn: vi.fn(), cancelReturn: vi.fn(), track: vi.fn() },
+  orders: {
+    getMyOrders: vi.fn(), get: vi.fn(), cancel: vi.fn(), requestReturn: vi.fn(), cancelReturn: vi.fn(), track: vi.fn(), playDemonstration: vi.fn(),
+  },
   payments: { getOverview: vi.fn(), requestPrompt: vi.fn(), checkAttempt: vi.fn() },
 }));
 vi.mock("../contexts/AuthContext", () => ({ useAuth: () => ({ user: mocks.user }) }));
@@ -25,6 +29,10 @@ const legacy: CustomerOrder = {
   ...fixtureCustomerOrder(fixturePendingOrder(fixtureQuote({ id: "quote-legacy" }))), id: "order-legacy", orderNumber: "APX-LEGACY", quoteId: null,
 };
 const page = (orders: CustomerOrder[]) => ({ data: { orders, pagination: { page: 1, limit: 100, total: orders.length, pages: 1 } } });
+const refusal = (code: string, error: string) => {
+  const config = { headers: new AxiosHeaders() };
+  return new AxiosError("Conflict", "ERR_BAD_REQUEST", config, undefined, { status: 409, statusText: "Conflict", data: { error, code }, headers: new AxiosHeaders(), config });
+};
 
 beforeEach(() => {
   mocks.user = customer;
@@ -228,10 +236,6 @@ describe("order actions, returns and refunds", () => {
     expect(notice()).not.toMatch(/No refund has been sent/);
   });
 
-  const refusal = (code: string, error: string) => {
-    const config = { headers: new AxiosHeaders() };
-    return new AxiosError("Conflict", "ERR_BAD_REQUEST", config, undefined, { status: 409, statusText: "Conflict", data: { error, code }, headers: new AxiosHeaders(), config });
-  };
   const processingPaid = (id: string) => order({ status: "PROCESSING", paymentStatus: "PAID", reservationStatus: "COMMITTED", reservationExpiresAt: null }, id);
   const tryToCancel = async () => {
     fireEvent.click(await screen.findByRole("button", { name: "Cancel & request refund" }, WAIT));
@@ -354,6 +358,179 @@ describe("order actions, returns and refunds", () => {
     });
     expect.soft(screen.queryByRole("button", { name: "Cancel & request refund" })).toBeNull();
     expect(mocks.orders.getMyOrders).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("demonstration orders", () => {
+  const now = new Date().toISOString();
+  const buttonNames = (container: HTMLElement) => within(container).queryAllByRole("button").map((button) => button.textContent);
+  /** A sample order paid with a demonstration payment, being prepared. */
+  const paidSample = (overrides: Partial<CustomerOrder> = {}) => fixtureCustomerOrder(fixturePendingOrder(fixtureQuote({ id: "q-sample" }), { isDemo: true }), {
+    status: "PROCESSING", paymentStatus: "PAID", paymentMethod: "DEMONSTRATION", reservationStatus: "COMMITTED", reservationExpiresAt: null,
+    customerActions: [], ...overrides,
+  });
+  /** The order as the server holds it now; reloads and the payment overview answer with it. */
+  let server: CustomerOrder;
+  const answer = (order: CustomerOrder) => {
+    server = order;
+    return { data: order };
+  };
+
+  beforeEach(() => {
+    mocks.orders.get.mockImplementation(async () => ({ data: server }));
+    mocks.payments.getOverview.mockImplementation(async () => ({ data: fixturePaymentOverview({ ...server, isDemo: true }, {
+      environment: "sandbox", reasonCode: "ORDER_NOT_PAYABLE", message: PAYMENT_MESSAGES.notPayable,
+      demonstration: { available: false, reasonCode: "ORDER_NOT_PAYABLE" },
+    }) }));
+  });
+
+  const openReceipt = async (order: CustomerOrder) => {
+    server = order;
+    mocks.orders.getMyOrders.mockResolvedValue(page([order]));
+    render(<AccountOrders />);
+    fireEvent.click(await screen.findByRole("button", { name: "Details" }, WAIT));
+    const receipt = screen.getByRole("dialog", { name: "Receipt details" });
+    return { receipt, controls: () => within(receipt).getByRole("region", { name: named("Demonstration controls") }) };
+  };
+  /** Plays one listed step, named by its text including any screen-reader suffix; focus moves to its outcome. */
+  const play = async (controls: () => HTMLElement, name: string, outcome: string) => {
+    const button = within(controls()).getAllByRole("button").find((item) => item.textContent === name);
+    expect(button, name).toBeTruthy();
+    fireEvent.click(button!);
+    const status = await within(controls()).findByText(outcome, undefined, WAIT);
+    await vi.waitFor(() => expect(document.activeElement).toBe(status), WAIT);
+  };
+
+  it("plays the store's order steps the server lists with the status it expects, keeping focus on each outcome", async () => {
+    const processing = paidSample({ demonstrationActions: [{ action: "DISPATCH", expectedStatus: "PROCESSING" }] });
+    const shipped = paidSample({ status: "SHIPPED", demonstrationActions: [{ action: "CONFIRM_DELIVERY", expectedStatus: "SHIPPED" }] });
+    const delivered = paidSample({ status: "DELIVERED", demonstrationActions: [] });
+    mocks.orders.playDemonstration.mockImplementationOnce(async () => answer(shipped)).mockImplementationOnce(async () => answer(delivered));
+    const { receipt, controls } = await openReceipt(processing);
+    expect(within(controls()).getByText("You play the store's part here. Nothing is shipped and no money moves.")).toBeTruthy();
+    expect(buttonNames(controls())).toEqual(["Mark as dispatched"]);
+
+    await play(controls, "Mark as dispatched", `Order ${processing.orderNumber} is marked as dispatched.`);
+    expect(buttonNames(controls())).toEqual(["Mark as delivered"]);
+    // The last step leaves no buttons; the region stays with its outcome, which keeps focus.
+    await play(controls, "Mark as delivered", `Order ${processing.orderNumber} is marked as delivered.`);
+    expect(buttonNames(controls())).toEqual([]);
+    expect(within(within(receipt).getByRole("region", { name: "Order summary" })).getByText("Delivered")).toBeTruthy();
+    expect(mocks.orders.playDemonstration.mock.calls).toEqual([
+      [processing.id, { action: "DISPATCH", expectedStatus: "PROCESSING" }],
+      [processing.id, { action: "CONFIRM_DELIVERY", expectedStatus: "SHIPPED" }],
+    ]);
+  });
+
+  it("reloads an order whose step was refused because it changed, and says so", async () => {
+    const processing = paidSample({ demonstrationActions: [{ action: "DISPATCH", expectedStatus: "PROCESSING" }] });
+    const moved = paidSample({ status: "SHIPPED", demonstrationActions: [{ action: "CONFIRM_DELIVERY", expectedStatus: "SHIPPED" }] });
+    mocks.orders.playDemonstration.mockImplementation(async () => {
+      server = moved;
+      throw refusal("ORDER_CHANGED", "This order changed. Reload it and try again.");
+    });
+    const { controls } = await openReceipt(processing);
+    await play(controls, "Mark as dispatched", "This order changed since it was shown, so that step was not recorded. The order has been refreshed.");
+    expect(mocks.orders.get).toHaveBeenCalledWith(processing.id);
+    expect(buttonNames(controls())).toEqual(["Mark as delivered"]);
+  });
+
+  it("approves and receives a return, then records its demonstration refund, naming each record", async () => {
+    const delivered = fixtureDeliveredOrder(fixturePendingOrder(fixtureQuote({ id: "q-sample-return" }), { isDemo: true }), {}, {
+      paymentMethod: "DEMONSTRATION", customerActions: [],
+    });
+    const requested = fixtureReturn(delivered, { reason: "FAULTY" });
+    const approved = { ...requested, status: "APPROVED" as const, decidedAt: now };
+    const received = {
+      ...approved, status: "RECEIVED" as const, receivedAt: now, merchantFaultConfirmed: true,
+      lines: requested.lines.map((line) => ({ ...line, receivedQuantity: line.quantity, refundableQuantity: line.quantity })),
+    };
+    const refund = fixtureRefund({ method: "DEMONSTRATION" });
+    const withRequest: CustomerOrder = {
+      ...delivered, returns: [requested], demonstrationActions: [{ action: "APPROVE", returnId: requested.id, expectedStatus: "REQUESTED" }],
+    };
+    const withApproval: CustomerOrder = {
+      ...withRequest, returns: [approved], demonstrationActions: [{ action: "RECEIVE", returnId: requested.id, expectedStatus: "APPROVED" }],
+    };
+    const withRefund: CustomerOrder = {
+      ...withRequest, returns: [received], refunds: [refund],
+      demonstrationActions: [{ action: "COMPLETE_REFUND", refundId: refund.id, expectedStatus: "REQUESTED" }],
+    };
+    const recorded: CustomerOrder = {
+      ...withRefund, paymentStatus: "PARTIALLY_REFUNDED", demonstrationActions: [],
+      refunds: [{ ...refund, status: "CONFIRMED", approvedAt: now, confirmedAt: now }],
+    };
+    mocks.orders.playDemonstration.mockImplementationOnce(async () => answer(withApproval))
+      .mockImplementationOnce(async () => answer(withRefund)).mockImplementationOnce(async () => answer(recorded));
+    const { receipt, controls } = await openReceipt(withRequest);
+
+    await play(controls, `Approve the return ${requested.number}`, `Return ${requested.number} is approved.`);
+    await play(controls, `Mark the return as received ${requested.number}`, `Return ${requested.number} is marked as received.`);
+    await play(controls, `Record the demonstration refund ${refund.number}`,
+      `Demonstration refund ${refund.number} of ${formatKES(refund.amount)} is recorded; no money was sent.`);
+    expect(buttonNames(controls())).toEqual([]);
+    expect(mocks.orders.playDemonstration.mock.calls.map(([, step]) => step)).toEqual([
+      { action: "APPROVE", returnId: requested.id, expectedStatus: "REQUESTED" },
+      { action: "RECEIVE", returnId: requested.id, expectedStatus: "APPROVED" },
+      { action: "COMPLETE_REFUND", refundId: refund.id, expectedStatus: "REQUESTED" },
+    ]);
+    expect(within(receipt).getByText("Fault confirmed in the demonstration.")).toBeTruthy();
+    expect(within(receipt).queryByText(/^Staff confirmed/)).toBeNull();
+    const refundRecord = within(receipt).getByText("Demonstration refund (no money sent)").closest("li");
+    expect(refundRecord?.textContent).toMatch(/Recorded on .+; no money was sent/);
+    expect(refundRecord?.textContent).not.toMatch(/M-Pesa|reference/);
+  });
+
+  it("reads a sample order's returns as played in the demonstration even when M-Pesa paid for it, and a live order's as staff's", async () => {
+    const sampleOrder = fixtureDeliveredOrder(fixturePendingOrder(fixtureQuote({ id: "q-sandbox" }), { isDemo: true }), {}, { customerActions: [] });
+    const approved = fixtureReturn(sampleOrder, { status: "APPROVED", decidedAt: now });
+    const [line] = approved.lines;
+    const received = fixtureReturn(sampleOrder, {
+      id: "return-2", number: `RMA-${sampleOrder.orderNumber}-2`, status: "RECEIVED", decidedAt: now, receivedAt: now, merchantFaultConfirmed: false,
+      lines: [{ ...line, id: "return-line-2", receivedQuantity: 1, refundableQuantity: 1 }],
+    });
+    const liveOrder = fixtureDeliveredOrder(fixturePendingOrder(fixtureQuote({ id: "q-live" })), {}, { customerActions: [] });
+    const liveReceived = fixtureReturn(liveOrder, { status: "RECEIVED", decidedAt: now, receivedAt: now, merchantFaultConfirmed: false });
+    const sample: CustomerOrder = { ...sampleOrder, paymentMethod: "MPESA", returns: [approved, received] };
+    const live: CustomerOrder = { ...liveOrder, returns: [liveReceived] };
+    server = sample;
+    mocks.orders.getMyOrders.mockResolvedValue(page([sample, live]));
+    render(<AccountOrders />);
+    expect(await screen.findByText(`Return ${approved.number}: Approved in the demonstration.`, undefined, WAIT)).toBeTruthy();
+
+    const [sampleDetails, liveDetails] = screen.getAllByRole("button", { name: "Details" });
+    fireEvent.click(sampleDetails);
+    const receipt = screen.getByRole("dialog", { name: "Receipt details" });
+    const record = (number: string) => within(receipt).getByText(number, { selector: "p" }).closest("li")!;
+    expect(within(record(approved.number)).getByText("Approved in the demonstration")).toBeTruthy();
+    expect(within(record(received.number)).getByText("Marked as received in the demonstration")).toBeTruthy();
+    expect(within(record(received.number)).getByText("No fault was recorded in the demonstration.")).toBeTruthy();
+    expect(receipt.textContent).not.toMatch(/staff will arrange|Received and checked|Staff did not find a fault/);
+    fireEvent.click(within(receipt).getByRole("button", { name: "Close" }));
+
+    server = live;
+    fireEvent.click(liveDetails);
+    const liveReceipt = screen.getByRole("dialog", { name: "Receipt details" });
+    expect(within(liveReceipt).getByText("Received and checked")).toBeTruthy();
+    expect(within(liveReceipt).getByText("Staff did not find a fault.")).toBeTruthy();
+  });
+
+  it("shows no controls for an order the server lists none for", async () => {
+    const { receipt } = await openReceipt(fixtureDeliveredOrder(fixturePendingOrder(fixtureQuote({ id: "q-mpesa" }))));
+    expect(within(receipt).getByRole("region", { name: "Order summary" })).toBeTruthy();
+    expect(within(receipt).queryByRole("region", { name: named("Demonstration controls") })).toBeNull();
+  });
+
+  it("promises no email when cancelling an order paid with a demonstration payment", async () => {
+    const sample = paidSample({ customerActions: ["CANCEL"] });
+    mocks.orders.getMyOrders.mockResolvedValue(page([sample]));
+    render(<AccountOrders />);
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel & request refund" }, WAIT));
+    const dialog = screen.getByRole("dialog", { name: "Cancel order" });
+    expect(within(dialog).getByText(
+      `Order ${sample.orderNumber} is paid. If you cancel, a refund request for the full amount (${formatKES(sample.total)}, including delivery) will be recorded.`,
+    )).toBeTruthy();
+    expect(dialog.textContent).not.toMatch(/email/i);
   });
 });
 

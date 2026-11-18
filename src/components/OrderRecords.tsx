@@ -116,17 +116,22 @@ export function OrderTimeline({ events, label = "Order history" }: {
   if (!events.length) return <p className="text-sm text-muted">No updates have been recorded yet.</p>;
   return (
     <ol aria-label={label} className="space-y-3">
-      {events.map((event) => (
-        <li key={event.id} className="border-l-2 border-divider pl-3">
-          <p className="text-sm font-semibold text-navy-900">{event.description}</p>
-          <p className="text-sm text-muted">
-            {formatDateTime(event.createdAt)}
-            {event.actorType ? ` · ${ACTOR_LABELS[event.actorType]}` : ""}
-            {event.location ? ` · ${event.location}` : ""}
-          </p>
-          {event.reason && <p className="mt-1 text-sm text-navy-800">Reason: {event.reason}</p>}
-        </li>
-      ))}
+      {events.map((event) => {
+        const actor = event.actorType ? ACTOR_LABELS[event.actorType] : null;
+        // A demonstration step is both recorded by and located in "Demonstration": say it once.
+        const location = event.location && event.location !== actor ? event.location : null;
+        return (
+          <li key={event.id} className="border-l-2 border-divider pl-3">
+            <p className="text-sm font-semibold text-navy-900">{event.description}</p>
+            <p className="text-sm text-muted">
+              {formatDateTime(event.createdAt)}
+              {actor ? ` · ${actor}` : ""}
+              {location ? ` · ${location}` : ""}
+            </p>
+            {event.reason && <p className="mt-1 text-sm text-navy-800">Reason: {event.reason}</p>}
+          </li>
+        );
+      })}
     </ol>
   );
 }

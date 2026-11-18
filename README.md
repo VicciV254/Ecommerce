@@ -268,6 +268,33 @@ describes reversal of STK test funds; the application does not guarantee
 refund timing. Obtain explicit recipient and amount approval before a test
 prompt rather than assuming sandbox means no debit.
 
+## Demonstration store
+
+`DEMONSTRATION_STORE=true` in the backend environment runs the public
+demonstration store: the storefront shows and sells only sample products, and
+signed-in visitors can order them. A sample order is paid with a labelled
+demonstration payment, which takes no money, sends no phone prompt and makes
+no Safaricom request. M-Pesa stays in the sandbox, behind a closed "Pay with
+M-Pesa sandbox instead" disclosure, and prompts go only to the approved test
+numbers; production M-Pesa is refused. Each account can create up to
+`DEMO_ORDER_DAILY_LIMIT` sample orders (default 10) in 24 hours.
+
+The owner of a sample order then plays the store's part from **Demonstration
+controls** in the order's receipt details: preparing, dispatching and
+delivering it, approving and receiving a return, and recording the refund.
+The buttons are exactly the steps the server lists in `demonstrationActions`,
+and each sends the status it was shown with, so a stale step is refused and
+the order reloads. Refunds of a demonstration payment have the method
+`DEMONSTRATION`: they move no money, never carry an M-Pesa reference, send no
+email, and staff can only cancel them.
+
+Public wording about ordering and payment (FAQ, Terms, Privacy notice, footer,
+About and checkout) follows the catalog snapshot's `demonstrationOrders`; until
+it loads, or with it off, the pages keep the wording for a store whose checkout
+stops before an order is placed. Order pages follow each order's
+`paymentMethod`. See [Demonstration store](backend/SETUP.md#demonstration-store)
+for the routes and guards.
+
 ## Public information pages
 
 Apex Cart is a demonstration store, and its public pages say how it is set up

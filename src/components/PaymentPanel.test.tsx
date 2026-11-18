@@ -10,13 +10,17 @@ import {
   PAYMENT_MESSAGES,
   fixtureAttempt,
   fixtureConfirmedAttempt,
+  fixtureDemonstrationOverview,
+  fixtureDemonstrationPaidOverview,
   fixturePaymentOverview,
 } from "../test-support/paymentFixtures";
+import { fixtureCustomerOrder } from "../test-support/orderFixtures";
+import { named, withoutSoftHyphens } from "../test-support/text";
 import { PaymentPanel, StaffPaymentPanel } from "./PaymentPanel";
 
 const mocks = vi.hoisted(() => ({
   user: null as User | null,
-  customer: { getOverview: vi.fn(), requestPrompt: vi.fn(), checkAttempt: vi.fn() },
+  customer: { getOverview: vi.fn(), requestPrompt: vi.fn(), checkAttempt: vi.fn(), payWithDemonstration: vi.fn() },
   staff: { getOverview: vi.fn(), checkAttempt: vi.fn() },
 }));
 vi.mock("../contexts/AuthContext", () => ({ useAuth: () => ({ user: mocks.user }) }));
@@ -470,6 +474,117 @@ describe("customer M-Pesa payment", () => {
   });
 });
 
+describe("customer demonstration payment", () => {
+  const sample = fixturePendingOrder(fixtureQuote(), { isDemo: true });
+  const offered = (overrides: Partial<PaymentOverview> = {}) => fixtureDemonstrationOverview(sample, overrides);
+  const paidOrder = fixtureCustomerOrder({ ...sample, paymentMethod: "DEMONSTRATION", paymentStatus: "PAID", reservationStatus: "COMMITTED" });
+  const payButton = () => screen.findByRole("button", { name: named("Pay with a demonstration payment") }, WAIT);
+  const sandboxDisclosure = () => screen.getByText("Pay with M-Pesa sandbox instead").closest("details")!;
+  const NO_MONEY = "No money is taken and no phone prompt is sent.";
+
+  it("offers the demonstration payment first, with the M-Pesa sandbox form closed in a disclosure below", async () => {
+    mocks.customer.getOverview.mockResolvedValue(reply(offered()));
+    render(<PaymentPanel orderId={sample.id} />);
+    const pay = await payButton();
+    expect(screen.getByRole("region", { name: "Payment" })).toBeTruthy();
+    const described = (pay.getAttribute("aria-describedby") ?? "").split(" ").map((id) => document.getElementById(id)?.textContent);
+    expect(described).toContain(NO_MONEY);
+    expect(described.some((text) => text?.includes("KES 1,244"))).toBe(true);
+    const disclosure = sandboxDisclosure();
+    expect(disclosure.open).toBe(false);
+    expect(pay.compareDocumentPosition(disclosure) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    for (const text of ["Sandbox test: real funds may be deducted", "Prompts can only be sent to approved test numbers."]) {
+      expect(within(disclosure).getByText(text)).toBeTruthy();
+    }
+    expect(within(disclosure).getByLabelText("M-Pesa phone number")).toBeTruthy();
+    expect(within(disclosure).getByRole("button", { name: "Send M-Pesa prompt" })).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: named(/Pay with a demonstration payment/) })).toHaveLength(1);
+  });
+
+  it("records it once, then shows the order paid by demonstration payment and returns focus to the panel heading", async () => {
+    const paid = deferred<{ data: unknown }>();
+    mocks.customer.getOverview.mockResolvedValueOnce(reply(offered())).mockResolvedValue(reply(fixtureDemonstrationPaidOverview(sample)));
+    mocks.customer.payWithDemonstration.mockReturnValue(paid.promise);
+    const onOrderChange = vi.fn();
+    render(<PaymentPanel orderId={sample.id} onOrderChange={onOrderChange} />);
+    const pay = await payButton();
+    pay.focus();
+    fireEvent.click(pay);
+    fireEvent.click(pay);
+    expect(pay.getAttribute("aria-disabled")).toBe("true");
+    expect(screen.getByRole("status").textContent).toBe("Recording the demonstration payment…");
+    await act(async () => paid.resolve(reply(paidOrder)));
+    await screen.findByText("Paid with a demonstration payment", undefined, WAIT);
+    expect(mocks.customer.payWithDemonstration).toHaveBeenCalledTimes(1);
+    expect(mocks.customer.payWithDemonstration).toHaveBeenCalledWith(sample.id);
+    expect(mocks.customer.requestPrompt).not.toHaveBeenCalled();
+    expect(screen.getByRole("status").textContent).toBe("Demonstration payment recorded. No money was taken.");
+    expect(screen.getByText(/^No money was taken\. Your order is waiting to be prepared\.$/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: named("Pay with a demonstration payment") })).toBeNull();
+    expect(screen.queryByText("Pay with M-Pesa sandbox instead")).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole("heading", { name: "Payment" }));
+    expect(onOrderChange).toHaveBeenLastCalledWith(expect.objectContaining({ paymentMethod: "DEMONSTRATION", paymentStatus: "PAID" }));
+  });
+
+  it("shows the server's refusal and refreshes, offering nothing the server would refuse", async () => {
+    mocks.customer.getOverview.mockResolvedValueOnce(reply(offered())).mockResolvedValue(reply(offered({
+      available: false, reasonCode: "PAYMENT_EXISTS", message: PAYMENT_MESSAGES.exists, attempts: [fixtureAttempt(sample)],
+      demonstration: { available: false, reasonCode: "PAYMENT_EXISTS" },
+    })));
+    const refusal = "An M-Pesa payment for this order is still open. Check it instead of paying another way.";
+    mocks.customer.payWithDemonstration.mockRejectedValue(apiError(409, { error: refusal, code: "PAYMENT_EXISTS" }));
+    render(<PaymentPanel orderId={sample.id} />);
+    fireEvent.click(await payButton());
+    expect((await screen.findByRole("alert", undefined, WAIT)).textContent).toBe(refusal);
+    expect(await screen.findByText("Approve the payment on your phone", undefined, WAIT)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: named("Pay with a demonstration payment") })).toBeNull();
+    expect(mocks.customer.getOverview).toHaveBeenCalledTimes(2);
+  });
+
+  it("stays available when M-Pesa is switched off or cannot take a fractional total", async () => {
+    mocks.customer.getOverview.mockResolvedValue(reply(offered({
+      available: false, environment: null, reasonCode: "MPESA_DISABLED", message: PAYMENT_MESSAGES.disabled,
+    })));
+    const off = render(<PaymentPanel orderId={sample.id} />);
+    await payButton();
+    expect(within(sandboxDisclosure()).getByText("M-Pesa payment unavailable")).toBeTruthy();
+    expect(within(sandboxDisclosure()).getByText(PAYMENT_MESSAGES.disabled)).toBeTruthy();
+    expect(screen.queryByText("Sandbox test: real funds may be deducted")).toBeNull();
+    expect(screen.queryByLabelText("M-Pesa phone number")).toBeNull();
+    off.unmount();
+
+    mocks.customer.getOverview.mockResolvedValue(reply(fixtureDemonstrationOverview({ ...sample, total: 1244.01 })));
+    render(<PaymentPanel orderId={sample.id} />);
+    await payButton();
+    expect(screen.getAllByText("KES 1,244.01").length).toBeGreaterThan(0);
+    expect(within(sandboxDisclosure()).getByText(/cannot be collected through M-Pesa without rounding/)).toBeTruthy();
+    expect(screen.queryByLabelText("M-Pesa phone number")).toBeNull();
+  });
+
+  it("shows paid and refunded demonstration orders with no M-Pesa receipt, phone or prompt", async () => {
+    for (const paymentStatus of ["PAID", "REFUNDED"] as const) {
+      const overview = fixtureDemonstrationPaidOverview(sample);
+      overview.order = { ...overview.order, paymentStatus };
+      mocks.customer.getOverview.mockResolvedValue(reply(overview));
+      const view = render(<PaymentPanel orderId={sample.id} />);
+      expect(await screen.findByText("Paid with a demonstration payment", undefined, WAIT)).toBeTruthy();
+      for (const absent of [/M-Pesa receipt/, /Send M-Pesa prompt/, /\+254/, /Pay with a demonstration payment/]) {
+        expect(withoutSoftHyphens(document.body.textContent), `${paymentStatus} ${absent}`).not.toMatch(absent);
+      }
+      view.unmount();
+    }
+  });
+
+  it("is never offered for a live order, whose M-Pesa form stays as it was", async () => {
+    mocks.customer.getOverview.mockResolvedValue(reply(payable()));
+    render(<PaymentPanel orderId={order.id} />);
+    await sendButton();
+    expect(screen.getByRole("region", { name: "Pay with M-Pesa" })).toBeTruthy();
+    expect(screen.queryByText("Pay with M-Pesa sandbox instead")).toBeNull();
+    expect(screen.queryByRole("button", { name: named("Pay with a demonstration payment") })).toBeNull();
+  });
+});
+
 describe("staff M-Pesa payments", () => {
   const failed = fixtureAttempt(order, { id: "attempt-1", status: "FAILED", message: PAYMENT_MESSAGES.cancelled, canReconcile: false });
   const unknown = fixtureAttempt(order, {
@@ -522,5 +637,15 @@ describe("staff M-Pesa payments", () => {
     expect(note?.textContent).toBe("Your role can view payments but cannot request M-Pesa checks.");
     fireEvent.click(check);
     expect(mocks.staff.checkAttempt).not.toHaveBeenCalled();
+  });
+
+  it("reads a demonstration payment as paid with no money taken, with nothing for staff to collect", async () => {
+    const sample = fixturePendingOrder(fixtureQuote(), { isDemo: true });
+    mocks.staff.getOverview.mockResolvedValue(reply(fixtureDemonstrationPaidOverview(sample)));
+    render(<StaffPaymentPanel orderId={sample.id} canCheck />);
+    const panel = await screen.findByRole("region", { name: "M-Pesa payments" }, WAIT);
+    await within(panel).findByText("Demonstration payment", undefined, WAIT);
+    expect(within(panel).getByText("Paid with a demonstration payment: no money was taken and there is nothing to collect.")).toBeTruthy();
+    expect(within(panel).queryByText(/The customer can request a new M-Pesa prompt/)).toBeNull();
   });
 });

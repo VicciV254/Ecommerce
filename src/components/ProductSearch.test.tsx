@@ -14,7 +14,8 @@ function catalog(status: CatalogValue["status"] = "ready"): CatalogValue {
     status, error: status === "error" ? "Catalog temporarily unavailable" : null, mode: "demo", products,
     productsById: new Map(products.map((product) => [product.id, product])),
     categories: buildCategoryTree(status === "ready" ? fixtureCategories : []), designers: [], discounts: [],
-    returnPolicy: status === "ready" ? fixtureReturnPolicy : null, delivery: status === "ready" ? fixtureDelivery : null, reload: vi.fn(),
+    returnPolicy: status === "ready" ? fixtureReturnPolicy : null, delivery: status === "ready" ? fixtureDelivery : null,
+    demonstrationOrders: status === "ready" ? false : null, reload: vi.fn(),
   };
 }
 

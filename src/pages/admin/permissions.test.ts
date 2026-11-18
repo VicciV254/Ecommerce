@@ -22,9 +22,9 @@ describe("permission map", () => {
   const sources: Record<AdminModuleId, { read: [string, number][]; write: [string, number][] }> = {
     dashboard: { read: [["analyticsRoutes.js", 15]], write: [] },
     analytics: { read: [["analyticsRoutes.js", 17]], write: [] },
-    orders: { read: [["orderRoutes.js", 28], ["mpesaRoutes.js", 8]], write: [["orderRoutes.js", 29], ["mpesaRoutes.js", 9], ["admin.js", 34]] },
-    returns: { read: [["orderRoutes.js", 28]], write: [["orderRoutes.js", 29]] },
-    refunds: { read: [["orderRoutes.js", 28]], write: [["orderRoutes.js", 29]] },
+    orders: { read: [["orderRoutes.js", 33], ["mpesaRoutes.js", 8]], write: [["orderRoutes.js", 34], ["mpesaRoutes.js", 9], ["admin.js", 34]] },
+    returns: { read: [["orderRoutes.js", 33]], write: [["orderRoutes.js", 34]] },
+    refunds: { read: [["orderRoutes.js", 33]], write: [["orderRoutes.js", 34]] },
     products: { read: [["index.js", 54]], write: [["productRoutes.js", 27], ["productRoutes.js", 28], ["productRoutes.js", 29], ["categoryRoutes.js", 20], ["categoryRoutes.js", 21], ["categoryRoutes.js", 22], ["categoryRoutes.js", 23], ["designerRoutes.js", 19], ["index.js", 55], ["index.js", 56]] },
     stock: { read: [["stockRoutes.js", 17]], write: [["stockRoutes.js", 21], ["stockRoutes.js", 22], ["stockRoutes.js", 23]] },
     storefront: { read: [["settingsRoutes.js", 7], ["settingsRoutes.js", 10]], write: [["settingsRoutes.js", 8], ["settingsRoutes.js", 9], ["settingsRoutes.js", 11]] },
