@@ -310,11 +310,20 @@ const focusRing = (page: Page) => page.evaluate(async () => {
   await new Promise<void>((resolve) => {
     let last = "";
     let still = 0;
+    let frames = 0;
+    // Focus scrolls a control into view (smoothly, unless reduced motion is set), and under load that scroll can start a
+    // few frames late: a control still outside the window has not settled yet. After about a second it is measured
+    // where it is, so a control the page never brings into view still fails.
+    const inView = () => {
+      const box = control.getBoundingClientRect();
+      return box.top >= 0 && box.left >= 0 && box.bottom <= window.innerHeight && box.right <= window.innerWidth;
+    };
     const settle = () => {
+      frames += 1;
       const { top, left } = control.getBoundingClientRect();
       still = `${top},${left}` === last ? still + 1 : 0;
       last = `${top},${left}`;
-      if (still >= 2) resolve();
+      if (still >= 2 && (inView() || frames > 60)) resolve();
       else requestAnimationFrame(settle);
     };
     requestAnimationFrame(settle);
