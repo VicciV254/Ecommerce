@@ -243,6 +243,22 @@ describe("published composition", () => {
     expect(screen.getAllByRole("status").map((status) => status.textContent)).toEqual(["Loading shop by department…", "Loading featured products…"]);
     expect(document.querySelectorAll(".product-grid > div")).toHaveLength(8);
   });
+
+  it("in a staff preview, leads product cards to the preview route and offers no buying or wishlist", () => {
+    const settings = fixtureStorefrontSettings({ sections: [picks] });
+    const { rerender } = render(<StorefrontSections settings={settings} mediaById={mediaById} />);
+    const cards = () => within(screen.getByRole("list", { name: "Staff picks" }));
+    expect(cards().getByRole("link", { name: "Cotton Polo Shirt" }).getAttribute("href")).toBe("#/product/prod-polo-shirt");
+    expect(cards().getAllByRole("button").map((button) => button.getAttribute("aria-label") ?? button.textContent)).toEqual([
+      "Save Cotton Polo Shirt to wishlist", "Add to cart",
+      "Save Linen Short-Sleeve Shirt to wishlist", "Choose options for Linen Short-Sleeve Shirt",
+    ]);
+
+    rerender(<StorefrontSections settings={settings} mediaById={mediaById} productPreviewRoute={(id) => `/admin/catalog/preview?product=${id}`} />);
+    expect(cards().getByRole("link", { name: "Cotton Polo Shirt" }).getAttribute("href")).toBe("#/admin/catalog/preview?product=prod-polo-shirt");
+    expect(cards().getByRole("link", { name: "Linen Short-Sleeve Shirt" }).getAttribute("href")).toBe("#/admin/catalog/preview?product=prod-linen-shirt");
+    expect(cards().queryAllByRole("button")).toEqual([]);
+  });
 });
 
 describe("campaign loading priority", () => {

@@ -33,6 +33,8 @@ type AdminModule = {
 
 export const ADMIN_HOME = "/admin";
 export const ADMIN_PREVIEW_ROUTE = "/admin/storefront/preview";
+/** The storefront draft alone, for the draft preview's frame; `App` serves it outside the admin and every shell. */
+export const ADMIN_PREVIEW_FRAME_ROUTE = "/admin/storefront/preview-frame";
 /** One saved product on shoppers' own product page, with buying off: `?product=<id>`. */
 export const ADMIN_PRODUCT_PREVIEW_ROUTE = "/admin/catalog/preview";
 
@@ -360,6 +362,30 @@ export function activityRoute({ type = DEFAULT_ACTIVITY_TYPE, page = 1 }: Partia
   if (page > 1 && isPage(String(page))) params.set("page", String(page));
   const query = params.toString();
   return `${adminModuleRoute("activity")}${query ? `?${query}` : ""}`;
+}
+
+/* Storefront draft preview */
+
+/** The widths the draft preview lays the storefront out at, in CSS px. */
+export const PREVIEW_DEVICES = [
+  { id: "phone", label: "Phone", width: 390 },
+  { id: "tablet", label: "Tablet", width: 768 },
+  { id: "desktop", label: "Desktop", width: 1280 },
+] as const;
+export type PreviewDevice = (typeof PREVIEW_DEVICES)[number];
+export type PreviewDeviceId = PreviewDevice["id"];
+const DEFAULT_PREVIEW_DEVICE: PreviewDeviceId = "phone";
+const isPreviewDevice = (value: string): value is PreviewDeviceId => PREVIEW_DEVICES.some((device) => device.id === value);
+
+/** The draft preview's device (`?device=tablet`); an unknown one is dropped and flagged, for a replace. */
+export function parsePreviewDevice(route: string): { device: PreviewDeviceId; invalid: boolean } {
+  const device = readParam(parseRoute(route).params, "device", isPreviewDevice);
+  return { device: device.value ?? DEFAULT_PREVIEW_DEVICE, invalid: device.invalid };
+}
+
+/** The draft preview at a device's width; the default (phone) is left out. */
+export function draftPreviewRoute(device: PreviewDeviceId) {
+  return device === DEFAULT_PREVIEW_DEVICE ? ADMIN_PREVIEW_ROUTE : `${ADMIN_PREVIEW_ROUTE}?device=${device}`;
 }
 
 /* Products */

@@ -20,6 +20,8 @@ import About from "./pages/About";
 import Contact from "./pages/Contact";
 import Wishlist from "./pages/Wishlist";
 import Admin from "./pages/Admin";
+import { ADMIN_PREVIEW_FRAME_ROUTE, routePath } from "./pages/admin/adminRoutes";
+import { StorefrontPreviewFrame } from "./pages/admin/StorefrontPreviewFrame";
 import TrackOrder from "./pages/TrackOrder";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -31,6 +33,9 @@ import VerifyEmail from "./pages/VerifyEmail";
 
 function Router() {
   const route = useRoute();
+  // The draft preview's frame: the storefront alone, outside the admin and the shopper shell (whose `min-h-screen`
+  // would stop the frame shrinking to its content).
+  if (routePath(route) === ADMIN_PREVIEW_FRAME_ROUTE) return <StorefrontPreviewFrame />;
   const { parts } = parseRoute(route);
   const root = parts[0] ?? "";
 

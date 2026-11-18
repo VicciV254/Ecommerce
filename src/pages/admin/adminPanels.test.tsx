@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { AxiosError, AxiosHeaders } from "axios";
 import { useRef } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,6 +13,7 @@ import { StockManager } from "./StockManager";
 import { StorefrontDraftProvider } from "./StorefrontDraft";
 import { StorefrontManager } from "./StorefrontManager";
 import { StorefrontPreview } from "./StorefrontPreview";
+import { PREVIEW_MESSAGES } from "./storefrontPreviewModel";
 import { UnsavedChangesProvider } from "./unsavedChanges";
 
 const admin = vi.hoisted(() => ({
@@ -113,6 +114,16 @@ function unloadPrevented() {
   const event = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(event);
   return event.defaultPrevented;
+}
+
+/** Has the preview's frame report ready, and returns what the preview posts to it. */
+function frameReady(element: HTMLElement) {
+  const frame = (element as HTMLIFrameElement).contentWindow!;
+  const sent = vi.spyOn(frame, "postMessage");
+  act(() => {
+    window.dispatchEvent(new MessageEvent("message", { data: { type: PREVIEW_MESSAGES.ready }, origin: window.location.origin, source: frame }));
+  });
+  return sent;
 }
 
 beforeEach(() => {
@@ -280,9 +291,14 @@ describe("admin catalog panels", () => {
     expect(unloadPrevented()).toBe(true);
     expect(screen.getByRole("button", { name: "Publish" }).hasAttribute("disabled")).toBe(true);
 
-    // The preview is its own route: it shows the unsaved edit, and returning keeps it.
+    // The preview is its own route: it posts the unsaved edit to its frame, and returning keeps it.
     fireEvent.click(screen.getByRole("link", { name: "Draft preview" }));
-    expect(within(await screen.findByRole("region", { name: "Draft preview" })).getByText("Apex Cart Draft")).toBeTruthy();
+    const sent = frameReady(await screen.findByTitle("Storefront draft at phone width (390 px)"));
+    expect(sent).toHaveBeenCalledTimes(1);
+    expect(sent).toHaveBeenCalledWith(
+      expect.objectContaining({ type: PREVIEW_MESSAGES.draft, settings: expect.objectContaining({ brand: expect.objectContaining({ name: "Apex Cart Draft" }) }) }),
+      window.location.origin,
+    );
     expect(document.documentElement.style.getPropertyValue("--color-brand-primary")).toBe("");
     fireEvent.click(screen.getByRole("link", { name: "Back to editor" }));
     expect((await screen.findByLabelText<HTMLInputElement>("Store name")).value).toBe("Apex Cart Draft");
@@ -303,11 +319,11 @@ describe("admin catalog panels", () => {
     await screen.findByLabelText("Store name");
     expect(screen.queryByText("Unavailable media references")).toBeNull();
     fireEvent.click(screen.getByRole("link", { name: "Draft preview" }));
-    const preview = await screen.findByRole("region", { name: "Draft preview" });
-    const image = preview.querySelector<HTMLImageElement>("picture img")!;
-    expect(image.getAttribute("src")).toBe(standalone.url);
-    expect(image.style.getPropertyValue("--focal-mobile")).toBe("20% 80%");
-    expect(within(preview).queryByText(/is unavailable/)).toBeNull();
+    const sent = frameReady(await screen.findByTitle("Storefront draft at phone width (390 px)"));
+    const [message] = sent.mock.calls[0];
+    expect(message.settings.campaigns[0].desktopMediaId).toBe(standalone.id);
+    expect(message.media).toContainEqual(standalone);
+    expect(screen.queryByText(/Unavailable references/)).toBeNull();
     fireEvent.click(screen.getByRole("link", { name: "Back to editor" }));
     expect((await screen.findByLabelText<HTMLSelectElement>("Desktop image")).value).toBe(standalone.id);
     expect(screen.getByRole("spinbutton", { name: "Mobile focal point horizontal" }).hasAttribute("disabled")).toBe(false);

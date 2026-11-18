@@ -326,7 +326,7 @@ const LOCKUP_PLACES: { place: string; path: string; lockup: (page: Page, name: s
   {
     place: "draft preview",
     path: "/#/admin/storefront/preview",
-    lockup: (page, name) => page.getByRole("region", { name: "Draft preview" }).getByText(name, { exact: true }).first(),
+    lockup: (page, name) => page.locator('iframe[title^="Storefront draft at"]').contentFrame().getByText(name, { exact: true }).first(),
   },
 ];
 
@@ -350,7 +350,8 @@ test("a long published store name wraps in every lockup at phone and tablet widt
         await page.goto(path);
         const shown = lockup(page, name);
         await expect(shown, `${place}: ${name}`).toBeVisible();
-        await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+        // Every document on the page gets the larger text, the draft preview's frame included.
+        for (const frame of page.frames()) await frame.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
         await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
         const where = `${place} at ${size.width}px with 200% text, ${name.length}-character name`;
         expect.soft(await pageOverflow(page), `${where}: page-level sideways scrolling (px)`).toBe(0);

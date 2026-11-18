@@ -30,6 +30,8 @@ type SectionsProps = {
   mediaById: ReadonlyMap<string, MediaAsset>;
   /** Staff preview lists unavailable references; shoppers never see substitutes. */
   showProblems?: boolean;
+  /** Staff preview: where each product card leads instead of its product page; cards then offer no buying or wishlist. */
+  productPreviewRoute?: (productId: string) => string;
 };
 
 /** Whether a section shows shoppers anything in the current catalog state; staff-only problem notes do not count. */
@@ -44,7 +46,7 @@ function showsShoppersContent(section: Section, settings: StorefrontSettings, ca
  * The published sections, enabled ones only, in published order; nothing is added or restored around them. The first
  * campaign shoppers can see is the page's hero (it never rotates); later campaigns render as compact promotion bands.
  */
-export function StorefrontSections({ settings, mediaById, showProblems = false }: SectionsProps) {
+export function StorefrontSections({ settings, mediaById, showProblems = false, productPreviewRoute }: SectionsProps) {
   const catalog = useCatalog();
   const sections = settings.sections.filter((section) => section.enabled);
   const usesCatalog = sections.some((section) => section.type !== "campaign");
@@ -101,7 +103,7 @@ export function StorefrontSections({ settings, mediaById, showProblems = false }
         }
         return section.type === "departments"
           ? <DepartmentsSection key={section.id} section={section} showProblems={showProblems} />
-          : <ProductsSection key={section.id} section={section} showProblems={showProblems} />;
+          : <ProductsSection key={section.id} section={section} showProblems={showProblems} productPreviewRoute={productPreviewRoute} />;
       })}
     </>
   );
@@ -141,7 +143,11 @@ function viewAllRoute(section: Section) {
   return section.type === "featured" && !section.productIds.length ? listingRoute({ featured: true }) : listingRoute();
 }
 
-function ProductsSection({ section, showProblems }: { section: Section; showProblems: boolean }) {
+function ProductsSection({ section, showProblems, productPreviewRoute }: {
+  section: Section;
+  showProblems: boolean;
+  productPreviewRoute: SectionsProps["productPreviewRoute"];
+}) {
   const catalog = useCatalog();
   const { items, missing } = sectionProducts(section, catalog);
   const problems = missing.map((id) => `Product ${id} is unavailable`);
@@ -164,7 +170,7 @@ function ProductsSection({ section, showProblems }: { section: Section; showProb
         <ul aria-label={section.title} className="product-grid">
           {items.map((product, index) => (
             <li key={product.id} className={`min-w-0 ${VISIBLE_FROM[index] ?? "hidden"}`}>
-              <ProductCard product={product} />
+              <ProductCard product={product} previewRoute={productPreviewRoute?.(product.id)} />
             </li>
           ))}
         </ul>

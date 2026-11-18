@@ -236,8 +236,11 @@ test.describe("storefront draft preview", () => {
     await waitForPlace(page, "Draft preview: shoppers can't see this");
     await expect(guard(page)).toHaveCount(0);
     await expect(page.getByText("Includes unsaved changes")).toBeVisible();
-    await expect(page.getByRole("region", { name: "Draft preview" })).toContainText("Apex Cart Draft");
-    await expect(page.locator("#apex-cart-preview-font-link")).toHaveAttribute("href", /family=Lora/);
+    // The draft, its theme and its font live in the preview's frame; the admin document never takes them.
+    const preview = page.locator('iframe[title^="Storefront draft at"]').contentFrame();
+    await expect(preview.getByText("Apex Cart Draft", { exact: true })).toBeVisible();
+    await expect(preview.locator("#apex-cart-preview-font-link")).toHaveAttribute("href", /family=Lora/);
+    await expect(page.locator("#apex-cart-preview-font-link")).toHaveCount(0);
     const stored = await page.evaluate(() => JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage }));
     expect(stored).not.toContain("Apex Cart Draft");
     expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--font-display"))).not.toContain("Lora");

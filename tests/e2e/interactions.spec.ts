@@ -247,7 +247,7 @@ test("storefront drafts save and publish with versions without leaking to shoppe
   await storeName.fill("Apex Cart Draft");
   // The draft preview is its own page, reached from the editor; returning keeps the edit.
   await page.getByRole("main").getByRole("link", { name: "Draft preview" }).click();
-  await expect(page.getByRole("region", { name: "Draft preview" })).toContainText("Apex Cart Draft");
+  await expect(page.locator('iframe[title^="Storefront draft at"]').contentFrame().getByText("Apex Cart Draft", { exact: true })).toBeVisible();
   await page.getByRole("link", { name: "Back to editor" }).click();
   await expect(storeName).toHaveValue("Apex Cart Draft");
   await expect(page.getByRole("button", { name: "Publish" })).toBeDisabled();

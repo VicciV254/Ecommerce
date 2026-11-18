@@ -207,8 +207,6 @@ export const layoutProblems = (page: Page) => page.evaluate(() => {
       const { overflowX } = getComputedStyle(element);
       if (overflowX !== "auto" && overflowX !== "scroll") return false;
       if (element.scrollWidth <= element.clientWidth + 1 || element.getClientRects().length === 0) return false;
-      // The storefront's own renderer inside the draft preview (its department rail scrolls by design; P7.2 owns it).
-      if (element.closest('[aria-label="Draft preview"]')) return false;
       return !(element.getAttribute("role") === "region" && element.getAttribute("aria-label") && element.tabIndex >= 0);
     })
     .map((element) => `${describe(element)} scrolls ${element.scrollWidth - element.clientWidth}px`);

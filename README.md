@@ -185,6 +185,12 @@ products, users, orders and existing staff credentials. See
   so unpublished artwork remains previewable after reload. Campaigns share
   copy and CTA across screens; without separate mobile artwork, phones use
   the desktop asset with the campaign's mobile focal point.
+- The draft preview shows the storefront at phone, tablet and desktop widths
+  (390, 768 and 1280 px) by running the shoppers' renderer in a same-origin
+  frame (`#/admin/storefront/preview-frame`) whose viewport is that width,
+  scaled down only for display. Any framing policy for the frontend must
+  allow its own origin (`frame-ancestors 'self'`). Links don't open from the
+  preview, and its product cards offer no buying or wishlist.
 - Every publication is kept in a publication history with its time and
   publisher. Super admins and admins can restore an earlier version into the
   draft (never straight to shoppers); a version that breaks the current rules

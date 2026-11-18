@@ -6,7 +6,9 @@ import {
   ADMIN_PRODUCT_PREVIEW_ROUTE,
   NO_ORDER_FILTERS,
   activityRoute,
+  draftPreviewRoute,
   parseActivityParams,
+  parsePreviewDevice,
   NO_PRODUCT_FILTERS,
   adminModuleRoute,
   ordersRoute,
@@ -343,6 +345,28 @@ describe("staff activity filter and page in the address", () => {
     expect(activityRoute({ page: 0 })).toBe("/admin/settings/activity");
     for (const route of [activityRoute({ type: "promotions", page: 7 }), activityRoute({ type: "signins" })]) {
       expect(activityRoute(parseActivityParams(route).filters)).toBe(route);
+    }
+  });
+});
+
+describe("draft preview device in the address", () => {
+  it("shows phone width by default and reads each device as given", () => {
+    expect(parsePreviewDevice(ADMIN_PREVIEW_ROUTE)).toEqual({ device: "phone", invalid: false });
+    for (const device of ["phone", "tablet", "desktop"] as const) {
+      expect(parsePreviewDevice(`${ADMIN_PREVIEW_ROUTE}?device=${device}`)).toEqual({ device, invalid: false });
+    }
+  });
+
+  it.each(["watch", "Tablet", "", "1280", "constructor"])("falls back to phone from the unknown device %j and flags it", (device) => {
+    expect(parsePreviewDevice(`${ADMIN_PREVIEW_ROUTE}?device=${device}`)).toEqual({ device: "phone", invalid: true });
+  });
+
+  it("leaves phone out of the route, and every route reads back as its device on the preview", () => {
+    expect(draftPreviewRoute("phone")).toBe(ADMIN_PREVIEW_ROUTE);
+    expect(draftPreviewRoute("desktop")).toBe("/admin/storefront/preview?device=desktop");
+    for (const device of ["phone", "tablet", "desktop"] as const) {
+      expect(parsePreviewDevice(draftPreviewRoute(device))).toEqual({ device, invalid: false });
+      expect(parseAdminPlace(draftPreviewRoute(device))).toEqual({ kind: "preview" });
     }
   });
 });
