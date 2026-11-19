@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import prisma from '../config/database.js';
 import { generateToken, generateRefreshToken, verifyRefreshToken } from '../config/auth.js';
-import { registerSchema, loginSchema, forgotPasswordSchema, resetPasswordSchema, changePasswordSchema, addressSchema } from '../utils/validators.js';
+import { registerSchema, loginSchema, changePasswordSchema, addressSchema } from '../utils/validators.js';
 import { sendOtpVerificationEmail, sendVerificationEmail } from '../services/mailService.js';
 
 const OTP_EXPIRY_MINUTES = Number(process.env.OTP_EXPIRY_MINUTES || 10);
@@ -511,80 +511,3 @@ export const changePassword = async (req, res, next) => {
     next(error);
   }
 };
-
-export const forgotPassword = async (req, res, next) => {
-  try {
-    const validatedData = forgotPasswordSchema.parse(req.body);
-    
-    const user = await prisma.user.findUnique({
-      where: { email: validatedData.email },
-    });
-    
-    if (!user) {
-      // Don't reveal if email exists or not
-      return res.json({ message: 'If the email exists, a reset link will be sent' });
-    }
-    
-    // Generate reset token
-    const resetToken = Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
-    const expiresAt = new Date(Date.now() + 3600000); // 1 hour
-    
-    // Delete any existing reset token
-    await prisma.passwordReset.deleteMany({
-      where: { userId: user.id },
-    });
-    
-    // Create password reset record
-    await prisma.passwordReset.create({
-      data: {
-        userId: user.id,
-        token: resetToken,
-        expiresAt,
-      },
-    });
-    
-    // TODO: Send email with reset link
-    // For now, return the token (in production, this should be sent via email)
-    res.json({ 
-      message: 'If the email exists, a reset link will be sent',
-      token: resetToken, // Remove this in production
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const resetPassword = async (req, res, next) => {
-  try {
-    const validatedData = resetPasswordSchema.parse(req.body);
-    
-    const passwordReset = await prisma.passwordReset.findUnique({
-      where: { token: validatedData.token },
-      include: { user: true },
-    });
-    
-    if (!passwordReset || passwordReset.usedAt || new Date(passwordReset.expiresAt) < new Date()) {
-      return res.status(400).json({ error: 'Invalid or expired reset token' });
-    }
-    
-    // Hash new password
-    const hashedPassword = await bcrypt.hash(validatedData.password, 10);
-    
-    // Update user password
-    await prisma.user.update({
-      where: { id: passwordReset.userId },
-      data: { password: hashedPassword },
-    });
-    
-    // Mark token as used
-    await prisma.passwordReset.update({
-      where: { id: passwordReset.id },
-      data: { usedAt: new Date() },
-    });
-    
-    res.json({ message: 'Password reset successfully' });
-  } catch (error) {
-    next(error);
-  }
-};
-
