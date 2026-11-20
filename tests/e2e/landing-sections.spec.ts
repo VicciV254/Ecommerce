@@ -354,3 +354,57 @@ test("nothing already on screen moves while the storefront and then the catalog 
   expect({ main: await top(main), hero: await top(heroRegion), strip: await top(strip) }).toEqual(placed);
   expect(await page.evaluate(() => (window as unknown as { layoutShift: number }).layoutShift)).toBeLessThan(0.01);
 });
+
+test("a split hero sits beside its artwork from 768px, and stacks while enlarged text needs the room", async ({ page, context, isMobile }) => {
+  test.skip(isMobile, "Tablet and laptop widths are set in the desktop project.");
+  const hero = section("hero", "campaign", "Hero", { campaignId: "week" });
+  const settings: StorefrontSettings = {
+    ...publishedStorefront.settings,
+    sections: [hero],
+    campaigns: [{
+      id: "week", title: "Shop for home, work and play", body: "Phones, fashion and more.", conditions: "",
+      cta: { label: "Browse products", target: "shop", targetId: null },
+      desktopMediaId: "media-campaign-desktop", mobileMediaId: null,
+      desktopFocal: { x: 50, y: 50 }, mobileFocal: { x: 50, y: 50 }, layout: "split",
+    }],
+  };
+  await context.route("**/api/settings/storefront", (route) => route.fulfill({ json: { ...publishedStorefront, settings } }));
+  const heading = page.getByRole("heading", { name: "Shop for home, work and play" });
+  const region = page.getByRole("region", { name: "Shop for home, work and play" });
+  /** Whether the artwork is beside the heading (true) or above it (false). */
+  const beside = async () => {
+    const art = await region.locator("picture img").boundingBox();
+    const title = await heading.boundingBox();
+    return Boolean(art && title && art.x >= title.x + title.width);
+  };
+  /** Lines of the heading as laid out, so a word broken inside itself shows up as a fragment. */
+  const lines = () => heading.evaluate((element) => {
+    const text = element.firstChild as Text;
+    const range = document.createRange();
+    const rows = new Map<number, string>();
+    for (let index = 0; index < text.length; index += 1) {
+      range.setStart(text, index);
+      range.setEnd(text, index + 1);
+      const top = Math.round(range.getBoundingClientRect().top);
+      rows.set(top, (rows.get(top) ?? "") + text.data[index]);
+    }
+    return [...rows.values()].flatMap((line) => line.trim().split(" "));
+  });
+  const words = ["Shop", "for", "home,", "work", "and", "play"];
+
+  for (const [width, expected] of [[767, false], [768, true], [1280, true]] as const) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/");
+    await expect(heading).toBeVisible();
+    expect(await beside(), `${width}px at 100% text`).toBe(expected);
+  }
+  for (const width of [768, 1024, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/");
+    await expect(heading).toBeVisible();
+    await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+    await frames(page);
+    expect(await lines(), `${width}px at 200% text`).toEqual(words);
+    expect(await pageOverflow(page)).toBeLessThanOrEqual(0);
+  }
+});

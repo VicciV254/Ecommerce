@@ -435,15 +435,19 @@ function CampaignSection({ resolved, catalogReady, catalogLoading, showProblems,
       </div>
     );
   } else if (split) {
+    // Side by side once the hero itself is 45rem wide: from 768px at the default text size (the page's padding
+    // leaves 720px). Enlarged text keeps it stacked until the copy has room, so headline words never break inside.
     body = (
-      <div className="overflow-hidden rounded-lg bg-surface shadow-card md:grid md:grid-cols-2">
-        {desktop && (
-          <div className="relative aspect-[16/9] bg-surface-warm md:order-2 md:aspect-auto md:min-h-64">
-            <CampaignArtwork resolved={resolved} priority={priority} sizes={SPLIT_HERO_SIZES} />
-            {sample}
-          </div>
-        )}
-        <div className="flex flex-col justify-center p-6 sm:p-8 md:p-12">{copy(true, false)}</div>
+      <div className="@container">
+        <div className="overflow-hidden rounded-lg bg-surface shadow-card @min-[45rem]:grid @min-[45rem]:grid-cols-2">
+          {desktop && (
+            <div className="relative aspect-[16/9] bg-surface-warm @min-[45rem]:order-2 @min-[45rem]:aspect-auto @min-[45rem]:min-h-64">
+              <CampaignArtwork resolved={resolved} priority={priority} sizes={SPLIT_HERO_SIZES} />
+              {sample}
+            </div>
+          )}
+          <div className="flex flex-col justify-center p-6 sm:p-8 @min-[45rem]:p-12">{copy(true, false)}</div>
+        </div>
       </div>
     );
   } else {
