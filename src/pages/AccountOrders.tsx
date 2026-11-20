@@ -287,7 +287,10 @@ function OrderDetails({ order, retentionDays, user, notice, closeRef, onClose, o
             <h2 className="type-h3 text-navy-900">Receipt details</h2>
             <p className="font-mono text-sm text-muted">{order.orderNumber}</p>
           </div>
-          <button ref={closeRef} type="button" onClick={onClose} className="min-h-[44px] rounded-sm px-3 text-sm font-semibold text-navy-900 hover:bg-surface-soft">Close</button>
+          {/* An icon, so no word can break in it beside a long heading or order number. */}
+          <button ref={closeRef} type="button" aria-label="Close" onClick={onClose} className="flex size-[44px] shrink-0 items-center justify-center rounded-full text-navy-900 transition-colors duration-(--motion-feedback) hover:bg-surface-soft">
+            <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+          </button>
         </div>
         <NoticeArea notice={notice} />
 

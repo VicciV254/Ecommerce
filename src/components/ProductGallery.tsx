@@ -1,12 +1,45 @@
-import { useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import type { MediaAsset } from "../api/catalog";
+import { zoomSource } from "../store/mediaModel";
 import { Lightbox, imageAlt } from "./Lightbox";
 import { MissingImage, ResponsiveImage, SampleImageLabel } from "./ui";
 
 /** A swipe or scroll counts as finished once the stage has been still this long. */
 const SCROLL_SETTLE_MS = 100;
+/** A hovering mouse or trackpad magnifies the shown image this much, around the pointer. */
+const HOVER_ZOOM = 2.5;
+const HOVER_POINTER = "(hover: hover) and (pointer: fine)";
 
 const wrap = (index: number, count: number) => ((index % count) + count) % count;
+const share = (offset: number, length: number) => (length > 0 ? Math.round(Math.min(Math.max(offset / length, 0), 1) * 1000) / 10 : 50);
+
+/** True while the page itself is pinch-zoomed, so a finger panning it never swipes the stage. */
+function usePageZoomed() {
+  const [zoomed, setZoomed] = useState(false);
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const update = () => setZoomed(viewport.scale > 1.01);
+    update();
+    viewport.addEventListener("resize", update);
+    return () => viewport.removeEventListener("resize", update);
+  }, []);
+  return zoomed;
+}
+
+/** True where a mouse or trackpad can hover; touch screens never magnify on hover. */
+function useHoverPointer() {
+  const [hover, setHover] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia?.(HOVER_POINTER);
+    if (!query) return;
+    const update = () => setHover(query.matches);
+    update();
+    query.addEventListener?.("change", update);
+    return () => query.removeEventListener?.("change", update);
+  }, []);
+  return hover;
+}
 
 const stageButton =
   "absolute z-10 flex size-[44px] items-center justify-center rounded-full border-2 border-navy-900 bg-white text-navy-900 shadow-card transition-colors duration-(--motion-feedback) hover:bg-surface-soft";
@@ -32,7 +65,9 @@ export type GalleryLayout = {
 /**
  * The product images shared by the product page and Quick View: a stage that swipes natively (scroll snapping), 44px
  * Previous/Next buttons, an "n of m" count, thumbnails, ←/→ while the gallery has focus, and a zoom button that opens
- * the full-screen viewer. Nothing moves on its own. A new `resetKey` (a changed choice) returns to the first image.
+ * the full-screen viewer, as does a tap or click on the shown image. A hovering mouse magnifies the shown image where
+ * it points; while the page itself is pinch-zoomed the stage stops swiping, so only the buttons and thumbnails change
+ * the image. Nothing moves on its own. A new `resetKey` (a changed choice) returns to the first image.
  */
 export function ProductGallery({ name, images, resetKey, layout, priority = false, zoom = true }: {
   name: string;
@@ -49,6 +84,13 @@ export function ProductGallery({ name, images, resetKey, layout, priority = fals
   const [loaded, setLoaded] = useState<ReadonlySet<string>>(() => new Set());
   const [failed, setFailed] = useState<ReadonlySet<string>>(() => new Set());
   const shownKey = useRef(resetKey);
+  const pageZoomed = usePageZoomed();
+  const hoverZoom = useHoverPointer() && zoom;
+  const [magnified, setMagnified] = useState(false);
+  const [sharpZoom, setSharpZoom] = useState<string | null>(null);
+  /** The shown image's magnifying layer, and the point it magnifies around (moved without re-rendering). */
+  const zoomLayer = useRef<HTMLDivElement>(null);
+  const zoomOrigin = useRef("50% 50%");
   const count = images.length;
   const current = Math.min(index, Math.max(0, count - 1));
 
@@ -100,6 +142,18 @@ export function ProductGallery({ name, images, resetKey, layout, priority = fals
     go(current + (event.key === "ArrowLeft" ? -1 : 1));
   };
 
+  const openViewer = () => {
+    setMagnified(false);
+    setViewing(true);
+  };
+  const onStagePointerMove = (event: PointerEvent<HTMLUListElement>) => {
+    if (!hoverZoom || event.pointerType !== "mouse") return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    zoomOrigin.current = `${share(event.clientX - rect.left, rect.width)}% ${share(event.clientY - rect.top, rect.height)}%`;
+    if (zoomLayer.current) zoomLayer.current.style.transformOrigin = zoomOrigin.current;
+    if (!magnified) setMagnified(true);
+  };
+
   if (!count) {
     return (
       <div className={layout.stage}>
@@ -120,32 +174,55 @@ export function ProductGallery({ name, images, resetKey, layout, priority = fals
           ref={stage}
           aria-label={`Images of ${name}`}
           tabIndex={-1}
-          className="no-scrollbar flex aspect-square snap-x snap-mandatory overflow-x-auto overscroll-x-contain rounded-lg bg-surface-warm motion-safe:scroll-smooth"
+          onClick={zoom ? openViewer : undefined}
+          onPointerMove={hoverZoom ? onStagePointerMove : undefined}
+          onPointerLeave={hoverZoom ? () => setMagnified(false) : undefined}
+          className={`no-scrollbar flex aspect-square snap-x snap-mandatory overscroll-x-contain rounded-lg bg-surface-warm motion-safe:scroll-smooth ${
+            pageZoomed ? "overflow-x-hidden" : "overflow-x-auto"
+          } ${zoom ? "cursor-zoom-in" : ""}`}
         >
           {images.map((item, position) => {
             const isCurrent = position === current;
             const broken = failed.has(item.url);
             const requested = nearby.has(position) || loaded.has(item.url);
+            const magnifying = isCurrent && magnified;
             return (
-              <li key={item.id} aria-hidden={isCurrent ? undefined : true} className="relative w-full shrink-0 snap-center snap-always">
+              <li key={item.id} aria-hidden={isCurrent ? undefined : true} className="relative w-full shrink-0 snap-center snap-always overflow-hidden">
                 {broken ? (
                   <div className="absolute inset-0 flex flex-col items-center justify-center text-muted">
                     <p className="text-sm font-medium">Image unavailable</p>
                     <p className="mt-1 text-xs">Try another image.</p>
                   </div>
                 ) : requested && (
-                  <ResponsiveImage
-                    url={item.url}
-                    preset="detail"
-                    sizes={layout.sizes}
-                    width={item.width}
-                    height={item.height}
-                    priority={priority && position === 0}
-                    alt={imageAlt(item, name, position, count)}
-                    className="absolute inset-0 h-full w-full object-cover"
-                    onLoad={() => setLoaded((set) => new Set(set).add(item.url))}
-                    onError={() => setFailed((set) => new Set(set).add(item.url))}
-                  />
+                  <div
+                    ref={isCurrent ? zoomLayer : undefined}
+                    style={magnifying ? { transform: `scale(${HOVER_ZOOM})`, transformOrigin: zoomOrigin.current } : undefined}
+                    className="absolute inset-0 motion-safe:transition-transform motion-safe:duration-(--motion-feedback)"
+                  >
+                    <ResponsiveImage
+                      url={item.url}
+                      preset="detail"
+                      sizes={layout.sizes}
+                      width={item.width}
+                      height={item.height}
+                      priority={priority && position === 0}
+                      alt={imageAlt(item, name, position, count)}
+                      className="absolute inset-0 h-full w-full object-cover"
+                      onLoad={() => setLoaded((set) => new Set(set).add(item.url))}
+                      onError={() => setFailed((set) => new Set(set).add(item.url))}
+                    />
+                    {/* The large rendition, fetched only while magnifying; the shown image stands in until it loads. */}
+                    {magnifying && (
+                      <img
+                        src={zoomSource(item.url)}
+                        alt=""
+                        aria-hidden="true"
+                        draggable={false}
+                        onLoad={() => setSharpZoom(item.url)}
+                        className={`absolute inset-0 h-full w-full object-cover ${sharpZoom === item.url ? "" : "opacity-0"}`}
+                      />
+                    )}
+                  </div>
                 )}
                 {isCurrent && !broken && !loaded.has(item.url) && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center">
@@ -169,7 +246,7 @@ export function ProductGallery({ name, images, resetKey, layout, priority = fals
           </>
         )}
         {zoom && (
-          <button type="button" aria-label={`Zoom image ${current + 1} of ${count}`} aria-haspopup="dialog" onClick={() => setViewing(true)} className={`${stageButton} right-2 top-2`}>
+          <button type="button" aria-label={`Zoom image ${current + 1} of ${count}`} aria-haspopup="dialog" onClick={openViewer} className={`${stageButton} right-2 top-2`}>
             {icon("m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607ZM10.5 7.5v6m3-3h-6")}
           </button>
         )}

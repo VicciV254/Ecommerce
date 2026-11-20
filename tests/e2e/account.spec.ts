@@ -373,6 +373,28 @@ test("the account, tracking, return and sign-up screens reflow with doubled text
   }
 });
 
+test("the receipt's close control stays one 44px target beside its heading, also with doubled text at 360px", async ({ page, isMobile }) => {
+  test.skip(!isMobile, "Checked at phone widths.");
+  await signInCustomer(page);
+  const orders = await serveOrderHistory(page);
+  await page.setViewportSize({ width: 360, height: 900 });
+  const receipt = accountSurfaces(page, orders).find((surface) => surface.name === "receipt details")!;
+  await receipt.open();
+  const dialog = receipt.scope();
+  const close = dialog.getByRole("button", { name: "Close", exact: true });
+  const heading = dialog.getByRole("heading", { name: "Receipt details" });
+  for (const size of ["100%", "200%"]) {
+    await page.evaluate((value) => { document.documentElement.style.fontSize = value; }, size);
+    const [button, title] = [(await close.boundingBox())!, (await heading.boundingBox())!];
+    expect([Math.round(button.width), Math.round(button.height)], `${size} text`).toEqual([44, 44]);
+    expect(button.y, `${size} text: beside the heading`).toBeLessThan(title.y + title.height);
+    expect(await close.evaluate((element) => element.textContent?.trim()), `${size} text: no words to break`).toBe("");
+  }
+  await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
+  await close.click();
+  await expect(dialog).toHaveCount(0);
+});
+
 /** Tabs `presses` times: each control shows its whole ring and, outside the header, sits wholly below the sticky chrome. */
 async function tabClearOfStickyChrome(page: Page, presses: number) {
   const visited: string[] = [];

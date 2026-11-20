@@ -233,6 +233,16 @@ test("the zoom viewer zooms by buttons and keys, loads the large image only when
   await page.keyboard.press("+");
   await page.keyboard.press("0");
   await expect(level).toHaveText("Zoom 100%");
+  // While zoomed the arrow keys pan within the picture instead of changing it (at 400% it overflows both ways).
+  for (let press = 0; press < 4; press += 1) await page.keyboard.press("+");
+  await expect(level).toHaveText("Zoom 400%");
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(async () => (await viewerState(page)).x).toBeLessThan(0);
+  await page.keyboard.press("ArrowDown");
+  await expect.poll(async () => (await viewerState(page)).y).toBeLessThan(0);
+  await expect(viewer.getByText("Image 1 of 5", { exact: true })).toBeVisible();
+  await page.keyboard.press("0");
+  await expect(level).toHaveText("Zoom 100%");
   await page.keyboard.press("ArrowRight");
   // The image's own alt text, otherwise the product name and position.
   await expect(viewer.getByRole("img", { name: `${LONG_NAME}, image 2 of 5` })).toBeVisible();
@@ -331,6 +341,137 @@ test("touch pinches to zoom, drags only as far as keeps the frame covered, and d
   const middle = { x: stage.x + stage.width / 2, y: stage.y + stage.height * 0.35 };
   await touchGesture(page, Array.from({ length: 10 }, (_, step) => [{ x: middle.x + 110 - step * 25, y: middle.y }]));
   await expect(page.getByText("Image 3 of 5", { exact: true })).toBeAttached();
+});
+
+test("in the viewer a zoomed picture stays put: Next's spot pans instead, and a finger lifted after pinching back never swipes", async ({ page, isMobile }) => {
+  test.skip(!isMobile, "Touch gestures are checked in the mobile project.");
+  await page.goto(productRoute(campShirt.id));
+  await page.getByRole("button", { name: "Zoom image 1 of 5" }).click();
+  const viewer = page.getByRole("dialog", { name: "Image viewer" });
+  const picture = viewer.getByRole("img", { name: "Camp-collar shirt laid flat, front" });
+  await expect.poll(() => picture.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth)).toBe(IMAGE_SIZE.width);
+  const level = viewer.getByText(/^Zoom \d+%$/);
+  await viewer.getByRole("button", { name: "Zoom in" }).click();
+  await expect(level).toHaveText("Zoom 150%");
+  const next = viewer.getByRole("button", { name: "Next image" });
+  await expect(next).toHaveAttribute("aria-disabled", "true");
+  const spot = (await next.boundingBox())!;
+  await page.touchscreen.tap(spot.x + spot.width / 2, spot.y + spot.height / 2);
+  await page.touchscreen.tap(spot.x + spot.width / 2 - 200, spot.y + spot.height / 2);
+  await expect(viewer.getByText("Image 1 of 5", { exact: true })).toBeVisible();
+  await expect(level).toHaveText("Zoom 150%");
+
+  // Two fingers pinch back to 100%; one lifts, the other slides well across the picture and lifts.
+  await viewer.getByRole("button", { name: "Reset zoom" }).click();
+  const frame = (await picture.boundingBox())!;
+  const centre = { x: frame.x + frame.width / 2, y: frame.y + frame.height / 2 };
+  const cdp = await page.context().newCDPSession(page);
+  const fingers = (spread: number) => [{ x: centre.x - spread, y: centre.y, id: 1 }, { x: centre.x + spread, y: centre.y, id: 2 }];
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: fingers(30) });
+  for (const spread of [50, 70, 90, 70, 50, 30]) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: fingers(spread) });
+  await expect(level).toHaveText("Zoom 100%");
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [fingers(30)[0]] });
+  for (let step = 1; step <= 6; step += 1) {
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: centre.x - 30 - step * 25, y: centre.y, id: 1 }] });
+  }
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await cdp.detach();
+  await expect(viewer.getByText("Image 1 of 5", { exact: true })).toBeVisible();
+});
+
+test("on a phone a tap on the picture opens the viewer, and a pinch-zoomed page never swipes the pictures", async ({ page, isMobile }) => {
+  test.skip(!isMobile, "Touch gestures are checked in the mobile project.");
+  await page.goto(productRoute(campShirt.id));
+  const list = page.getByRole("list", { name: `Images of ${LONG_NAME}` });
+  await list.evaluate((element) => element.scrollIntoView({ block: "center", behavior: "instant" }));
+  const stage = (await list.boundingBox())!;
+  await page.touchscreen.tap(stage.x + stage.width / 2, stage.y + stage.height * 0.35);
+  const viewer = page.getByRole("dialog", { name: "Image viewer" });
+  await expect(viewer.getByText("Image 1 of 5", { exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(viewer).toHaveCount(0);
+
+  const cdp = await page.context().newCDPSession(page);
+  /**
+   * A finger sliding left across the visible part of the stage, clear of its buttons. DevTools touch points are page
+   * (client) coordinates even while the page is zoomed; the swipe must start on the stage itself.
+   */
+  const swipeAcrossStage = async () => {
+    const line = await list.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      const view = window.visualViewport!;
+      const y = rect.top + rect.height * 0.35;
+      const left = Math.max(rect.left, view.offsetLeft) + 20;
+      const right = Math.min(rect.right, view.offsetLeft + view.width) - 20;
+      const visible = y > view.offsetTop && y < view.offsetTop + view.height;
+      return { from: right, to: left, y, onStage: visible && element.contains(document.elementFromPoint(right, y)) };
+    });
+    expect(line.onStage, "the swipe starts on the visible stage itself").toBe(true);
+    const point = (step: number) => [{ x: line.from - ((line.from - line.to) * step) / 9, y: line.y }];
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: point(0) });
+    for (let step = 1; step <= 9; step += 1) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: point(step) });
+    // Held still before lifting, so it ends without a fling: a fling left over from the zoomed swipe would carry on
+    // into the stage once the emulated zoom resets, which real fingers (pinching back out) never allow.
+    await page.waitForTimeout(150);
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  };
+  const scrolled = () => list.evaluate((element) => element.scrollLeft);
+  /** The furthest the stage has scrolled since this was first read, so a drag that springs back still counts. */
+  const furthest = () => list.evaluate((element) => {
+    const store = window as unknown as { stageFurthest?: number };
+    if (store.stageFurthest === undefined) {
+      store.stageFurthest = 0;
+      element.addEventListener("scroll", () => { store.stageFurthest = Math.max(store.stageFurthest!, element.scrollLeft); }, { passive: true });
+    }
+    return store.stageFurthest;
+  });
+  await furthest();
+  await cdp.send("Emulation.setPageScaleFactor", { pageScaleFactor: 2 });
+  await expect.poll(() => page.evaluate(() => window.visualViewport!.scale)).toBeGreaterThan(1.5);
+  await swipeAcrossStage();
+  await page.waitForTimeout(400);
+  expect(await furthest(), "the stage never moves while the page is zoomed").toBe(0);
+  await expect(page.getByText("Image 1 of 5", { exact: true })).toBeAttached();
+  // Back at 100%, still on the first picture at rest, the same swipe moves to the next picture.
+  await cdp.send("Emulation.setPageScaleFactor", { pageScaleFactor: 1 });
+  await expect.poll(() => page.evaluate(() => window.visualViewport!.scale)).toBe(1);
+  await page.waitForTimeout(300);
+  expect(await scrolled(), "nothing carried on into the stage").toBe(0);
+  await swipeAcrossStage();
+  await expect(page.getByText("Image 2 of 5", { exact: true })).toBeAttached();
+  await cdp.detach();
+});
+
+test("a hovering mouse magnifies the shown picture where it points, and a click opens the viewer", async ({ page, context, isMobile }) => {
+  test.skip(isMobile, "Hover zoom serves a mouse or trackpad.");
+  const requested = await serveSelectionCatalog(context);
+  await page.goto(productRoute(campShirt.id));
+  const list = page.getByRole("list", { name: `Images of ${LONG_NAME}` });
+  const picture = list.getByRole("img", { name: "Camp-collar shirt laid flat, front" });
+  await expect.poll(() => picture.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
+  /** The magnification applied around the picture, and where it centres as a share of the picture. */
+  const magnified = () => picture.locator("xpath=..").evaluate((element: HTMLElement) => {
+    const style = getComputedStyle(element);
+    const [x, y] = style.transformOrigin.split(" ").map(parseFloat);
+    return { scale: style.transform === "none" ? 1 : new DOMMatrix(style.transform).a, x: x / element.offsetWidth, y: y / element.offsetHeight };
+  });
+  expect(requested.some((url) => url.includes("w_2400"))).toBe(false);
+  const box = (await list.boundingBox())!;
+  await page.mouse.move(box.x + box.width * 0.25, box.y + box.height * 0.75);
+  await expect.poll(async () => (await magnified()).scale).toBeCloseTo(2.5, 2);
+  let now = await magnified();
+  expect([now.x, now.y].map((share) => Math.round(share * 100))).toEqual([25, 75]);
+  await expect.poll(() => requested.filter((url) => url.includes("w_2400"))).toEqual([
+    "https://res.cloudinary.com/apex-test/image/upload/c_limit,w_2400/q_auto/f_auto/v1763200000/apex-cart/products/camp-front.webp",
+  ]);
+  await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.2);
+  now = await magnified();
+  expect([now.x, now.y].map((share) => Math.round(share * 100))).toEqual([60, 20]);
+  // Leaving the picture restores it; a click on it opens the viewer at it.
+  await page.mouse.move(box.x + box.width / 2, box.y - 30);
+  await expect.poll(async () => (await magnified()).scale).toBe(1);
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height * 0.6);
+  await expect(page.getByRole("dialog", { name: "Image viewer" }).getByText("Image 1 of 5", { exact: true })).toBeVisible();
 });
 
 test("reduced motion makes zoom and image changes immediate", async ({ page }) => {

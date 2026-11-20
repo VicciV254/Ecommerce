@@ -19,6 +19,8 @@ import { SampleImageLabel } from "./ui";
 
 /** A horizontal touch movement this long, at 1×, moves to the neighbouring image. */
 const SWIPE_DISTANCE = 48;
+/** While zoomed, each arrow key press pans this share of the frame. */
+const KEY_PAN_SHARE = 0.15;
 /** Taps: a finger that moves less than this and lifts within TAP_MS; two taps within DOUBLE_TAP_MS toggle zoom. */
 const TAP_SLOP = 10;
 const TAP_MS = 300;
@@ -35,7 +37,7 @@ export function imageAlt(image: MediaAsset, name: string, index: number, count: 
 const toolButton =
   "flex size-[44px] shrink-0 items-center justify-center rounded-full text-white transition-colors duration-(--motion-feedback) hover:bg-white/15 aria-disabled:cursor-not-allowed aria-disabled:text-on-navy-muted aria-disabled:opacity-60";
 const sideButton =
-  "absolute top-1/2 z-10 flex size-[44px] -translate-y-1/2 items-center justify-center rounded-full border-2 border-navy-900 bg-white text-navy-900 shadow-overlay transition-colors duration-(--motion-feedback) hover:bg-surface-soft";
+  "absolute top-1/2 z-10 flex size-[44px] -translate-y-1/2 items-center justify-center rounded-full border-2 border-navy-900 bg-white text-navy-900 shadow-overlay transition-[background-color,opacity] duration-(--motion-feedback) hover:bg-surface-soft aria-disabled:pointer-events-none aria-disabled:opacity-40";
 const icon = (path: string) => (
   <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="size-5">
     <path strokeLinecap="round" strokeLinejoin="round" d={path} />
@@ -51,13 +53,14 @@ const ICONS = {
 };
 
 type Gesture =
-  | { kind: "pan"; start: Point; origin: Zoom; startedAt: number; moved: boolean; touch: boolean }
+  | { kind: "pan"; start: Point; origin: Zoom; startedAt: number; moved: boolean; touch: boolean; afterPinch: boolean }
   | { kind: "pinch"; distance: number; midpoint: Point; origin: Zoom };
 
 /**
  * Full-screen image viewer. It loads the large zoom rendition only while open. Zoom (1× to 4×) by buttons, + and −
- * keys, pinch, double-tap or double-click; drag to pan while zoomed; ←/→, swipe or buttons change image; 0 resets.
- * Reduced motion turns off the zoom and image transitions.
+ * keys, pinch, double-tap or double-click; drag or the arrow keys pan while zoomed; 0 resets. Only at 1× do ←/→, a
+ * swipe or the buttons change image, so nothing done to a zoomed picture moves to another one. Reduced motion turns
+ * off the zoom and image transitions.
  */
 export function Lightbox({ name, images, index, onIndexChange, onClose }: {
   name: string;
@@ -109,15 +112,25 @@ export function Lightbox({ name, images, index, onIndexChange, onClose }: {
   const step = (direction: 1 | -1) => zoomTo(steppedScale(zoom.scale, direction));
   const reset = () => setZoom(NO_ZOOM);
   const toggleAt = (point: Point) => zoomTo(zoom.scale > MIN_ZOOM ? MIN_ZOOM : DOUBLE_TAP_ZOOM, point);
+  const zoomed = zoom.scale > MIN_ZOOM;
   const move = (direction: 1 | -1) => {
-    if (count > 1) onIndexChange(wrap(index + direction, count));
+    if (count > 1 && !zoomed) onIndexChange(wrap(index + direction, count));
+  };
+  /** Shows more of the picture towards `dx`/`dy` (−1, 0 or 1), as far as keeps the frame covered. */
+  const panToward = (dx: number, dy: number) => {
+    const { size, content } = measure();
+    setZoom((current) => clampZoom({
+      ...current, x: current.x - dx * size.width * KEY_PAN_SHARE, y: current.y - dy * size.height * KEY_PAN_SHARE,
+    }, size, content));
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.ctrlKey || event.metaKey || event.altKey) return;
-    const actions: Record<string, () => void> = {
-      ArrowLeft: () => move(-1),
-      ArrowRight: () => move(1),
+    const actions: Record<string, (() => void) | undefined> = {
+      ArrowLeft: () => (zoomed ? panToward(-1, 0) : move(-1)),
+      ArrowRight: () => (zoomed ? panToward(1, 0) : move(1)),
+      ArrowUp: zoomed ? () => panToward(0, -1) : undefined,
+      ArrowDown: zoomed ? () => panToward(0, 1) : undefined,
       "+": () => step(1),
       "=": () => step(1),
       "-": () => step(-1),
@@ -127,6 +140,8 @@ export function Lightbox({ name, images, index, onIndexChange, onClose }: {
     const action = actions[event.key];
     if (!action) return;
     event.preventDefault();
+    // The viewer's keys stay in the viewer: the gallery behind it has its own ←/→.
+    event.stopPropagation();
     action();
   };
 
@@ -151,7 +166,7 @@ export function Lightbox({ name, images, index, onIndexChange, onClose }: {
       };
       setGesturing(true);
     } else if (points.length === 1) {
-      gesture.current = { kind: "pan", start: points[0], origin: zoom, startedAt: at, moved: afterPinch, touch };
+      gesture.current = { kind: "pan", start: points[0], origin: zoom, startedAt: at, moved: afterPinch, touch, afterPinch };
     }
   };
 
@@ -193,7 +208,8 @@ export function Lightbox({ name, images, index, onIndexChange, onClose }: {
   const finishPan = (pan: Extract<Gesture, { kind: "pan" }>, event: PointerEvent<HTMLDivElement>) => {
     const dx = event.clientX - pan.start.x;
     const dy = event.clientY - pan.start.y;
-    if (pan.touch && pan.origin.scale === MIN_ZOOM && Math.abs(dx) >= SWIPE_DISTANCE && Math.abs(dx) > Math.abs(dy)) {
+    // The finger left on the glass after a pinch is still adjusting the zoom: it never swipes to another image.
+    if (pan.touch && !pan.afterPinch && pan.origin.scale === MIN_ZOOM && Math.abs(dx) >= SWIPE_DISTANCE && Math.abs(dx) > Math.abs(dy)) {
       move(dx < 0 ? 1 : -1);
       return;
     }
@@ -267,8 +283,9 @@ export function Lightbox({ name, images, index, onIndexChange, onClose }: {
           {image.isPlaceholder && <SampleImageLabel />}
           {count > 1 && (
             <>
-              <button type="button" aria-label="Previous image" onClick={() => move(-1)} className={`${sideButton} left-2`}>{icon(ICONS.previous)}</button>
-              <button type="button" aria-label="Next image" onClick={() => move(1)} className={`${sideButton} right-2`}>{icon(ICONS.next)}</button>
+              {/* While zoomed they are unavailable and let touches through, so panning near them never changes image. */}
+              <button type="button" aria-label="Previous image" aria-disabled={zoomed} onClick={() => move(-1)} className={`${sideButton} left-2`}>{icon(ICONS.previous)}</button>
+              <button type="button" aria-label="Next image" aria-disabled={zoomed} onClick={() => move(1)} className={`${sideButton} right-2`}>{icon(ICONS.next)}</button>
             </>
           )}
         </div>
