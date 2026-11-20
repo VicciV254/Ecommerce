@@ -13,6 +13,8 @@ The real `.env` is ignored by Git and excluded from container builds.
 |---|---|
 | `DATABASE_URL` | Application database connection |
 | `DIRECT_URL` | Direct connection for Prisma migrations; required by the schema |
+| `APPROVED_DATABASE_HOSTS` | Development deployment only: comma-separated hosts of its own database (see "Development deployment"); unset locally |
+| `APPROVED_DATABASE_ROLE` | Development deployment only: the restricted role its database connections must use; unset locally |
 | `JWT_SECRET`, `JWT_REFRESH_SECRET` | Distinct, unique signing secrets of at least 32 characters |
 | `HOST`, `PORT` | Local example binds `127.0.0.1:5000` |
 | `CORS_ORIGIN` | Comma-separated frontend origins, matching their actual host/port |
@@ -222,6 +224,14 @@ Initialization requires:
   initial account also requires `ADMIN_PASSWORD` of at least 12 characters.
 - A write invocation explicitly sets `ALLOW_DEMO_INITIALIZATION=true`.
 
+The one exception to the loopback rule is the development deployment's own
+database. When `DATABASE_URL` or `DIRECT_URL` names a host listed in
+`APPROVED_DATABASE_HOSTS`, both must be the same direct (not pooled)
+connection to the `apex_development` database as `APPROVED_DATABASE_ROLE`,
+with `sslmode=require` or stricter and no settings beyond `sslmode`,
+`channel_binding` and `connect_timeout` (so the `public` schema), and
+`NODE_ENV` must be `development`. The reset command never accepts a hosted
+database.
 
 ```bash
 npm --prefix backend run seed:demo -- --dry-run
@@ -252,6 +262,49 @@ ALLOW_LOCAL_DATABASE_RESET=true npm --prefix backend run reset
 The old hosted database being disposable does not authorize these commands
 to contact it. Hosted-resource deletion and production connection changes
 remain separate operations.
+
+## Development deployment
+
+Production deploys from `main` to the store's address. The `apex` branch
+deploys to Vercel's preview environment as the development deployment, with
+its own database, secrets and settings scoped to that branch; production's
+variables are not available to it. The frontend build reads `VERCEL_ENV` and
+`VERCEL_GIT_COMMIT_REF` (see `src/deployment.ts`) and stops a production
+build from any branch but `main`, and a preview build from any branch but
+`apex`. Builds outside Vercel are local and unaffected.
+
+Every page of a development deployment, the staff area included, starts with
+the notice "Development preview: use test accounts and test data only."
+Production and local builds never show it.
+
+Outside production on Vercel, and wherever `APPROVED_DATABASE_HOSTS` or
+`APPROVED_DATABASE_ROLE` is set, the API answers every request with 503
+(`DEPLOYMENT_DATABASE_REFUSED`) until both connections pass the rules above
+(the pooled `DATABASE_URL` may also carry `pgbouncer`, `pool_timeout` and
+`connection_limit`) and the connected session is verified once per instance:
+the approved role on `apex_development`, with no administrative attributes,
+no right to create objects in the database or `public` schema, membership
+in no other role (a member can take on that role's powers, `neon_superuser`
+included) and no tables of its own (`src/config/deploymentDatabase.js`).
+
+The database owner applies migrations; the deployment connects as a separate
+login role with row access only. Create it as the owner after migrating:
+
+```sql
+CREATE ROLE apex_runtime WITH LOGIN PASSWORD '<private>' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+GRANT CONNECT, TEMPORARY ON DATABASE apex_development TO apex_runtime;
+GRANT USAGE ON SCHEMA public TO apex_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO apex_runtime;
+GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO apex_runtime;
+REVOKE INSERT, UPDATE, DELETE ON "_prisma_migrations" FROM apex_runtime;
+ALTER DEFAULT PRIVILEGES FOR ROLE <owner> IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO apex_runtime;
+ALTER DEFAULT PRIVILEGES FOR ROLE <owner> IN SCHEMA public GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO apex_runtime;
+```
+
+On Neon, create this role with SQL: roles created in the console or API join
+`neon_superuser`, which the check refuses. Initialize the catalog and staff
+account through the same role with the hosted rule under "Guarded local
+initialization".
 
 ## Canonical API surfaces
 

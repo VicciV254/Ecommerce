@@ -79,6 +79,17 @@ npm run build
 
 The production build is output to the `dist/` folder.
 
+### Deployments
+
+`main` deploys to the store's address. `apex` deploys to Vercel's preview
+environment as the development deployment, with its own database, secrets
+and settings; its addresses require signing in to the Vercel team. A hosted
+build from any other branch stops at build time. Every page of the
+development deployment starts with the notice "Development preview: use test
+accounts and test data only." See
+[Backend setup](backend/SETUP.md#development-deployment) for the database
+rules it enforces.
+
 ## Verification
 
 ```bash

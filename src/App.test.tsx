@@ -6,6 +6,7 @@ import { navigate } from "./router";
 import { buildCategoryTree } from "./store/catalogModel";
 import type { CatalogValue } from "./store/CatalogContext";
 import { fixtureSnapshot } from "./test-support/catalogFixtures";
+import { ADMIN_PREVIEW_FRAME_ROUTE } from "./pages/admin/adminRoutes";
 import App from "./App";
 import { Header } from "./components/Header";
 import { Footer } from "./components/Footer";
@@ -127,6 +128,39 @@ describe("routes", () => {
       expect(screen.getByRole("main")).toBe(main);
       unmount();
     }
+  });
+});
+
+describe("deployment notice", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  const NOTICE = "Development preview: use test accounts and test data only.";
+  const noticeAt = (hash: string) => {
+    window.location.hash = hash;
+    const { unmount } = render(<App />);
+    const notice = screen.queryByRole("region", { name: "Deployment" })?.textContent ?? null;
+    unmount();
+    return notice;
+  };
+
+  it("leads every shopper page and the staff area of a development deployment, but not the draft preview's frame", () => {
+    vi.stubEnv("VITE_DEPLOYMENT_ENVIRONMENT", "preview");
+    for (const hash of ["#/", "#/checkout?step=delivery", "#/login", "#/does-not-exist", "#/admin/overview/dashboard"]) {
+      expect(noticeAt(hash), hash).toBe(NOTICE);
+    }
+    expect(noticeAt(`#${ADMIN_PREVIEW_FRAME_ROUTE}`)).toBeNull();
+  });
+
+  it("never shows on production or local builds", () => {
+    for (const environment of ["production", "local"]) {
+      vi.stubEnv("VITE_DEPLOYMENT_ENVIRONMENT", environment);
+      expect(noticeAt("#/"), environment).toBeNull();
+      expect(noticeAt("#/admin/overview/dashboard"), environment).toBeNull();
+    }
+    vi.unstubAllEnvs();
+    expect(noticeAt("#/")).toBeNull();
   });
 });
 

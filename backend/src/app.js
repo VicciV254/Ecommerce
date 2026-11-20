@@ -5,11 +5,14 @@ import { moneyJsonReplacer } from './utils/money.js';
 import callbackRoutes from './routes/mpesaCallbackRoutes.js';
 import { requestBodyErrorHandler } from './middleware/errorHandler.js';
 import { trustedProxyHops } from './config/proxy.js';
+import { deploymentDatabaseGuard } from './config/deploymentDatabase.js';
 
 const app = express();
 app.set('json replacer', moneyJsonReplacer);
 // The rate limits count by `req.ip`: behind a proxy it must be the client's address, not the proxy's.
 app.set('trust proxy', trustedProxyHops());
+// A development deployment answers nothing until it is verified on its approved database and restricted role.
+app.use(deploymentDatabaseGuard());
 
 // Body parser
 app.use('/api/mpesa/callback', callbackRoutes);

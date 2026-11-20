@@ -7,6 +7,7 @@ import { StorefrontProvider } from "./store/StorefrontContext";
 import { AuthProvider } from "./contexts/AuthContext";
 import { useRoute, parseRoute } from "./router";
 import { Header } from "./components/Header";
+import { DeploymentNotice } from "./components/DeploymentNotice";
 import { GuestCartMerge } from "./components/GuestCartMerge";
 import { MiniCartProvider } from "./components/MiniCart";
 import { Footer } from "./components/Footer";
@@ -118,7 +119,12 @@ function Router() {
       );
       break;
     case "admin":
-      return <Admin />;
+      return (
+        <>
+          <DeploymentNotice />
+          <Admin />
+        </>
+      );
     default:
       page = <NotFound />;
   }
@@ -132,6 +138,7 @@ function Router() {
     : root === "checkout" || root === "account" || SECTIONED_PAGES.has(root) ? pathname : route;
   return (
     <div className="flex min-h-screen flex-col">
+      <DeploymentNotice />
       <Header />
       <GuestCartMerge />
       <main key={pageKey} className="flex-1 animate-fade-in">
