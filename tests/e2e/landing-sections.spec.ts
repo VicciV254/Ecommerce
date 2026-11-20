@@ -294,3 +294,63 @@ test("a published section of a kind this version doesn't know is left out; the r
   await expect(page.getByRole("main").getByRole("heading", { level: 2 })).toHaveText(["Shop by department", "Staff picks"]);
   await expect(page.getByText("Storefront content is unavailable")).toHaveCount(0);
 });
+
+test("nothing already on screen moves while the storefront and then the catalog arrive", async ({ page, context }) => {
+  const hero = section("hero", "campaign", "Hero", { campaignId: "week" });
+  const settings: StorefrontSettings = {
+    ...publishedStorefront.settings,
+    sections: [hero, facts, departmentsGrid, picks()],
+    campaigns: [{
+      id: "week", title: "Fashion week", body: "New arrivals across the department.", conditions: "",
+      cta: { label: "Shop fashion", target: "category", targetId: "dept-fashion" },
+      desktopMediaId: "media-campaign-desktop", mobileMediaId: null,
+      desktopFocal: { x: 50, y: 50 }, mobileFocal: { x: 50, y: 50 }, layout: "split",
+    }],
+  };
+  // Each answer waits until the test releases it.
+  let releaseStorefront = () => {};
+  let releaseCatalog = () => {};
+  const storefrontReleased = new Promise<void>((resolve) => { releaseStorefront = resolve; });
+  const catalogReleased = new Promise<void>((resolve) => { releaseCatalog = resolve; });
+  await context.route("**/api/settings/storefront", async (route) => {
+    await storefrontReleased;
+    await route.fulfill({ json: { ...publishedStorefront, settings } });
+  });
+  await context.route("**/api/catalog", async (route) => {
+    await catalogReleased;
+    await route.fulfill({ json: discoverySnapshot() });
+  });
+  await page.addInitScript(() => {
+    const shifts = window as unknown as { layoutShift: number };
+    shifts.layoutShift = 0;
+    new PerformanceObserver((list) => {
+      for (const entry of list.getEntries() as unknown as { value: number; hadRecentInput: boolean }[]) {
+        if (!entry.hadRecentInput) shifts.layoutShift += entry.value;
+      }
+    }).observe({ type: "layout-shift", buffered: true });
+  });
+  const top = (locator: Locator) => locator.evaluate((element) => element.getBoundingClientRect().top + window.scrollY);
+
+  await page.goto("/");
+  await expect(page.getByRole("status").filter({ hasText: "Loading the storefront" })).toBeVisible();
+  await page.evaluate(() => document.fonts.ready.then(() => undefined));
+  // The footer waits below the first screen, where the arriving page can't push it.
+  expect(await top(page.getByRole("contentinfo"))).toBeGreaterThanOrEqual(page.viewportSize()?.height ?? 0);
+  const main = page.locator("main");
+  const mainTop = await top(main);
+
+  releaseStorefront();
+  const heroRegion = page.getByRole("region", { name: "Fashion week" });
+  const strip = page.getByRole("list", { name: "How shopping works" });
+  await expect(strip).toBeVisible();
+  await frames(page);
+  const placed = { main: await top(main), hero: await top(heroRegion), strip: await top(strip) };
+  expect(placed.main).toBe(mainTop);
+
+  releaseCatalog();
+  await expect(heroRegion.getByRole("link", { name: "Shop fashion" })).toBeVisible();
+  await expect(page.getByRole("list", { name: "Shop by department" }).getByRole("link").first()).toBeVisible();
+  await frames(page);
+  expect({ main: await top(main), hero: await top(heroRegion), strip: await top(strip) }).toEqual(placed);
+  expect(await page.evaluate(() => (window as unknown as { layoutShift: number }).layoutShift)).toBeLessThan(0.01);
+});

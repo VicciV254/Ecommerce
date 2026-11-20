@@ -136,6 +136,7 @@ export function StorefrontSections({ settings, mediaById, showProblems = false, 
               key={section.id}
               resolved={resolveCampaign(campaign, mediaById, catalog)}
               catalogReady={catalog.status === "ready"}
+              catalogLoading={catalog.status === "loading"}
               showProblems={showProblems}
               priority={section === lead}
               variant={section === hero ? "hero" : "band"}
@@ -385,9 +386,10 @@ function CampaignArtwork({ resolved, priority, sizes }: { resolved: ResolvedCamp
   );
 }
 
-function CampaignSection({ resolved, catalogReady, showProblems, priority, variant }: {
+function CampaignSection({ resolved, catalogReady, catalogLoading, showProblems, priority, variant }: {
   resolved: ResolvedCampaign;
   catalogReady: boolean;
+  catalogLoading: boolean;
   showProblems: boolean;
   /** The page's leading section: its artwork (whichever source is chosen) loads eagerly with high priority. */
   priority: boolean;
@@ -396,28 +398,27 @@ function CampaignSection({ resolved, catalogReady, showProblems, priority, varia
   const { campaign, desktop, mobile } = resolved;
   // Catalog targets are only linked, or reported missing, once the catalog has loaded.
   const route = campaign.cta.target === "shop" || catalogReady ? resolved.ctaRoute : null;
+  // Until then the button keeps its place, unseen and out of the Tab order, so nothing under the copy moves.
+  const holdButton = !route && catalogLoading;
   const problems = catalogReady && resolved.ctaProblem ? [...resolved.mediaProblems, resolved.ctaProblem] : resolved.mediaProblems;
   const placeholder = Boolean(desktop?.isPlaceholder || mobile?.isPlaceholder);
   const split = campaign.layout === "split";
   const sample = placeholder ? <SampleImageLabel /> : null;
 
-  const copy = (hero: boolean, onDark: boolean): ReactNode => (
-    <div className={onDark ? "text-white" : "text-navy-900"}>
-      <h2 className={`${hero ? "type-display" : "type-h3"} break-words`}>{campaign.title}</h2>
-      {campaign.body && <p className={`mt-3 max-w-xl break-words ${onDark ? "text-white/90" : "text-navy-800"}`}>{campaign.body}</p>}
-      {campaign.conditions && <p className={`mt-3 max-w-xl break-words text-sm ${onDark ? "text-on-navy-muted" : "text-muted"}`}>{campaign.conditions}</p>}
-      {route && (
-        <Link
-          to={route}
-          className={`mt-5 inline-flex min-h-[44px] items-center rounded-sm px-6 text-sm font-semibold uppercase tracking-[0.12em] transition-colors duration-(--motion-feedback) ${
-            onDark ? "bg-gold-500 text-navy-900 hover:bg-gold-400" : "bg-navy-900 text-white hover:bg-gold-500 hover:text-navy-900"
-          }`}
-        >
-          {campaign.cta.label}
-        </Link>
-      )}
-    </div>
-  );
+  const copy = (hero: boolean, onDark: boolean): ReactNode => {
+    const button = `mt-5 inline-flex min-h-[44px] items-center rounded-sm px-6 text-sm font-semibold uppercase tracking-[0.12em] transition-colors duration-(--motion-feedback) ${
+      onDark ? "bg-gold-500 text-navy-900 hover:bg-gold-400" : "bg-navy-900 text-white hover:bg-gold-500 hover:text-navy-900"
+    }`;
+    return (
+      <div className={onDark ? "text-white" : "text-navy-900"}>
+        <h2 className={`${hero ? "type-display" : "type-h3"} break-words`}>{campaign.title}</h2>
+        {campaign.body && <p className={`mt-3 max-w-xl break-words ${onDark ? "text-white/90" : "text-navy-800"}`}>{campaign.body}</p>}
+        {campaign.conditions && <p className={`mt-3 max-w-xl break-words text-sm ${onDark ? "text-on-navy-muted" : "text-muted"}`}>{campaign.conditions}</p>}
+        {route && <Link to={route} className={button}>{campaign.cta.label}</Link>}
+        {holdButton && <span aria-hidden="true" className={`${button} invisible`}>{campaign.cta.label}</span>}
+      </div>
+    );
+  };
 
   let body: ReactNode;
   if (variant === "band") {

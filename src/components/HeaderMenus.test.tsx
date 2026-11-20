@@ -128,4 +128,14 @@ describe("phone department shortcuts", () => {
       ["Fashion", "#/shop?cat=fashion", null],
     ]);
   });
+
+  it("keeps its row, with All departments, while the catalog loads or after it fails", () => {
+    for (const status of ["loading", "error"] as const) {
+      state.catalog = { ...state.catalog!, status, categories: buildCategoryTree([]) };
+      const { unmount } = render(<DepartmentShortcuts />);
+      const links = within(screen.getByRole("navigation", { name: "Department shortcuts" })).getAllByRole("link");
+      expect(links.map((link) => [link.textContent, link.getAttribute("href")])).toEqual([["All departments", "#/departments"]]);
+      unmount();
+    }
+  });
 });

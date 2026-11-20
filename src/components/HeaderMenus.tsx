@@ -301,8 +301,11 @@ export function DepartmentsMenu() {
 export function DepartmentShortcuts() {
   const { categories, status } = useCatalog();
   const route = useRoute();
-  if (status !== "ready" || !categories.roots.length) return null;
-  const listed = listedCategory(route, categories);
+  // The row keeps its place while the catalog loads or after it fails (All departments needs no catalog), so the page
+  // under it doesn't move when the departments arrive.
+  const ready = status === "ready";
+  const departments = ready ? categories.roots : [];
+  const listed = ready ? listedCategory(route, categories) : undefined;
   const currentDepartment = listed ? categories.path(listed.id)[0] : undefined;
   const pill = "flex min-h-[44px] items-center whitespace-nowrap rounded-full border px-4 text-sm transition-colors duration-(--motion-feedback)";
   return (
@@ -312,7 +315,7 @@ export function DepartmentShortcuts() {
         <li className="shrink-0">
           <Link to="/departments" className={`${pill} border-navy-900 font-semibold text-navy-900 hover:bg-surface-soft`}>All departments</Link>
         </li>
-        {categories.roots.map((department) => {
+        {departments.map((department) => {
           const current = department.id === currentDepartment?.id;
           return (
             <li key={department.id} className="shrink-0">

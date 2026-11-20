@@ -161,11 +161,21 @@ export function ErrorPanel({ title, message, onRetry, children }: { title: strin
 }
 
 /** Notice shown wherever demo catalog records are visible to shoppers. */
-export function DemoCatalogNotice() {
-  const { mode } = useCatalog();
-  if (mode !== "demo") return null;
+/**
+ * `holdPlace` keeps the notice's space, unseen and unannounced, while the catalog loads, so a page whose sections show
+ * before the catalog (the home page) doesn't move when the notice appears. This store runs a demo catalog; a live one
+ * gives the space back once it has loaded.
+ */
+export function DemoCatalogNotice({ holdPlace = false }: { holdPlace?: boolean }) {
+  const { mode, status } = useCatalog();
+  const holding = holdPlace && status === "loading";
+  if (mode !== "demo" && !holding) return null;
   return (
-    <p role="note" className="rounded-md border border-ocean-blue/30 bg-ocean-blue/10 px-4 py-2 text-xs text-ocean-blue-dark">
+    <p
+      role={holding ? undefined : "note"}
+      aria-hidden={holding || undefined}
+      className={`rounded-md border border-ocean-blue/30 bg-ocean-blue/10 px-4 py-2 text-xs text-ocean-blue-dark ${holding ? "invisible" : ""}`}
+    >
       <strong>Demo catalog:</strong> listings marked Demo use sample details, prices, stock and images for review. They are not real inventory.
     </p>
   );

@@ -7,7 +7,8 @@ export default function Home() {
   const { status, error, storefront, mediaById, reload, brandName } = useStorefront();
 
   if (status === "loading") {
-    return <Container className="py-16"><LoadingPanel label="Loading the storefront…" /></Container>;
+    // A screen tall, so the footer starts below the first screen and the arriving page doesn't push it off.
+    return <Container className="min-h-svh py-16"><LoadingPanel label="Loading the storefront…" /></Container>;
   }
   if (!storefront) {
     return (
@@ -25,7 +26,7 @@ export default function Home() {
     <div className="pb-8">
       {/* The page's one H1; the published sections below carry the visible headings. */}
       <h1 className="sr-only">{brandName}</h1>
-      <Container className="pt-6"><DemoCatalogNotice /></Container>
+      <Container className="pt-6"><DemoCatalogNotice holdPlace /></Container>
       <StorefrontSections settings={storefront.settings} mediaById={mediaById} />
     </div>
   );
