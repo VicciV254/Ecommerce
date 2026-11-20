@@ -9,7 +9,7 @@ import { CampaignEditor, STOREFRONT_LIMITS, SectionEditor, type PickerItem } fro
 import { draftProblems, useStorefrontDraft } from "./StorefrontDraft";
 import { StorefrontHistory } from "./StorefrontHistory";
 import { StorefrontSummary } from "./StorefrontSummary";
-import { Feedback, Field, Panel, categoryOptions, inputClass, primaryButtonClass, smallButtonClass } from "./shared";
+import { Feedback, Field, Panel, WrappingSelect, categoryOptions, inputClass, primaryButtonClass, smallButtonClass } from "./shared";
 
 type Section = StorefrontSettings["sections"][number];
 
@@ -157,32 +157,33 @@ export function StorefrontManager({ canWrite }: { canWrite: boolean }) {
               <div className="space-y-3">
                 <Field label="Store name">{(id) => <input id={id} value={settings.brand.name} onChange={(event) => update({ ...settings, brand: { ...settings.brand, name: event.target.value } })} className={inputClass} />}</Field>
                 <Field label="Tagline (optional)">{(id) => <input id={id} value={settings.brand.tagline} onChange={(event) => update({ ...settings, brand: { ...settings.brand, tagline: event.target.value } })} className={inputClass} />}</Field>
-                <p className="text-[11px] text-gray-600">The Apex Cart mark is built into the site; the store name is shown beside it in the header, footer and sign-in screens.</p>
+                <p className="text-[0.6875rem] text-gray-600">The Apex Cart mark is built into the site; the store name is shown beside it in the header, footer and sign-in screens.</p>
               </div>
             </Panel>
 
             <Panel title="Theme">
-              <div className="space-y-3">
+              <div className="@container space-y-3">
                 <Field label="Fonts">
                   {(id) => (
-                    <select id={id} value={settings.theme.fontId} onChange={(event) => {
+                    <WrappingSelect id={id} value={settings.theme.fontId} onChange={(event) => {
                       const font = FONT_OPTIONS.find((option) => option.id === event.target.value);
                       if (font) update({ ...settings, theme: { ...settings.theme, fontId: font.id } });
                     }} className={inputClass}>
                       {FONT_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
-                    </select>
+                    </WrappingSelect>
                   )}
                 </Field>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {/* Columns by the room at the current text size, so labels wrap between words and never push past the panel. */}
+                <div className="grid grid-cols-1 gap-2 @[17rem]:grid-cols-2 @[30rem]:grid-cols-3">
                   {COLOR_SLOTS.map((slot) => (
-                    <label key={slot.key} className="flex items-center gap-2 text-[11px] text-charcoal">
+                    <label key={slot.key} className="flex min-w-0 items-center gap-2 text-[0.6875rem] text-charcoal">
                       <input
                         type="color"
                         value={settings.theme.colors[slot.key]}
                         onChange={(event) => update({ ...settings, theme: { ...settings.theme, colors: { ...settings.theme.colors, [slot.key]: event.target.value } } })}
                         className="h-8 w-8 shrink-0 cursor-pointer rounded-sm border border-light-gray bg-transparent"
                       />
-                      <span>{slot.label}</span>
+                      <span className="min-w-0">{slot.label}</span>
                     </label>
                   ))}
                 </div>
@@ -203,7 +204,8 @@ export function StorefrontManager({ canWrite }: { canWrite: boolean }) {
               </div>
             }
           >
-            <div className="space-y-3">
+            {/* A container, so each section's card gives up its frame when the column is narrow (see SectionEditor). */}
+            <div className="@container space-y-3">
               {settings.sections.map((section, index) => (
                 <SectionEditor
                   key={section.id}
@@ -227,7 +229,7 @@ export function StorefrontManager({ canWrite }: { canWrite: boolean }) {
             description="One campaign keeps the same copy, conditions and destination at every screen size; only artwork and cropping differ."
             actions={<button type="button" disabled={settings.campaigns.length >= STOREFRONT_LIMITS.campaigns} onClick={addCampaign} className={smallButtonClass}>+ Campaign</button>}
           >
-            <div className="space-y-3">
+            <div className="@container space-y-3">
               {settings.campaigns.map((campaign, index) => (
                 <CampaignEditor
                   key={`${index}-${campaign.id}`}

@@ -4,9 +4,12 @@ import routes from './routes/index.js';
 import { moneyJsonReplacer } from './utils/money.js';
 import callbackRoutes from './routes/mpesaCallbackRoutes.js';
 import { requestBodyErrorHandler } from './middleware/errorHandler.js';
+import { trustedProxyHops } from './config/proxy.js';
 
 const app = express();
 app.set('json replacer', moneyJsonReplacer);
+// The rate limits count by `req.ip`: behind a proxy it must be the client's address, not the proxy's.
+app.set('trust proxy', trustedProxyHops());
 
 // Body parser
 app.use('/api/mpesa/callback', callbackRoutes);

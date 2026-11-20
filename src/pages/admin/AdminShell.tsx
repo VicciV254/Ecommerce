@@ -27,8 +27,8 @@ import { UnsavedChangesProvider, useLeaveGuard } from "./unsavedChanges";
 import { UnreadAlertsRefresh, useUnreadAlerts } from "./unreadAlerts";
 
 const TOAST_MS = 2500;
-/** From this width the navigation is a persistent column, and an open drawer closes itself. */
-const COLUMN_QUERY = "(min-width: 1280px)";
+/** From this width the navigation is a persistent column, and an open drawer closes itself. In em, like `xl`. */
+const COLUMN_QUERY = "(min-width: 80em)";
 /** Modules that need the staff catalog before they can show anything. */
 const CATALOG_MODULES: readonly AdminModuleId[] = ["products", "stock", "discounts"];
 

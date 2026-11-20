@@ -29,7 +29,7 @@ import { OrderActionDialog, RefundActionDialog, type ActionOutcome } from "./Ope
 import type { RecordListFilters } from "./adminRoutes";
 import { StaffRefundCard } from "./RefundRecords";
 import type { WorkspaceFocus } from "./OrderWorkspace";
-import { Feedback, Field } from "./shared";
+import { Feedback, Field, WrappingSelect } from "./shared";
 import { usePage, type LoadState, type PageControl } from "./usePage";
 
 const PAGE_SIZE = 20;
@@ -39,9 +39,9 @@ export type OpenTarget = { orderId: string; focus: WorkspaceFocus };
 type OpenOrder = (target: OpenTarget, from: HTMLElement) => void;
 
 
-const openClass = "min-h-11 rounded-sm border border-light-gray px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-charcoal hover:border-brand-primary hover:text-brand-primary";
-const stepClass = "min-h-11 rounded-sm bg-brand-primary px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-white hover:bg-brand-secondary hover:text-brand-primary";
-const cancelClass = "min-h-11 rounded-sm border border-error/50 px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-error hover:bg-error hover:text-white";
+const openClass = "min-h-11 rounded-sm border border-light-gray px-3 py-2 text-[0.6875rem] font-bold uppercase tracking-wider text-charcoal hover:border-brand-primary hover:text-brand-primary";
+const stepClass = "min-h-11 rounded-sm bg-brand-primary px-3 py-2 text-[0.6875rem] font-bold uppercase tracking-wider text-white hover:bg-brand-secondary hover:text-brand-primary";
+const cancelClass = "min-h-11 rounded-sm border border-error/50 px-3 py-2 text-[0.6875rem] font-bold uppercase tracking-wider text-error hover:bg-error hover:text-white";
 const selectClass = "min-h-11 w-full rounded-sm border border-light-gray bg-off-white px-3 py-2 text-sm";
 const sectionClass = "rounded-lg bg-white p-4 shadow-sm sm:p-5";
 
@@ -81,7 +81,7 @@ function ListStatus<T>({ state, onRetry, loadingText }: { state: LoadState<T>; o
 }
 
 function DemoTag() {
-  return <span className="ml-2 rounded-full bg-ocean-blue/10 px-2 py-0.5 align-middle font-body text-[10px] font-bold uppercase text-ocean-blue-dark">Demo</span>;
+  return <span className="ml-2 rounded-full bg-ocean-blue/10 px-2 py-0.5 align-middle font-body text-[0.625rem] font-bold uppercase text-ocean-blue-dark">Demo</span>;
 }
 
 /** One order: key fields, then its permitted steps (writers only) and Open. A table row from 1024px. */
@@ -94,22 +94,22 @@ function OrderRow({ order, canWrite, onAction, onOpen }: {
   const customer = order.user ? `${order.user.firstName} ${order.user.lastName}`.trim() : "";
   const openReturns = order.returns.filter((item) => item.status === "REQUESTED" || item.status === "APPROVED").length;
   return (
-    <li className="grid gap-3 border-b border-light-gray py-4 first:pt-0 last:border-b-0 last:pb-0 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,0.7fr)_minmax(0,1.2fr)_minmax(0,1.5fr)] lg:items-center lg:gap-4">
+    <li className="grid gap-3 border-b border-light-gray py-4 first:pt-0 last:border-b-0 last:pb-0 @min-[54rem]:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,0.7fr)_minmax(0,1.2fr)_minmax(0,1.5fr)] @min-[54rem]:items-center @min-[54rem]:gap-4">
       <div className="min-w-0">
-        <p className="font-mono text-sm font-bold text-brand-primary">{order.orderNumber}{order.isDemo && <DemoTag />}</p>
+        <p className="font-mono text-sm font-bold text-brand-primary [overflow-wrap:anywhere]">{order.orderNumber}{order.isDemo && <DemoTag />}</p>
         <p className="text-xs text-gray-600">{customer || order.user?.email || "Customer"}</p>
       </div>
       <p className="text-xs text-gray-600">
-        <span className="lg:sr-only">Placed </span>{formatDateTime(order.createdAt)}<br />{DELIVERY_LABELS[order.deliveryMethod]}
+        <span className="@min-[54rem]:sr-only">Placed </span>{formatDateTime(order.createdAt)}<br />{DELIVERY_LABELS[order.deliveryMethod]}
       </p>
       <p className="font-semibold text-brand-primary"><span className="sr-only">Total </span>{formatKES(order.total)}</p>
       <div className="flex flex-wrap items-center gap-1.5">
         <OrderStatusBadge order={order} audience="staff" />
         <span className="text-xs text-gray-600">{paymentLabel(order)}</span>
-        {order.paymentReviewOpen && <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[11px] font-semibold text-warning">Payment review</span>}
-        {openReturns > 0 && <span className="rounded-full bg-coral/10 px-2 py-0.5 text-[11px] font-semibold text-coral">{openReturns} open {openReturns === 1 ? "return" : "returns"}</span>}
+        {order.paymentReviewOpen && <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[0.6875rem] font-semibold text-warning">Payment review</span>}
+        {openReturns > 0 && <span className="rounded-full bg-coral/10 px-2 py-0.5 text-[0.6875rem] font-semibold text-coral">{openReturns} open {openReturns === 1 ? "return" : "returns"}</span>}
       </div>
-      <div className="flex flex-wrap gap-2 lg:justify-end">
+      <div className="flex flex-wrap gap-2 @min-[54rem]:justify-end">
         {canWrite && order.allowedActions.map((action) => (
           <button key={action} type="button" onClick={() => onAction(order, action)} className={action === "CANCEL" ? cancelClass : stepClass}>
             {STAFF_ACTION_LABELS[action]}<span className="sr-only"> {order.orderNumber}</span>
@@ -158,10 +158,11 @@ export function OrderQueue({ title, filters, emptyText, reloadToken, canWrite, o
   };
 
   const data = state.status === "ready" ? state.data : null;
+  // Columns only where the list has room for them at the current text size (54rem); otherwise each order stacks.
   return (
-    <section aria-labelledby={titleId} className={sectionClass}>
+    <section aria-labelledby={titleId} className={`@container ${sectionClass}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h4 id={titleId} className="font-body text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">{title}</h4>
+        <h4 id={titleId} className="font-body text-[0.6875rem] font-bold uppercase tracking-[0.15em] text-brand-primary">{title}</h4>
         {data && <p className="text-xs font-semibold text-gray-600">{countText(data.pagination, ["order", "orders"])}</p>}
       </div>
       <ListStatus state={state} onRetry={retry} loadingText="Loading orders…" />
@@ -169,10 +170,10 @@ export function OrderQueue({ title, filters, emptyText, reloadToken, canWrite, o
       {data && !data.orders.length && <p className="mt-3 text-sm text-gray-600">{emptyText}</p>}
       {data && data.orders.length > 0 && (
         <>
-          <div aria-hidden="true" className="mt-4 hidden grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,0.7fr)_minmax(0,1.2fr)_minmax(0,1.5fr)] gap-4 border-b border-light-gray pb-2 text-[10px] font-bold uppercase tracking-wider text-gray-600 lg:grid">
+          <div aria-hidden="true" className="mt-4 hidden grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,0.7fr)_minmax(0,1.2fr)_minmax(0,1.5fr)] gap-4 border-b border-light-gray pb-2 text-[0.625rem] font-bold uppercase tracking-wider text-gray-600 @min-[54rem]:grid">
             <span>Order</span><span>Placed · delivery</span><span>Total</span><span>Status</span><span className="text-right">Actions</span>
           </div>
-          <ul className="mt-3 lg:mt-0">
+          <ul className="mt-3 @min-[54rem]:mt-0">
             {data.orders.map((order) => (
               <OrderRow key={order.id} order={order} canWrite={canWrite} onOpen={onOpen}
                 onAction={(selected, action) => { setFailure(""); setDialog({ order: selected, action }); }} />
@@ -207,16 +208,16 @@ export function ReturnsQueue({ reloadToken, onOpen, filters, onFilters }: {
     <section aria-labelledby={titleId} className={sectionClass}>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h4 id={titleId} className="font-body text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Returns</h4>
+          <h4 id={titleId} className="font-body text-[0.6875rem] font-bold uppercase tracking-[0.15em] text-brand-primary">Returns</h4>
           {data && <p className="text-xs font-semibold text-gray-600">{countText(data.pagination, ["return", "returns"])}</p>}
         </div>
         <div className="w-full sm:w-64">
           <Field label="Return status">
             {(id) => (
-              <select id={id} value={status ?? ""} onChange={(event) => onFilters({ status: isReturnStatus(event.target.value) ? event.target.value : null, page: 1 })} className={selectClass}>
+              <WrappingSelect id={id} value={status ?? ""} onChange={(event) => onFilters({ status: isReturnStatus(event.target.value) ? event.target.value : null, page: 1 })} className={selectClass}>
                 <option value="">All returns</option>
                 {RETURN_STATUSES.map((value) => <option key={value} value={value}>{STAFF_RETURN_STATUS[value]}</option>)}
-              </select>
+              </WrappingSelect>
             )}
           </Field>
         </div>
@@ -227,7 +228,7 @@ export function ReturnsQueue({ reloadToken, onOpen, filters, onFilters }: {
         <ul className="mt-3 space-y-3">
           {data.returns.map((item) => (
             <li key={item.id} className="flex flex-wrap items-start justify-between gap-3 rounded-md border border-light-gray p-3">
-              <div className="min-w-0 flex-1 basis-60">
+              <div className="min-w-0 flex-1 basis-60 [overflow-wrap:anywhere]">
                 <p className="font-mono text-sm font-bold text-brand-primary">{item.number}{item.isDemo && <DemoTag />}</p>
                 <p className="text-xs text-gray-600">Order {item.orderNumber} · requested {formatDateTime(item.requestedAt)}</p>
                 <p className="mt-1 text-sm"><span className="font-semibold">{STAFF_RETURN_STATUS[item.status]}</span> · {RETURN_REASON_LABELS[item.reason]}</p>
@@ -288,16 +289,16 @@ export function RefundsQueue({ reloadToken, canWrite, onOpen, onChanged, showToa
     <section aria-labelledby={titleId} className={sectionClass}>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h4 id={titleId} className="font-body text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Refunds</h4>
+          <h4 id={titleId} className="font-body text-[0.6875rem] font-bold uppercase tracking-[0.15em] text-brand-primary">Refunds</h4>
           {data && <p className="text-xs font-semibold text-gray-600">{countText(data.pagination, ["refund", "refunds"])}</p>}
         </div>
         <div className="w-full sm:w-64">
           <Field label="Refund status">
             {(id) => (
-              <select id={id} value={status ?? ""} onChange={(event) => onFilters({ status: isRefundStatus(event.target.value) ? event.target.value : null, page: 1 })} className={selectClass}>
+              <WrappingSelect id={id} value={status ?? ""} onChange={(event) => onFilters({ status: isRefundStatus(event.target.value) ? event.target.value : null, page: 1 })} className={selectClass}>
                 <option value="">All refunds</option>
                 {REFUND_STATUSES.map((value) => <option key={value} value={value}>{STAFF_REFUND_STATUS[value]}</option>)}
-              </select>
+              </WrappingSelect>
             )}
           </Field>
         </div>
@@ -319,7 +320,7 @@ export function RefundsQueue({ reloadToken, canWrite, onOpen, onChanged, showToa
               onAction={(action) => { setFailure(""); setDialog({ refund, action }); }}
               header={(
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2 border-b border-light-gray pb-2">
-                  <p className="text-xs text-gray-600">Order <span className="font-mono font-bold text-brand-primary">{refund.orderNumber}</span>{refund.isDemo && <DemoTag />}</p>
+                  <p className="text-xs text-gray-600 [overflow-wrap:anywhere]">Order <span className="font-mono font-bold text-brand-primary">{refund.orderNumber}</span>{refund.isDemo && <DemoTag />}</p>
                   <button type="button" onClick={(event) => onOpen({ orderId: refund.orderId, focus: { kind: "refund", id: refund.id } }, event.currentTarget)} className={openClass}>
                     Open order<span className="sr-only"> {refund.orderNumber}</span>
                   </button>

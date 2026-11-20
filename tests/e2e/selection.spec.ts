@@ -1,7 +1,7 @@
 import type { BrowserContext, Locator, Page } from "@playwright/test";
 import { linenShirt } from "../../src/test-support/catalogFixtures";
 import { IMAGE_SIZE, LONG_NAME, campShirt, selectionSnapshot } from "../../src/test-support/selectionFixtures";
-import { backdropContrast, expect, expectWholeFocusRing, pageOverflow, shopperState, tabThroughRings, test } from "./fixtures";
+import { backdropContrast, expect, expectWholeFocusRing, pageOverflow, shopperState, tabThroughRings, tabWithoutBrowserScrolling, test } from "./fixtures";
 
 const STAND_IN = `<svg xmlns="http://www.w3.org/2000/svg" width="${IMAGE_SIZE.width}" height="${IMAGE_SIZE.height}"><rect width="100%" height="100%" fill="#c9d6e3"/><circle cx="600" cy="500" r="300" fill="#fff"/></svg>`;
 const productRoute = (id: string) => `/#/product/${encodeURIComponent(id)}`;
@@ -408,6 +408,28 @@ test("keyboard focus moved behind the purchase bar ends above it (WCAG 2.4.11)",
   await scrollSettled(page);
   const start = (await target.boundingBox())!;
   expect(start.y + start.height, "target starts behind the bar").toBeGreaterThan(barTop);
+  await before.evaluate((element) => (element as HTMLElement).focus({ preventScroll: true }));
+  await page.keyboard.press("Tab");
+  await expect(target).toBeFocused();
+  await scrollSettled(page);
+  const end = (await target.boundingBox())!;
+  expect(end.y + end.height + 5, "target and its focus ring end above the bar").toBeLessThanOrEqual((await bar.boundingBox())!.y);
+});
+
+test("keyboard focus ends above the purchase bar where the browser's own focus scroll stops short", async ({ page, isMobile }) => {
+  test.skip(!isMobile, "The purchase bar serves widths below 1024px.");
+  await page.goto(productRoute(campShirt.id));
+  const bar = page.locator("[data-purchase-bar]");
+  const related = page.getByRole("region", { name: /^More in/ });
+  const target = related.getByRole("button", { name: "Add to cart" }).first();
+  const before = related.getByRole("link", { name: "Cotton Polo Shirt", exact: true });
+  await tabWithoutBrowserScrolling(page, before, target);
+  await target.scrollIntoViewIfNeeded();
+  await expect(bar).toBeVisible();
+  const barTop = (await bar.boundingBox())!.y;
+  // Only the ring is behind the bar: the button itself ends 2px above it.
+  await target.evaluate((element, edge) => window.scrollBy({ top: element.getBoundingClientRect().bottom - (edge - 2), behavior: "instant" }), barTop);
+  await scrollSettled(page);
   await before.evaluate((element) => (element as HTMLElement).focus({ preventScroll: true }));
   await page.keyboard.press("Tab");
   await expect(target).toBeFocused();

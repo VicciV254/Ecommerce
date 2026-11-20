@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CatalogCategory, CatalogDelivery } from "../api/catalog";
+import type { ReturnRule } from "../api/orders";
 import { buildCategoryTree } from "../store/catalogModel";
 import type { CatalogValue } from "../store/CatalogContext";
 import { STORE_FACTS } from "../store/storeFacts";
@@ -25,12 +26,12 @@ function readyCatalog(overrides: Partial<CatalogValue> = {}, categories: Catalog
     status: "ready", error: null, mode: "demo", products: snapshot.products,
     productsById: new Map(snapshot.products.map((product) => [product.id, product])), categories: buildCategoryTree(categories),
     designers: [], discounts: [], returnPolicy: snapshot.returnPolicy, delivery: snapshot.delivery, demonstrationOrders: snapshot.demonstrationOrders,
-    reload: vi.fn(), ...overrides,
+    sampleOrderRetentionDays: null, reload: vi.fn(), ...overrides,
   };
 }
 
-const loadingCatalog = () => readyCatalog({ status: "loading", mode: null, returnPolicy: null, delivery: null, demonstrationOrders: null }, []);
-const failedCatalog = () => readyCatalog({ status: "error", error: "The catalog could not be loaded. Try again later.", mode: null, returnPolicy: null, delivery: null, demonstrationOrders: null }, []);
+const loadingCatalog = () => readyCatalog({ status: "loading", mode: null, returnPolicy: null, delivery: null, demonstrationOrders: null, sampleOrderRetentionDays: null }, []);
+const failedCatalog = () => readyCatalog({ status: "error", error: "The catalog could not be loaded. Try again later.", mode: null, returnPolicy: null, delivery: null, demonstrationOrders: null, sampleOrderRetentionDays: null }, []);
 
 const text = () => document.body.textContent ?? "";
 const block = (name: string) => screen.getByRole("heading", { level: 2, name }).closest("li")!;
@@ -226,11 +227,25 @@ describe("FAQ", () => {
     expect(answer("Where does the store deliver?")).toBe(
       "Standard delivery: Anywhere in Kenya · 2–5 working days. Same-day delivery: Nairobi only · Paid by 12:00 EAT on a working day: arrives that day; otherwise the next working day. Pickup isn't offered. See Delivery.",
     );
-    expect(answer("What can be returned?")).toBe(
-      "Most items within 7 days of delivery; some only if unopened, or if faulty, damaged or wrong. Each product page shows its rule. See Returns and refunds.",
-    );
+    expect(answer("What can be returned?")).toBe("Items within 7 days of delivery. Each product page shows its rule. See Returns and refunds.");
     expect(screen.getByRole("link", { name: "Delivery" }).getAttribute("href")).toBe("#/delivery");
     expect(screen.getByRole("link", { name: "Returns and refunds" }).getAttribute("href")).toBe("#/returns");
+  });
+
+  it("names in the returns answer only the restrictions the category rules set", () => {
+    const rules = (byId: Record<string, ReturnRule>) => fixtureSnapshot().categories.map((category) => ({ ...category, returnRule: byId[category.id] ?? null }));
+    const cases: [Record<string, ReturnRule>, string][] = [
+      [{ "cat-shirts": "UNOPENED_OR_FAULT" }, "Most items within 7 days of delivery; some only if unopened, or if faulty, damaged or wrong."],
+      [{ "cat-smartphones": "FAULT_ONLY" }, "Most items within 7 days of delivery; some only if faulty, damaged or wrong."],
+      [{ "cat-shirts": "UNOPENED_OR_FAULT", "cat-smartphones": "FAULT_ONLY" },
+        "Most items within 7 days of delivery; some only if unopened, or if faulty, damaged or wrong; others only if faulty, damaged or wrong."],
+    ];
+    for (const [byId, sentence] of cases) {
+      state.catalog = readyCatalog({}, rules(byId));
+      const { unmount } = render(<Faq />);
+      expect(answer("What can be returned?")).toBe(`${sentence} Each product page shows its rule. See Returns and refunds.`);
+      unmount();
+    }
   });
 
   for (const [name, catalog] of [["loading", loadingCatalog], ["failed", failedCatalog]] as const) {
@@ -365,6 +380,31 @@ describe("wording where sample orders take demonstration payments", () => {
     render(<Privacy />);
     for (const statement of [ON.checkout, ON.safaricom, ON.security]) expect(flat()).toContain(statement);
     for (const statement of [OFF.checkout, "That can't happen on this site."]) expect(flat()).not.toContain(statement);
+  });
+
+  const RETENTION = {
+    checkout: "Orders for sample products record the same details as any order, and are scheduled for deletion 7 days after they're placed unless an M-Pesa sandbox payment was tried for them. A demonstration payment records the method, amount and time, but no mobile-money or provider details.",
+    keep: "This is a demonstration. Sample orders, with the delivery details copied onto them and their history, are scheduled for deletion 7 days after they're placed, unless an M-Pesa sandbox payment was tried for them. Nothing else is deleted automatically yet: your account, your saved addresses and other checkout records stay until they're deleted on request or the demonstration is reset.",
+    none: "This is a demonstration, and there's no automatic deletion yet. Account, address and checkout records stay until they're deleted on request or the demonstration is reset.",
+  };
+  const keepSection = () => (document.getElementById("how-long-we-keep-it")?.closest("section")?.textContent ?? "").replace(/\s+/g, " ");
+
+  it("says in the Privacy notice when sample orders are deleted, only when the catalog states a period", () => {
+    state.catalog = readyCatalog({ demonstrationOrders: true, sampleOrderRetentionDays: 7 });
+    render(<Privacy />);
+    expect(flat()).toContain(RETENTION.checkout);
+    expect(keepSection()).toContain(RETENTION.keep);
+    for (const statement of [ON.checkout, RETENTION.none]) expect(flat()).not.toContain(statement);
+  });
+
+  it("keeps the Privacy notice's retention wording where no period is stated", () => {
+    for (const catalog of [readyCatalog({ demonstrationOrders: true }), readyCatalog({ demonstrationOrders: false }), loadingCatalog()]) {
+      state.catalog = catalog;
+      const { unmount } = render(<Privacy />);
+      expect(keepSection()).toContain(RETENTION.none);
+      expect(flat()).not.toContain("scheduled for deletion");
+      unmount();
+    }
   });
 
   it("adds that demonstration refunds move no money to the Returns page only when sample orders take demonstration payments", () => {

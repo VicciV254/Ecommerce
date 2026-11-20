@@ -1,8 +1,8 @@
 import type { Locator, Page } from "@playwright/test";
 import { serveAdminData } from "./adminFixtures";
 import {
-  browserQuote, clippedWithin, expect, orderPage, pageOverflow, publishedStorefront, servePaymentOverview, signInCustomer, signInStaff,
-  storefrontDraft, test,
+  browserQuote, clippedWithin, expect, expectWholeFocusRing, orderPage, pageOverflow, publishedStorefront, servePaymentOverview, signInCustomer,
+  signInStaff, storefrontDraft, tabWithoutBrowserScrolling, test,
 } from "./fixtures";
 import { fixturePendingOrder } from "../../src/test-support/checkoutFixtures";
 import { fixtureCustomerOrder } from "../../src/test-support/orderFixtures";
@@ -277,6 +277,49 @@ test("keyboard focus moved to a control behind or above the sticky header ends f
       expect.soft(clearance, `${label}; px below the header`).toBeGreaterThanOrEqual(FOCUS_RING_OUTSET);
     }
   }
+});
+
+/** Places Email so `hidden` px of it sit behind the sticky header or past the bottom of the window (-2: only its ring). */
+async function placeEmail(page: Page, edge: "header" | "window", hidden: number) {
+  await page.getByRole("main").evaluate((main) => { main.style.paddingTop = "1500px"; }); // room above, for either edge
+  await focusStop(page, CONTACT.to).evaluate((element, { below, header, hidden }) => {
+    const box = element.getBoundingClientRect();
+    window.scrollBy({ top: below ? box.bottom - (window.innerHeight + hidden) : box.top - (header - hidden), behavior: "instant" });
+  }, { below: edge === "window", header: await stickyBottom(page), hidden });
+}
+
+// Tab from Name moves focus to Email with no scrolling at all (see tabWithoutBrowserScrolling).
+for (const { place, edge, hidden } of [
+  { place: "4px of it behind the header", edge: "header", hidden: 4 },
+  { place: "only its ring behind the header", edge: "header", hidden: -2 },
+  { place: "4px of it below the window", edge: "window", hidden: 4 },
+  { place: "only its ring below the window", edge: "window", hidden: -2 },
+] as const) {
+  test(`keyboard focus ends with its whole ring in view where the browser's own focus scroll stops short: ${place}`, async ({ page }) => {
+    await page.goto(CONTACT.route);
+    const target = focusStop(page, CONTACT.to);
+    await expect(target).toBeVisible();
+    await tabWithoutBrowserScrolling(page, focusStop(page, CONTACT.from), target);
+    await placeEmail(page, edge, hidden);
+    await focusStop(page, CONTACT.from).evaluate((element) => (element as HTMLElement).focus({ preventScroll: true }));
+    await page.keyboard.press("Tab");
+    await expect(target).toBeFocused();
+    await expectWholeFocusRing(page);
+    const top = await target.evaluate((element) => element.getBoundingClientRect().top);
+    expect(top - FOCUS_RING_OUTSET, "px of ring below the sticky header").toBeGreaterThanOrEqual(await stickyBottom(page) - 0.5);
+  });
+}
+
+test("focus moved by a script rather than the keyboard keeps the script's choice not to scroll", async ({ page }) => {
+  await page.goto(CONTACT.route);
+  const target = focusStop(page, CONTACT.to);
+  await expect(target).toBeVisible();
+  await placeEmail(page, "header", 4);
+  const before = await page.evaluate(() => window.scrollY);
+  await target.evaluate((element) => (element as HTMLElement).focus({ preventScroll: true }));
+  await expect(target).toBeFocused();
+  await scrollSettled(page);
+  expect(await page.evaluate(() => window.scrollY)).toBe(before);
 });
 
 test("focus and typing inside the sticky header never scroll the page", async ({ page, isMobile }) => {

@@ -10,7 +10,7 @@ import { ProductImagesSection, initialGallery } from "./ProductImages";
 import { TableRegion, smallButtonClass } from "./shared";
 import { useImageUploads } from "./useImageUploads";
 
-const sectionTitle = "text-[11px] font-bold uppercase tracking-wider text-brand-primary";
+const sectionTitle = "text-[0.6875rem] font-bold uppercase tracking-wider text-brand-primary";
 const termClass = "text-xs font-semibold text-muted";
 const valueClass = "text-sm text-navy-900 [overflow-wrap:anywhere]";
 const ignore = () => undefined;
@@ -48,7 +48,7 @@ export function ProductDetails({ product, onClose }: { product: CatalogProduct; 
           <div className="min-w-0">
             <h2 className="font-display text-lg text-brand-primary [overflow-wrap:anywhere]">{product.name}</h2>
             <p className="text-xs font-semibold text-navy-800">{visibilityLabel(product.isActive)}</p>
-            {product.isDemo && <p className="text-[11px] font-semibold text-ocean-blue">Demo record: sample data, not a real listing.</p>}
+            {product.isDemo && <p className="text-[0.6875rem] font-semibold text-ocean-blue">Demo record: sample data, not a real listing.</p>}
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <Link to={productPreviewRoute(product.id)} className={`inline-flex min-h-[44px] items-center ${smallButtonClass}`}>Preview</Link>
@@ -89,7 +89,7 @@ export function ProductDetails({ product, onClose }: { product: CatalogProduct; 
               <TableRegion label="Variants" className="-my-[6px]">
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="border-b border-light-gray text-left text-[10px] font-bold uppercase tracking-wider text-gray-600">
+                    <tr className="border-b border-light-gray text-left text-[0.625rem] font-bold uppercase tracking-wider text-gray-600">
                       <th className="py-2 pr-2">SKU</th>
                       {optionKeys.map((key) => <th key={key} className="pr-2">{key}</th>)}
                       <th className="pr-2">Price</th>
@@ -100,13 +100,13 @@ export function ProductDetails({ product, onClose }: { product: CatalogProduct; 
                   <tbody>
                     {product.variants.map((variant) => (
                       <tr key={variant.id} className="border-b border-light-gray/60">
-                        <td className="py-2 pr-2"><code className="text-[11px]">{variant.sku}</code></td>
+                        <td className="py-2 pr-2"><code className="text-[0.6875rem]">{variant.sku}</code></td>
                         {optionKeys.map((key) => <td key={key} className="pr-2">{variant.attributes[key] ?? "—"}</td>)}
                         <td className="whitespace-nowrap pr-2">{formatKES(variant.price)}</td>
                         <td className="pr-2">{variant.isActive ? "Yes" : "No"}</td>
                         <td className="whitespace-nowrap text-gray-600">
                           <span className="font-semibold text-charcoal">{variant.onHand}</span>
-                          <span className="block text-[10px]">{variant.reserved} reserved · {variant.stock} available</span>
+                          <span className="block text-[0.625rem]">{variant.reserved} reserved · {variant.stock} available</span>
                         </td>
                       </tr>
                     ))}

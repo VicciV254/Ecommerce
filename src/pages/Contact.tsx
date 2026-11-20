@@ -120,7 +120,7 @@ export default function Contact() {
           <p className="mt-2 text-navy-800">Include your order number in the message. You can also follow an order yourself:</p>
           <ul className="mt-2">
             <li><Link to="/track" className={helpLink}>Track an order</Link></li>
-            <li><Link to="/account/orders" className={helpLink}>Orders and returns</Link></li>
+            <li><Link to="/account/orders" className={helpLink}>Your orders</Link></li>
           </ul>
         </section>
       </div>

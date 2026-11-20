@@ -14,6 +14,11 @@ export const SUGGEST_MIN_LENGTH = 2;
 export const SUGGEST_DELAY_MS = 150;
 const PRODUCT_SUGGESTIONS = 5;
 const CATEGORY_SUGGESTIONS = 3;
+/**
+ * The keyboard-active suggestion: its tint alone is 1.12:1 against the list, so it also takes the focus ring's look,
+ * inset so the list's edge never clips it (and outlines survive forced colours).
+ */
+const activeOptionClass = "bg-surface-soft [outline:var(--focus-ring-width)_solid_var(--focus-ring)] [outline-offset:calc(-1*var(--focus-ring-width))]";
 
 /** Field and button colours for the surface the search sits on; the white field needs no border on navy. */
 const SEARCH_TONES = {
@@ -195,7 +200,7 @@ export function ProductSearch({ onNavigate, tone = "light", inputRef }: {
                             aria-selected={index === activeIndex}
                             onMouseDown={(event) => event.preventDefault()}
                             onClick={() => choose(option)}
-                            className={`flex min-h-[44px] cursor-pointer items-center gap-3 px-3 py-1.5 hover:bg-surface-soft ${index === activeIndex ? "bg-surface-soft" : ""}`}
+                            className={`flex min-h-[44px] cursor-pointer items-center gap-3 px-3 py-1.5 hover:bg-surface-soft ${index === activeIndex ? activeOptionClass : ""}`}
                           >
                             {option.kind === "product" ? <ProductOption product={option.product} /> : (
                               <span className="min-w-0 flex-1">

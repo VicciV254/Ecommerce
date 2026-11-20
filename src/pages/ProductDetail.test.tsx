@@ -41,7 +41,7 @@ function catalogWith(products: CatalogProduct[], status: CatalogValue["status"] 
     designers: [],
     discounts: fixtureDiscounts,
     returnPolicy: status === "ready" ? fixtureReturnPolicy : null, delivery: status === "ready" ? fixtureDelivery : null,
-    demonstrationOrders: status === "ready" ? false : null,
+    demonstrationOrders: status === "ready" ? false : null, sampleOrderRetentionDays: null,
     reload: vi.fn(),
   };
 }
@@ -223,11 +223,11 @@ describe("ProductDetail", () => {
     const cover = screen.getByRole("img", { name: "Linen shirt, front" });
     expect([cover.getAttribute("loading"), cover.getAttribute("fetchpriority"), cover.getAttribute("decoding")]).toEqual(["eager", "high", "async"]);
     // From 768px the gallery is the left of two columns.
-    expect(cover.getAttribute("sizes")).toBe("(min-width: 768px) 50vw, 100vw");
+    expect(cover.getAttribute("sizes")).toBe("(min-width: 48em) 50vw, 100vw");
     expect(cover.getAttribute("srcset")?.split(", ").map((entry) => entry.split(" ")[1])).toEqual(["480w", "640w", "960w", "1280w", "1600w"]);
     expect([cover.getAttribute("width"), cover.getAttribute("height")]).toEqual(["2400", "3000"]);
     const thumbnails = screen.getAllByRole("button", { name: /^Image \d+ of \d+$/ }).map((button) => button.querySelector("img")!);
-    const strip = "(min-width: 1440px) 157px, (min-width: 1024px) calc(12.5vw - 23px), (min-width: 768px) calc(12.5vw - 20px), (min-width: 640px) calc(25vw - 22px), calc(25vw - 18px)";
+    const strip = "(min-width: 90em) 157px, (min-width: 64em) calc(12.5vw - 23px), (min-width: 48em) calc(12.5vw - 20px), (min-width: 40em) calc(25vw - 22px), calc(25vw - 18px)";
     expect(thumbnails.map((image) => [image.getAttribute("sizes"), image.getAttribute("loading")])).toEqual([[strip, "lazy"], [strip, "lazy"]]);
     expect(thumbnails[0].getAttribute("srcset")?.split(", ").map((entry) => entry.split(" ")[1])).toEqual(["96w", "160w", "240w"]);
 

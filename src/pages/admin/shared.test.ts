@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { isAcceptedImageUrl } from "./shared";
 
@@ -32,5 +34,20 @@ describe("isAcceptedImageUrl", () => {
     ["leading whitespace", " https://media.example.test/a.jpg"],
   ])("[7] rejects an address containing %s", (_label, value) => {
     expect(isAcceptedImageUrl(value)).toBe(false);
+  });
+});
+
+describe("text sizes", () => {
+  /** Every source file of the app (tests aside). */
+  const sources = (directory: string): string[] => readdirSync(directory).flatMap((name) => {
+    const path = join(directory, name);
+    if (statSync(path).isDirectory()) return sources(path);
+    return /\.(ts|tsx)$/.test(name) && !/\.test\.tsx?$/.test(name) ? [path] : [];
+  });
+
+  it("sets text in rem, never px, so it grows with the browser's text size", () => {
+    const pixelText = sources(resolve(process.cwd(), "src")).flatMap((path) =>
+      [...readFileSync(path, "utf8").matchAll(/\btext-\[[\d.]+px\]/g)].map(([found]) => `${path.replace(process.cwd(), "")}: ${found}`));
+    expect(pixelText).toEqual([]);
   });
 });

@@ -40,6 +40,19 @@ describe("order view validation", () => {
   });
 });
 
+describe("sample-order deletion", () => {
+  it("reads whether a customer order is scheduled for deletion; an older backend that omits it schedules none", () => {
+    const customer = fixtureCustomerOrder(order);
+    expect(parseCustomerOrder({ ...customer, scheduledForDeletion: true }).scheduledForDeletion).toBe(true);
+    expect(parseCustomerOrder({ ...customer, scheduledForDeletion: false }).scheduledForDeletion).toBe(false);
+    const { scheduledForDeletion: _omitted, ...older } = { ...customer, scheduledForDeletion: true };
+    expect(parseCustomerOrder(older).scheduledForDeletion).toBe(false);
+    for (const value of ["true", 1, null, {}]) {
+      expect(() => parseCustomerOrder({ ...customer, scheduledForDeletion: value }), JSON.stringify(value)).toThrow(/scheduled deletion/);
+    }
+  });
+});
+
 describe("demonstration records", () => {
   const sample = fixturePendingOrder(fixtureQuote(), { isDemo: true, paymentMethod: "DEMONSTRATION", paymentStatus: "PAID" });
   const requested = fixtureReturn(sample);

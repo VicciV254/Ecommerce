@@ -45,12 +45,37 @@ describe("catalog snapshot boundary", () => {
     expect(() => parseCatalogSnapshot(broken, ["demo"])).toThrow(/products/);
   });
 
-  it("says whether sample orders can be paid with a demonstration payment, and requires the answer", () => {
+  it("says whether sample orders can be paid with a demonstration payment; an older backend that omits it offers none", () => {
     expect(parseCatalogSnapshot(fixtureSnapshot({ demonstrationOrders: true }), ["demo"]).demonstrationOrders).toBe(true);
     expect(parseCatalogSnapshot(fixtureSnapshot(), ["demo"]).demonstrationOrders).toBe(false);
     expect(parseAdminCatalogSnapshot(fixtureAdminSnapshot({ demonstrationOrders: true })).demonstrationOrders).toBe(true);
-    for (const value of [undefined, "true", 1, null]) {
-      expect(() => parseCatalogSnapshot({ ...fixtureSnapshot(), demonstrationOrders: value }, ["demo"])).toThrow(/demonstration orders/);
+    const { demonstrationOrders: _public, ...publicWithout } = fixtureSnapshot({ demonstrationOrders: true });
+    const { demonstrationOrders: _admin, ...adminWithout } = fixtureAdminSnapshot({ demonstrationOrders: true });
+    expect(parseCatalogSnapshot(publicWithout, ["demo"]).demonstrationOrders).toBe(false);
+    expect(parseAdminCatalogSnapshot(adminWithout).demonstrationOrders).toBe(false);
+    for (const value of ["true", 1, null, 0, {}]) {
+      expect(() => parseCatalogSnapshot({ ...fixtureSnapshot(), demonstrationOrders: value }, ["demo"]), JSON.stringify(value))
+        .toThrow(CatalogFormatError);
+      expect(() => parseAdminCatalogSnapshot({ ...fixtureAdminSnapshot(), demonstrationOrders: value }), JSON.stringify(value))
+        .toThrow(/demonstration orders/);
+    }
+  });
+
+  it("says after how many days sample orders are deleted, null where none are or an older backend omits it", () => {
+    for (const days of [1, 7, 3650]) {
+      expect(parseCatalogSnapshot(fixtureSnapshot({ sampleOrderRetentionDays: days }), ["demo"]).sampleOrderRetentionDays).toBe(days);
+      expect(parseAdminCatalogSnapshot(fixtureAdminSnapshot({ sampleOrderRetentionDays: days })).sampleOrderRetentionDays).toBe(days);
+    }
+    expect(parseCatalogSnapshot(fixtureSnapshot({ sampleOrderRetentionDays: null }), ["demo"]).sampleOrderRetentionDays).toBeNull();
+    const { sampleOrderRetentionDays: _public, ...publicWithout } = fixtureSnapshot({ sampleOrderRetentionDays: 7 });
+    const { sampleOrderRetentionDays: _admin, ...adminWithout } = fixtureAdminSnapshot({ sampleOrderRetentionDays: 7 });
+    expect(parseCatalogSnapshot(publicWithout, ["live", "demo"]).sampleOrderRetentionDays).toBeNull();
+    expect(parseAdminCatalogSnapshot(adminWithout).sampleOrderRetentionDays).toBeNull();
+    for (const value of ["7", 0, -1, 1.5, 3651, true, Number.NaN, {}]) {
+      expect(() => parseCatalogSnapshot({ ...fixtureSnapshot(), sampleOrderRetentionDays: value }, ["demo"]), String(value))
+        .toThrow(CatalogFormatError);
+      expect(() => parseAdminCatalogSnapshot({ ...fixtureAdminSnapshot(), sampleOrderRetentionDays: value }), String(value))
+        .toThrow(/sample order retention/);
     }
   });
 

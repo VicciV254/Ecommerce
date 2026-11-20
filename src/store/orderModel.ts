@@ -209,7 +209,10 @@ function orderProblem(value: unknown, staff: boolean): string | null {
   if (!listOf(value.refunds, (item) => isRefund(item, staff))) return "refunds";
   if (!isEligibility(value.returnEligibility)) return "return eligibility";
   if (!uniqueListOf(value.customerActions, isCustomerAction)) return "customer actions";
-  if (!staff) return isDemonstrationActions(value.demonstrationActions, value) ? null : "demonstration actions";
+  if (!staff) {
+    if (!isDemonstrationActions(value.demonstrationActions, value)) return "demonstration actions";
+    return value.scheduledForDeletion === undefined || typeof value.scheduledForDeletion === "boolean" ? null : "scheduled deletion";
+  }
   if (!uniqueListOf(value.allowedActions, isStaffAction) || typeof value.paymentReviewOpen !== "boolean") return "staff actions";
   if (!listOf(value.refundRequestOptions, isRefundRequestOption)) return "refund request options";
   if (value.user !== undefined && value.user !== null &&
@@ -223,7 +226,8 @@ export function parseCustomerOrder(data: unknown, expectedId?: string): Customer
   if (problem) throw new OrderFormatError(problem);
   const order = data as CustomerOrder;
   if (expectedId !== undefined && order.id !== expectedId) throw new OrderFormatError("order identity");
-  return order;
+  // An older backend omits it: such an order is not scheduled for deletion.
+  return { ...order, scheduledForDeletion: order.scheduledForDeletion ?? false };
 }
 
 /** Validates a staff order view, including the fulfilment actions the server would accept now. */

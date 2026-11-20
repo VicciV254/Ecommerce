@@ -308,7 +308,8 @@ function CustomerPayment({ ownerId, orderId, defaultPhone, level, framed, onOrde
         {/* A section of the panel under a hairline, not a bordered box inside it. */}
         <details className="group mt-4 border-t border-divider">
           <summary className="flex min-h-[44px] cursor-pointer list-none items-center justify-between gap-3 py-2 font-semibold text-navy-900 hover:text-link [&::-webkit-details-marker]:hidden">
-            <span className="min-w-0">Pay with M-Pesa sandbox instead</span>
+            {/* "M-Pesa" stays whole: at 200% text on a phone it would otherwise break at its hyphen. */}
+            <span className="min-w-0">Pay with <span className="whitespace-nowrap">M-Pesa</span> sandbox instead</span>
             <svg aria-hidden="true" viewBox="0 0 20 20" fill="currentColor" className="size-5 shrink-0 transition-transform duration-(--motion-feedback) group-open:rotate-180 motion-reduce:transition-none">
               <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.17l3.71-3.94a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clipRule="evenodd" />
             </svg>

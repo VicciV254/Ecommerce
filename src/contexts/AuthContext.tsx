@@ -44,8 +44,21 @@ interface AuthContextValue {
   refreshUser: () => Promise<void>;
 }
 
-/** A new account is either signed in at once (already verified) or waits for its email to be verified. */
-export type RegisterOutcome = 'signed-in' | 'verify' | 'failed';
+/** A new account is either signed in at once (already verified) or waits for its email to be verified; a refused
+ *  sign-up carries what to tell the shopper. */
+export type RegisterOutcome = 'signed-in' | 'verify' | { error: string };
+
+/**
+ * What a refused sign-up says: the server's own words for a limit (they say when to try again), the usual hint for a
+ * refused address (the form already checks everything else the server does), else to try again later.
+ */
+function registrationRefusal(error: unknown) {
+  const response = isAxiosError<{ error?: unknown }>(error) ? error.response : undefined;
+  const said = response?.data?.error;
+  if (response?.status === 429 && typeof said === 'string' && said) return said;
+  if (response && response.status >= 400 && response.status < 500 && response.status !== 429) return 'Registration failed. Email may already be in use.';
+  return 'Could not create your account. Please try again later.';
+}
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -150,8 +163,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       establishSession(data);
       setUser(data.user);
       return 'signed-in';
-    } catch {
-      return 'failed';
+    } catch (error) {
+      return { error: registrationRefusal(error) };
     }
   }, []);
 

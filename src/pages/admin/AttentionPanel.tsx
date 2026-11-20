@@ -18,7 +18,7 @@ const SEVERITY: Record<AttentionItem["severity"], { label: string; tone: string 
   low: { label: "Low", tone: "bg-ocean-blue/10 text-ocean-blue" },
 };
 
-const smallClass = "min-h-11 rounded-sm border border-light-gray px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-charcoal hover:border-brand-primary hover:text-brand-primary aria-disabled:opacity-50";
+const smallClass = "min-h-11 rounded-sm border border-light-gray px-3 py-2 text-[0.6875rem] font-bold uppercase tracking-wider text-charcoal hover:border-brand-primary hover:text-brand-primary aria-disabled:opacity-50";
 
 /**
  * Open work derived from current records. Marking an item read only changes this staff member's view;
@@ -106,14 +106,14 @@ export function AttentionPanel({ canWrite, reloadToken, onOpen }: {
     <section aria-labelledby={titleId} className="rounded-lg bg-white p-4 shadow-sm sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h3 id={titleId} className="font-body text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Needs attention</h3>
+          <h3 id={titleId} className="font-body text-[0.6875rem] font-bold uppercase tracking-[0.15em] text-brand-primary">Needs attention</h3>
           {state.status === "ready" && (
             <p className="text-xs text-gray-600">{items.length} {items.length === 1 ? "item" : "items"} · {unread} unread</p>
           )}
         </div>
         <button type="button" onClick={refresh} className={smallClass}>Refresh<span className="sr-only"> attention list</span></button>
       </div>
-      <p role="status" className={status ? "mt-3 rounded-md bg-off-white p-2 text-xs text-charcoal" : "sr-only"}>{status}</p>
+      <p role="status" className={status ? "mt-3 rounded-md bg-off-white p-2 text-xs text-charcoal [overflow-wrap:anywhere]" : "sr-only"}>{status}</p>
       {state.status === "loading" && <p role="status" className="mt-3 text-sm text-gray-600">Loading items that need attention…</p>}
       {state.status === "error" && (
         <div role="alert" className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-md border border-error/30 bg-error/10 p-3 text-sm text-error">
@@ -128,14 +128,17 @@ export function AttentionPanel({ canWrite, reloadToken, onOpen }: {
             const severity = SEVERITY[item.severity];
             return (
               <li key={item.key} className={`py-3 first:pt-0 last:pb-0 ${item.read ? "opacity-80" : ""}`}>
-                <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-wider">
+                <div className="flex flex-wrap items-center gap-2 text-[0.6875rem] font-bold uppercase tracking-wider">
                   <span className={`rounded-full px-2 py-0.5 ${severity.tone}`}>{severity.label}<span className="sr-only"> priority</span></span>
                   <span className="text-gray-600">{ATTENTION_TYPE_LABELS[item.type]}</span>
                   <span className={item.read ? "text-gray-600" : "text-brand-primary"}>{item.read ? "Read" : "New"}</span>
                 </div>
-                <p className={`mt-1 text-sm ${item.read ? "text-charcoal" : "font-semibold text-brand-primary"}`}>{item.title}</p>
-                <p className="text-xs text-charcoal">{item.detail}</p>
-                <p className="text-[11px] text-gray-600">Since {formatDateTime(item.since)}{item.orderNumber ? ` · Order ${item.orderNumber}` : ""}</p>
+                {/* Order, return and refund numbers have no break of their own: they wrap anywhere rather than run past a phone. */}
+                <div className="[overflow-wrap:anywhere]">
+                  <p className={`mt-1 text-sm ${item.read ? "text-charcoal" : "font-semibold text-brand-primary"}`}>{item.title}</p>
+                  <p className="text-xs text-charcoal">{item.detail}</p>
+                  <p className="text-[0.6875rem] text-gray-600">Since {formatDateTime(item.since)}{item.orderNumber ? ` · Order ${item.orderNumber}` : ""}</p>
+                </div>
                 {itemErrors[item.key] && <div className="mt-2"><Feedback message={itemErrors[item.key]} tone="error" /></div>}
                 <div className="mt-2 flex flex-wrap gap-2">
                   {item.orderId && (

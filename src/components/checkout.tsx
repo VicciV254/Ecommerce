@@ -9,7 +9,8 @@ import { deliveryDescription } from "../store/storeFacts";
 import type { CheckoutQuote } from "../store/useCheckoutQuote";
 import type { SubmissionState } from "../store/useOrderSubmission";
 import { formatDateTime } from "../utils/format";
-import { fieldClass, fieldLabelClass } from "./AddressForm";
+import { fieldLabelClass, selectBoxClass } from "./AddressForm";
+import { WrappingSelect } from "./WrappingSelect";
 import { FigureRows } from "./CheckoutSummary";
 
 /** Quote errors shown beside the choice that caused them rather than in the totals. */
@@ -111,19 +112,19 @@ export function DeliveryChoices({
     <div className="space-y-4">
       <div>
         <label htmlFor={`${id}-address`} className={fieldLabelClass}>Delivery address</label>
-        <select
+        <WrappingSelect
           id={`${id}-address`}
           value={address.id}
           disabled={disabled}
           aria-invalid={Boolean(addressError)}
           aria-describedby={addressError ? `${id}-address-error` : undefined}
           onChange={(event) => onAddress(event.target.value)}
-          className={fieldClass}
+          className={selectBoxClass}
         >
           {addresses.map((item) => (
             <option key={item.id} value={item.id}>{formatAddress(item)}{item.isDefault ? " (default)" : ""}</option>
           ))}
-        </select>
+        </WrappingSelect>
         <FieldError id={`${id}-address-error`} message={addressError} />
         <Link to="/account/addresses" className={`${textLinkClass} text-sm`}>Manage addresses</Link>
       </div>

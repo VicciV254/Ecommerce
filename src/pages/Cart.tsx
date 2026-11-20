@@ -22,7 +22,7 @@ import { useCheckoutQuote } from "../store/useCheckoutQuote";
 import { useOrderSubmission } from "../store/useOrderSubmission";
 
 const CRUMBS = [{ label: "Cart" }];
-const summaryTitle = "text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary";
+const summaryTitle = "text-[0.6875rem] font-bold uppercase tracking-[0.15em] text-brand-primary";
 
 export default function Cart() {
   const { user } = useAuth();
@@ -208,7 +208,7 @@ function CartContent({ user }: { user: User }) {
               <p id="checkout-unavailable" className="mt-2 text-center text-xs text-charcoal">{unavailableReason}</p>
             </>
           )}
-          <Link to="/shop" className="mt-3 block text-center text-[11px] text-gray-600 underline-offset-4 hover:text-brand-primary hover:underline">
+          <Link to="/shop" className="mt-3 block text-center text-[0.6875rem] text-gray-600 underline-offset-4 hover:text-brand-primary hover:underline">
             Continue shopping
           </Link>
         </section>

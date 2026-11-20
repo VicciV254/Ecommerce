@@ -31,9 +31,9 @@ const RELATED_LIMIT = 4;
  * columns (gap 32px, 40px from 1024px). Thumbnails are four to a row with `gap-2`, measured inside their 2px borders.
  */
 export const PRODUCT_GALLERY: GalleryLayout = {
-  sizes: "(min-width: 768px) 50vw, 100vw",
+  sizes: "(min-width: 48em) 50vw, 100vw",
   thumbnailSizes:
-    "(min-width: 1440px) 157px, (min-width: 1024px) calc(12.5vw - 23px), (min-width: 768px) calc(12.5vw - 20px), (min-width: 640px) calc(25vw - 22px), calc(25vw - 18px)",
+    "(min-width: 90em) 157px, (min-width: 64em) calc(12.5vw - 23px), (min-width: 48em) calc(12.5vw - 20px), (min-width: 40em) calc(25vw - 22px), calc(25vw - 18px)",
   thumbnails: "grid grid-cols-4 gap-2",
 };
 

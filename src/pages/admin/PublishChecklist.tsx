@@ -61,14 +61,14 @@ function nextStep(id: ReadinessCheckId, readiness: Readiness, steps: Steps): { t
 export function PublishChecklist({ readiness, className = "", ...steps }: Steps & { readiness: Readiness; className?: string }) {
   const openCount = readiness.open.length;
   const [expanded, setExpanded] = useState(openCount > 0);
-  const summary = readiness.readyToPublish ? "Ready to publish" : openCount ? `${openCount} open` : "All checks passed";
+  const summary = readiness.readyToPublish ? "Ready to publish" : openCount ? `${openCount} open` : "Publishing checks passed";
   return (
     <details
       open={expanded}
       onToggle={(event) => setExpanded(event.currentTarget.open)}
       className={`min-w-0 rounded-md border border-light-gray bg-off-white ${className}`}
     >
-      <summary className="flex min-h-[44px] cursor-pointer flex-wrap items-center gap-x-2 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-brand-primary">
+      <summary className="flex min-h-[44px] cursor-pointer flex-wrap items-center gap-x-2 px-3 py-1 text-[0.6875rem] font-bold uppercase tracking-wider text-brand-primary">
         Before publishing
         <span className="text-xs font-semibold normal-case tracking-normal text-navy-900">{summary}</span>
       </summary>

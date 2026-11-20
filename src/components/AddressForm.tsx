@@ -23,6 +23,9 @@ const AUTOCOMPLETE: Record<AddressField, string> = {
 export const fieldLabelClass = "block text-sm font-semibold text-navy-900";
 export const fieldClass =
   "mt-1 block min-h-[44px] w-full min-w-0 rounded-sm border border-control bg-surface px-3 py-2 text-navy-900 placeholder:text-muted aria-[invalid=true]:border-2 aria-[invalid=true]:border-error disabled:cursor-not-allowed disabled:bg-surface-soft disabled:text-muted";
+/** `fieldClass` for a `WrappingSelect`'s box: the box is not the control, so its states come from the select inside. */
+export const selectBoxClass =
+  "mt-1 min-h-[44px] w-full min-w-0 rounded-sm border border-control bg-surface px-3 py-2 text-navy-900 has-[select[aria-invalid=true]]:border-2 has-[select[aria-invalid=true]]:border-error has-[select:disabled]:bg-surface-soft has-[select:disabled]:text-muted";
 export const fieldErrorClass = "mt-1 text-sm font-semibold text-error";
 
 /** The four address fields with their labels, autocomplete hints and the error tied to each field. */

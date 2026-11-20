@@ -19,6 +19,8 @@ The real `.env` is ignored by Git and excluded from container builds.
 | `FRONTEND_URL` | Public storefront origin used for links in customer emails, including each promotional email's unsubscribe link |
 | `BACKGROUND_JOBS_ENABLED` | Opt-in in-process maintenance for always-on hosts; defaults to `false` |
 | `CRON_SECRET` | Bearer secret for `GET /api/internal/maintenance`; empty disables the endpoint |
+| `REGISTRATION_LIMIT_PER_HOUR` | Accounts one client address may open in an hour; every sign-up counts, successful or not; defaults to `5` (counts are per running instance, so approximate on serverless hosts) |
+| `TRUST_PROXY_HOPS` | Proxies in front of the API whose `X-Forwarded-For` entries are trusted, so the rate limits count by the client's address; a whole number from 0 to 9. Unset means `1` on Vercel (its proxy replaces the header with the client's address) and `0` elsewhere; an invalid value stops start-up |
 | `CLOUDINARY_URL` | Server-only `cloudinary://<api_key>:<api_secret>@<cloud_name>`; empty disables image uploads |
 | `CLOUDINARY_UPLOAD_PREFIX` | Upload folder and public-ID prefix; defaults to `apex-cart` |
 | `RETURN_POLICY_JSON` | Optional complete validated return policy; empty uses `src/config/returnPolicy.js` defaults |
@@ -29,6 +31,7 @@ The real `.env` is ignored by Git and excluded from container builds.
 | `ALLOW_DEMO_ORDERS` | Additional development/test-only opt-in for demo orders, separate from catalog visibility |
 | `DEMONSTRATION_STORE` | The public demonstration store in any `NODE_ENV`: sample products only, demonstration payments and controls, M-Pesa sandbox only; `true` or `false`, defaults to `false` (see "Demonstration store") |
 | `DEMO_ORDER_DAILY_LIMIT` | Most sample orders one account may create in 24 hours; a positive whole number, defaults to `10` |
+| `SAMPLE_ORDER_RETENTION_DAYS` | Days after which visitors' sample orders are deleted by the maintenance step; a whole number from 1 to 3650, defaults to `7` (see "Sample-order deletion") |
 | `CHECKOUT_POLICY_JSON` | Optional complete validated pricing profile; empty uses `src/config/checkoutPolicy.js` defaults |
 | `ENABLE_MPESA` | Enables the order-linked Daraja integration only when all merchant, callback, limit and environment checks pass |
 | `MPESA_LIVE_PAYMENTS_ENABLED` | Additional gate for the production API; defaults to `false`, but does not guarantee sandbox tests are money-free |
@@ -121,8 +124,8 @@ listener, stops scheduled jobs and disconnects Prisma. SIGINT/SIGTERM use
 the same cleanup.
 
 Set `BACKGROUND_JOBS_ENABLED=true` only on an intentional always-on host.
-It runs due payment reconciliation every 15 seconds, and reservation expiry
-and due email delivery every 60 seconds.
+It runs due payment reconciliation every 15 seconds, reservation expiry and
+due email delivery every 60 seconds, and sample-order deletion every hour.
 These services can mutate orders and send messages; they are not health
 checks. A job does not overlap its previous invocation. `NODE_ENV=test`
 always prevents background startup, even if the opt-in flag is set.
@@ -218,6 +221,7 @@ Initialization requires:
 - `ADMIN_EMAIL` and `ADMIN_USERNAME` are supplied privately. Creating the
   initial account also requires `ADMIN_PASSWORD` of at least 12 characters.
 - A write invocation explicitly sets `ALLOW_DEMO_INITIALIZATION=true`.
+
 
 ```bash
 npm --prefix backend run seed:demo -- --dry-run
@@ -668,5 +672,51 @@ send no email. Money M-Pesa reports for an order already paid by demonstration
 is held for review (`EXTRA_PAYMENT`) and refunded through M-Pesa as a
 payment-review refund.
 
-Deploy the backend before the storefront: the storefront requires the catalog's
-`demonstrationOrders`.
+The storefront reads a catalog without `demonstrationOrders` as `false` and
+without `sampleOrderRetentionDays` as `null` (an older backend offers neither),
+so a page served before the backend is updated keeps working, with the wording
+for a store whose sample orders take no demonstration payments and are not
+deleted.
+
+### Sample-order deletion
+
+The maintenance step `sampleOrders` (the daily cron, or hourly in the optional
+worker) deletes visitors' sample orders placed more than
+`SAMPLE_ORDER_RETENTION_DAYS` days ago (default 7; a whole number from 1 to
+3650, read when the step runs). It runs only while sample orders are enabled;
+otherwise it reports `{ skipped: "SAMPLE_ORDERS_DISABLED" }`. An invalid value
+stops only this step, reported as `{ error: "SAMPLE_RETENTION_CONFIGURATION" }`.
+
+- **Kept, never deleted:** an order with any M-Pesa attempt (linked by order id
+  or, for older payments, by order number, whatever its outcome), a settled
+  payment id, a refund tied to a payment, carrying a provider reference, made by
+  a method other than `DEMONSTRATION` or reviewing a payment, or a settled
+  payment status (`PAID`, `PARTIALLY_REFUNDED`, `REFUNDED`) by any method but
+  `DEMONSTRATION`. Live orders are never candidates.
+- **Stock given back**, one entry per variant, logged as `sample-order-purge`:
+  a held reservation is released; committed stock gets back the ordered
+  quantity less what received returns already restocked; an expired or
+  released reservation (every cancelled order) holds nothing more. A missing
+  variant, stock beyond 1,000,000, reserved stock below the order's or more
+  units restocked than ordered leaves the order for review
+  (`INVENTORY_REVIEW`), never clamped.
+- **Deleted together:** the order's outbox emails and staff read-state keys,
+  refunds, return lines and requests, tracking events, items, the order and its
+  consumed checkout quote. Accounts, saved addresses, the catalog and stock,
+  `ActivityLog`, `StockLog` and `RestockHistory` are kept.
+
+Each order is re-checked and deleted in its own serializable transaction under
+the order's lock. A concurrent payment attempt, demonstration step or
+cancellation either commits first, and the re-check sees it, or waits for the
+lock and then finds the order gone; a serialization conflict makes the deletion
+retry, and an order changed three times running is reported as `ORDER_RETRY`
+and checked again next run. A
+run works oldest first, deleting at most 200 orders and examining at most
+1,000. An order refused for review stays a candidate, so the run counts it and
+carries on past it: refused orders never hold back younger ones. The run
+answers `{ deleted, unchanged, failed: { CODE: count } }` with codes only.
+
+The catalog reports `sampleOrderRetentionDays` (the period while sample orders
+are enabled and the setting is valid, else `null`), and each customer order
+view reports `scheduledForDeletion`; the account's orders and the Privacy
+notice mention deletion only when both say so.

@@ -120,8 +120,7 @@ export async function serveStaffHistory(context: BrowserContext, entries: () => 
 }
 
 /** Staff reads every module makes, answered as the API would; writes fall through to the test (or the 503 default). */
-export async function serveAdminData(context: BrowserContext) {
-  const orders = staffOrders();
+export async function serveAdminData(context: BrowserContext, orders: StaffOrder[] = staffOrders()) {
   await serveStaffOrders(context, () => orders);
   const read = (json: unknown) => (route: Parameters<Parameters<BrowserContext["route"]>[1]>[0]) =>
     route.request().method() === "GET" ? route.fulfill({ json }) : route.fallback();

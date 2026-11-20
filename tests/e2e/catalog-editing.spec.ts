@@ -374,11 +374,13 @@ test("§6 matrix: the products list, category tree, editor checklist and preview
   expect(failures, failures.join("\n")).toEqual([]);
 });
 
-test("the checklist's steps move to their section inside the editor and keep the header with Save in view", async ({ page, context, isMobile }) => {
+test("the checklist's steps move to their section inside the editor and keep the header with Save in view, except where it scrolls with the form", async ({ page, context, isMobile }) => {
   await signInStaff(page);
   await serveCatalog(context);
   for (const [width, scale] of isMobile ? [[360, 1], [360, 2], [390, 1]] : [[1280, 1], [1024, 2]]) {
     const label = `${width}px ${scale * 100}%`;
+    // On a phone with enlarged text the pinned header would take most of the screen (O-g): it scrolls with the form.
+    const pinned = !(isMobile && scale > 1);
     // A fresh tab at this size and text size, so nothing is left scrolled or edited from the previous one.
     const tab = await context.newPage();
     await tab.setViewportSize({ width, height: 800 });
@@ -392,23 +394,32 @@ test("the checklist's steps move to their section inside the editor and keep the
     const editor = editorOf(tab);
     const save = editor.getByRole("button", { name: "Save product" });
     await expect(save).toBeInViewport();
+    const frameTop = () => editor.evaluate((dialog) => dialog.querySelector("div")!.getBoundingClientRect().top);
+    /** Where a step's section ends up: with the header pinned, Save stays in view; otherwise the section starts at the
+     *  top of the editor, the header (and Save) having scrolled away with the form. */
+    const expectSectionShown = async (heading: typeof save, step: string) => {
+      await expect(heading, label).toBeFocused();
+      await expect(heading, label).toBeInViewport();
+      if (pinned) {
+        await expect(save, `${label} ${step}: Save stays in view`).toBeInViewport();
+        return;
+      }
+      const offset = await heading.evaluate((element) => element.getBoundingClientRect().top) - await frameTop();
+      expect(offset, `${label} ${step}: the section starts at the top of the editor`).toBeLessThan(40);
+      await expect(save, `${label} ${step}: Save scrolled away with the header`).not.toBeInViewport();
+    };
     // Playwright scrolls a target into view before clicking it, which could scroll the dialog itself; these steps start
     // in view (the checklist is at the top of the editor body), so any scrolling seen is the editor's own.
     await editor.getByRole("button", { name: "Go to Images" }).click();
-    const images = editor.getByRole("heading", { name: "Images", exact: true });
-    await expect(images, label).toBeFocused();
-    await expect(images, label).toBeInViewport();
-    await expect(save, `${label} Go to Images: Save stays in view`).toBeInViewport();
+    await expectSectionShown(editor.getByRole("heading", { name: "Images", exact: true }), "Go to Images");
 
-    // Back at the top of the editor body, turn the only option off: "No active option" opens with its own step.
-    await editor.evaluate((dialog) => { dialog.querySelector<HTMLElement>(".overflow-y-auto")!.scrollTop = 0; });
+    // Back at the top of the editor, Save is there; turn the only option off: "No active option" opens with its own step.
+    await editor.evaluate((dialog) => { for (const scroller of dialog.querySelectorAll<HTMLElement>("[data-editor-scroller]")) scroller.scrollTop = 0; });
+    await expect(save, `${label}: Save at the top of the editor`).toBeInViewport();
     await editor.getByRole("checkbox", { name: "Variant 1 active" }).dispatchEvent("click");
     await editor.getByRole("button", { name: "Go to Variants" }).click();
-    const variants = editor.getByRole("heading", { name: "Variants (sellable SKUs)", exact: true });
-    await expect(variants, label).toBeFocused();
-    await expect(variants, label).toBeInViewport();
-    await expect(save, `${label} Go to Variants: Save stays in view`).toBeInViewport();
-    await expect(editor.getByRole("button", { name: "Close product editor" }), label).toBeInViewport();
+    await expectSectionShown(editor.getByRole("heading", { name: "Variants (sellable SKUs)", exact: true }), "Go to Variants");
+    if (pinned) await expect(editor.getByRole("button", { name: "Close product editor" }), label).toBeInViewport();
     await tab.close();
   }
 });

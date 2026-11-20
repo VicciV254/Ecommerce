@@ -6,7 +6,7 @@ import { navigate, useRoute } from "../../router";
 import { describeVariant } from "../../store/catalogModel";
 import { useAdminCatalog } from "./AdminCatalogContext";
 import { STOCK_STATUSES, parseStockParams, stockRoute, type StockFilters } from "./adminRoutes";
-import { Feedback, Panel, TableRegion, categoryOptions, descendantIds, inputClass, smallButtonClass } from "./shared";
+import { Feedback, Panel, TableRegion, WrappingSelect, categoryOptions, descendantIds, inputClass, smallButtonClass } from "./shared";
 import { useUnsavedChanges } from "./unsavedChanges";
 
 const ROW_LIMIT = 100;
@@ -102,14 +102,14 @@ export function StockManager({ canWrite, showToast }: { canWrite: boolean; showT
     >
       <div className="mb-5 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,220px)_minmax(0,160px)]">
         <input aria-label="Search stock" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by product or SKU…" className={inputClass} />
-        <select aria-label="Filter stock by category" value={categoryId} onChange={(event) => filterBy({ category: event.target.value || null })} className={inputClass}>
+        <WrappingSelect aria-label="Filter stock by category" value={categoryId} onChange={(event) => filterBy({ category: event.target.value || null })} className={inputClass}>
           <option value="">All categories</option>
           {options.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
-        </select>
-        <select aria-label="Filter stock by status" value={statusFilter} onChange={(event) => filterBy({ status: STOCK_STATUSES.find((status) => status === event.target.value) ?? null })} className={inputClass}>
+        </WrappingSelect>
+        <WrappingSelect aria-label="Filter stock by status" value={statusFilter} onChange={(event) => filterBy({ status: STOCK_STATUSES.find((status) => status === event.target.value) ?? null })} className={inputClass}>
           <option value="">All statuses</option>
           {STOCK_STATUSES.map((status) => <option key={status} value={status}>{STATUS_STYLES[status].label}</option>)}
-        </select>
+        </WrappingSelect>
       </div>
 
       {canWrite ? (
@@ -128,7 +128,7 @@ export function StockManager({ canWrite, showToast }: { canWrite: boolean; showT
       <TableRegion label="Stock by SKU table" className="mt-[6px]">
         <table className="w-full text-xs">
           <thead>
-            <tr className="border-b border-light-gray text-left text-[10px] font-bold uppercase tracking-widest text-gray-600">
+            <tr className="border-b border-light-gray text-left text-[0.625rem] font-bold uppercase tracking-widest text-gray-600">
               <th className="py-2.5">Product / SKU</th><th>On hand</th><th>Reserved</th><th>Available</th><th>Max</th><th>Low at</th><th>Status</th>{canWrite && <th><span className="sr-only">Actions</span></th>}
             </tr>
           </thead>
@@ -145,9 +145,9 @@ export function StockManager({ canWrite, showToast }: { canWrite: boolean; showT
                   <td className="py-2.5 pr-2">
                     <p className="font-medium text-brand-primary">
                       {row.productName}
-                      {row.isDemo && <span className="ml-1.5 rounded-sm bg-ocean-blue/15 px-1 text-[9px] font-bold uppercase text-ocean-blue">Demo</span>}
+                      {row.isDemo && <span className="ml-1.5 rounded-sm bg-ocean-blue/15 px-1 text-[0.5625rem] font-bold uppercase text-ocean-blue">Demo</span>}
                     </p>
-                    <p className="text-[11px] text-gray-500">{row.sku}{options ? ` · ${options}` : ""}</p>
+                    <p className="text-[0.6875rem] text-gray-500">{row.sku}{options ? ` · ${options}` : ""}</p>
                   </td>
                   <td>
                     {canWrite ? (
@@ -161,7 +161,7 @@ export function StockManager({ canWrite, showToast }: { canWrite: boolean; showT
                           onChange={(event) => setDrafts((all) => ({ ...all, [row.variantId]: event.target.value }))}
                           className="w-20 rounded-sm border border-light-gray px-2 py-1"
                         />
-                        {draft !== undefined && !valid && <p className="mt-1 text-[10px] font-semibold text-error">Whole number, at least {row.reserved}</p>}
+                        {draft !== undefined && !valid && <p className="mt-1 text-[0.625rem] font-semibold text-error">Whole number, at least {row.reserved}</p>}
                       </>
                     ) : <span className="font-semibold text-charcoal">{row.quantity}</span>}
                   </td>

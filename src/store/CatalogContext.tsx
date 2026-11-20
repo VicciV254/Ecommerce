@@ -41,10 +41,12 @@ export type CatalogValue = {
    * Public wording about ordering and payment uses the demonstration variant only when this is `true`.
    */
   demonstrationOrders: boolean | null;
+  /** Days after which visitors' sample orders are deleted; `null` where none are, or until the snapshot has loaded. */
+  sampleOrderRetentionDays: number | null;
   reload: () => void;
 };
 
-const EMPTY: Omit<CatalogSnapshot, "returnPolicy" | "delivery" | "demonstrationOrders"> = {
+const EMPTY: Omit<CatalogSnapshot, "returnPolicy" | "delivery" | "demonstrationOrders" | "sampleOrderRetentionDays"> = {
   version: 2, mode: "live", products: [], categories: [], designers: [], discounts: [],
 };
 
@@ -71,6 +73,7 @@ function useCatalogValue(state: LoadState, reload: () => void): CatalogValue {
     returnPolicy: state.status === "ready" ? state.snapshot.returnPolicy : null,
     delivery: state.status === "ready" ? state.snapshot.delivery : null,
     demonstrationOrders: state.status === "ready" ? state.snapshot.demonstrationOrders : null,
+    sampleOrderRetentionDays: state.status === "ready" ? state.snapshot.sampleOrderRetentionDays : null,
     reload,
   }), [state, snapshot, productsById, categories, reload]);
 }

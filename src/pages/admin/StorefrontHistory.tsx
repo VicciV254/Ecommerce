@@ -145,14 +145,14 @@ export function StorefrontHistory({ canWrite, onRestoreSettled }: { canWrite: bo
   }
 
   return (
-    <section aria-labelledby={headingId} className="rounded-lg bg-white shadow-sm">
+    <section aria-labelledby={headingId} className="@container rounded-lg bg-white shadow-sm">
       <h3 id={headingId}>
         <button
           type="button"
           aria-expanded={open}
           aria-controls={regionId}
           onClick={() => setOpen((value) => !value)}
-          className="flex min-h-11 w-full items-center justify-between gap-3 rounded-lg px-5 py-3 text-left text-xs font-bold uppercase tracking-[0.15em] text-brand-primary sm:px-6"
+          className="flex min-h-11 w-full items-center justify-between gap-3 rounded-lg px-5 py-3 text-left text-xs font-bold uppercase tracking-[0.15em] text-brand-primary sm:px-6 @max-[12rem]:px-3"
         >
           Publication history
           <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className={`size-5 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}>
@@ -160,7 +160,8 @@ export function StorefrontHistory({ canWrite, onRestoreSettled }: { canWrite: bo
           </svg>
         </button>
       </h3>
-      <div id={regionId} hidden={!open} className="border-t border-light-gray px-5 pb-5 pt-4 sm:px-6">
+      {/* Narrower padding where the panel is under 12rem at the current text size, so "Publication" fits its line. */}
+      <div id={regionId} hidden={!open} className="border-t border-light-gray px-5 pb-5 pt-4 sm:px-6 @max-[12rem]:px-3">
         {open && body}
       </div>
       {confirming && draft && (

@@ -4,19 +4,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import About from "./About";
 import Contact from "./Contact";
 import { Footer } from "../components/Footer";
-import type { CatalogDelivery } from "../api/catalog";
+import type { CatalogCategory, CatalogDelivery } from "../api/catalog";
+import type { ReturnRule } from "../api/orders";
 import { STORE_FACTS } from "../store/storeFacts";
 import { fixtureSnapshot } from "../test-support/catalogFixtures";
 
 const contact = vi.hoisted(() => ({ send: vi.fn() }));
 const subscriptions = vi.hoisted(() => ({ subscribe: vi.fn() }));
 const auth = vi.hoisted(() => ({ value: { user: null as { id: string } | null, refreshUser: vi.fn() } }));
-const catalog = vi.hoisted(() => ({
-  value: {
-    returnPolicy: null as { windowDays: number } | null, delivery: null as CatalogDelivery[] | null,
-    demonstrationOrders: false as boolean | null,
-  },
-}));
+type CatalogFacts = {
+  returnPolicy: { windowDays: number } | null; delivery: CatalogDelivery[] | null; demonstrationOrders: boolean | null;
+  /** None: no categories, as before the catalog loads. */
+  categories?: CatalogCategory[];
+};
+const catalog = vi.hoisted(() => ({ value: { returnPolicy: null, delivery: null, demonstrationOrders: false } as CatalogFacts }));
 const titles = vi.hoisted(() => [] as string[]);
 vi.mock("../api/contact", () => ({ contactAPI: contact }));
 vi.mock("../api/subscriptions", () => ({ subscriptionsAPI: subscriptions }));
@@ -25,12 +26,19 @@ vi.mock("../store/StorefrontContext", () => ({
   useStorefront: () => ({ brandName: "Apex Cart" }),
   usePageTitle: (title: string) => { titles.push(title); },
 }));
-vi.mock("../store/CatalogContext", () => ({
-  useCatalog: () => ({
-    categories: { roots: [{ slug: "fashion", name: "Fashion" }] }, returnPolicy: catalog.value.returnPolicy, delivery: catalog.value.delivery,
-    demonstrationOrders: catalog.value.demonstrationOrders,
-  }),
-}));
+vi.mock("../store/CatalogContext", async () => {
+  const { buildCategoryTree } = await import("../store/catalogModel");
+  return {
+    useCatalog: () => ({
+      categories: buildCategoryTree(catalog.value.categories ?? []), returnPolicy: catalog.value.returnPolicy,
+      delivery: catalog.value.delivery, demonstrationOrders: catalog.value.demonstrationOrders,
+    }),
+  };
+});
+
+/** The fixture categories with the given return rules (by category id); the rest inherit or are STANDARD. */
+const withRules = (rules: Record<string, ReturnRule>, hidden: string[] = []) => fixtureSnapshot().categories
+  .map((category) => ({ ...category, returnRule: rules[category.id] ?? null, isActive: !hidden.includes(category.id) }));
 
 function apiError(status: number, data: unknown) {
   const config = { headers: new AxiosHeaders() };
@@ -61,7 +69,8 @@ function expectNoContactDetails() {
 
 beforeEach(() => {
   const { returnPolicy, delivery } = fixtureSnapshot();
-  catalog.value = { returnPolicy, delivery, demonstrationOrders: false };
+  // Shirts can go back only unopened or faulty, so the returns fact has one restriction to name.
+  catalog.value = { returnPolicy, delivery, demonstrationOrders: false, categories: withRules({ "cat-shirts": "UNOPENED_OR_FAULT" }) };
   auth.value = { user: null, refreshUser: vi.fn().mockResolvedValue(undefined) };
   subscriptions.subscribe.mockReset();
   titles.length = 0;
@@ -125,6 +134,9 @@ describe("Contact", () => {
     expect(screen.getByRole("heading", { level: 2, name: "Or send us a message" })).toBeTruthy();
     expect(screen.getByText("Messages are emailed to our mailbox.")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Track an order" }).getAttribute("href")).toBe("#/track");
+    // Named as the footer names the same page.
+    expect(screen.getByRole("link", { name: "Your orders" }).getAttribute("href")).toBe("#/account/orders");
+    expect(screen.queryByRole("link", { name: "Orders and returns" })).toBeNull();
     expect(document.querySelectorAll("img, iframe")).toHaveLength(0);
     expect(document.body.textContent).not.toMatch(/whatsapp/i);
     expectNoRetiredDetails();
@@ -199,6 +211,32 @@ describe("payment and refund facts where sample orders take demonstration paymen
     expect(screen.getByText("Pay by M-Pesa, approving the payment in the prompt on your phone.")).toBeTruthy();
     expect(screen.getByText("Each product page shows its return rule and window. Refunds are sent by M-Pesa.")).toBeTruthy();
   });
+});
+
+describe("returns facts from the catalog's return rules", () => {
+  const WINDOW = "can be returned within 7 days of delivery";
+  const REFUNDS = "Refunds are sent by M-Pesa.";
+  const cases: [string, Record<string, ReturnRule>, string][] = [
+    ["no restriction", {}, `Items ${WINDOW}. ${REFUNDS}`],
+    ["unopened or faulty only", { "cat-shirts": "UNOPENED_OR_FAULT" }, `Most items ${WINDOW}; some only if unopened, or if faulty, damaged or wrong. ${REFUNDS}`],
+    ["faulty only", { "cat-smartphones": "FAULT_ONLY" }, `Most items ${WINDOW}; some only if faulty, damaged or wrong. ${REFUNDS}`],
+    ["both", { "cat-shirts": "UNOPENED_OR_FAULT", "cat-smartphones": "FAULT_ONLY" },
+      `Most items ${WINDOW}; some only if unopened, or if faulty, damaged or wrong; others only if faulty, damaged or wrong. ${REFUNDS}`],
+  ];
+  for (const [name, view] of [["About", () => render(<About />)], ["the footer", () => render(<Footer />)]] as const) {
+    for (const [rules, categoryRules, sentence] of cases) {
+      it(`${name} names only the restrictions that exist (${rules})`, () => {
+        catalog.value = { ...catalog.value, categories: withRules(categoryRules) };
+        view();
+        expect(screen.getByText(sentence)).toBeTruthy();
+      });
+    }
+    it(`${name} leaves out a hidden category's rule`, () => {
+      catalog.value = { ...catalog.value, categories: withRules({ "cat-smartphones": "FAULT_ONLY" }, ["cat-phones-tablets"]) };
+      view();
+      expect(screen.getByText(`Items ${WINDOW}. ${REFUNDS}`)).toBeTruthy();
+    });
+  }
 });
 
 describe("Footer", () => {

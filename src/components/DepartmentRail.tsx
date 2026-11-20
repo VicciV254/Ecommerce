@@ -11,7 +11,7 @@ const EDGE_TOLERANCE = 1;
 /** Tile width: at least 9rem, else 42% of the rail on phones (a third tile peeks in), 22% from 768px, 15% from 1280px. */
 const TILE_WIDTH = "basis-[max(42%,9rem)] md:basis-[max(22%,9rem)] xl:basis-[max(15%,9rem)]";
 /** The tile widths above as image slot sizes (the 9rem floor only matters on the narrowest phones). */
-export const DEPARTMENT_TILE_SIZES = "(min-width: 1440px) 208px, (min-width: 1280px) 15vw, (min-width: 768px) 22vw, 42vw";
+export const DEPARTMENT_TILE_SIZES = "(min-width: 90em) 208px, (min-width: 80em) 15vw, (min-width: 48em) 22vw, 42vw";
 
 const railButton =
   "flex size-[44px] items-center justify-center rounded-full border border-navy-900 text-navy-900 transition-colors duration-(--motion-feedback) hover:bg-navy-900 hover:text-white";

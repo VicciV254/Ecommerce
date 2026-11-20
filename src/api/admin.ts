@@ -128,7 +128,7 @@ export type RefundRequestOption =
   | { source: "RETURN"; returnId: string; returnNumber: string; maxAmount: number };
 
 /** `GET /orders/admin/:id`: the customer view plus actor details, staff notes and permitted actions. */
-export interface StaffOrder extends Omit<CustomerOrder, "trackingHistory" | "returns" | "refunds" | "demonstrationActions"> {
+export interface StaffOrder extends Omit<CustomerOrder, "trackingHistory" | "returns" | "refunds" | "demonstrationActions" | "scheduledForDeletion"> {
   user?: StaffOrderCustomer | null;
   trackingHistory: StaffTrackingEvent[];
   returns: StaffReturn[];

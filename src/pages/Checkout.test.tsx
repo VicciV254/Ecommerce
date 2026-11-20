@@ -90,7 +90,7 @@ beforeEach(() => {
   mocks.catalog = {
     status: "ready", error: null, mode: "live", products: snapshot.products,
     productsById: new Map(snapshot.products.map((product) => [product.id, product])),
-    categories: buildCategoryTree(snapshot.categories), designers: [], discounts: [], returnPolicy: snapshot.returnPolicy, delivery: snapshot.delivery, demonstrationOrders: false, reload: vi.fn(),
+    categories: buildCategoryTree(snapshot.categories), designers: [], discounts: [], returnPolicy: snapshot.returnPolicy, delivery: snapshot.delivery, demonstrationOrders: false, sampleOrderRetentionDays: null, reload: vi.fn(),
   };
   for (const fn of [...Object.values(mocks.orders), ...Object.values(mocks.payments)]) fn.mockReset();
   mocks.orders.createQuote.mockResolvedValue({ data: fixtureQuote() });

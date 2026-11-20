@@ -22,6 +22,7 @@ import {
 } from "../store/returnRequestModel";
 import { formatDateTime } from "../utils/format";
 import { ModalDialog } from "./Modal";
+import { WrappingSelect } from "./WrappingSelect";
 
 const PROBLEM_MESSAGES: Record<ReturnFormProblem, string> = {
   items: "Choose at least one item and how many of it to return.",
@@ -31,6 +32,8 @@ const PROBLEM_MESSAGES: Record<ReturnFormProblem, string> = {
 };
 
 const fieldClass = "min-h-[44px] w-full rounded-sm border border-control bg-surface px-3 py-2 text-navy-900 aria-[invalid=true]:border-2 aria-[invalid=true]:border-error";
+/** `fieldClass` for the reason's `WrappingSelect` box, whose invalid state comes from the select inside. */
+const reasonBoxClass = "mt-1.5 min-h-[44px] w-full rounded-sm border border-control bg-surface px-3 py-2 text-navy-900 has-[select[aria-invalid=true]]:border-2 has-[select[aria-invalid=true]]:border-error";
 const labelClass = "block text-sm font-semibold text-navy-900";
 // Touch targets are sized in CSS px so the stepper still fits a 360px screen when text is enlarged.
 const stepClass = "flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-sm border border-control text-lg text-navy-900 hover:border-navy-900 aria-disabled:cursor-not-allowed aria-disabled:bg-surface-soft aria-disabled:text-muted";
@@ -188,7 +191,7 @@ export default function ReturnOrderModal({ order, ownerId, onClose, onReturned, 
               {intent.body.comment && <p>Comment: {intent.body.comment}</p>}
             </section>
           ) : blocked ? (
-            <p className="rounded-md bg-surface-soft p-3 text-sm">{returnWindowText(eligibility) ?? "This order cannot be returned right now."}</p>
+            <p className="rounded-md bg-surface-soft p-3 text-sm">{returnWindowText(eligibility, order.deliveryMethod) ?? "This order cannot be returned right now."}</p>
           ) : (
             <>
               {windowText && <p className="text-sm font-semibold text-navy-900">{windowText}</p>}
@@ -207,7 +210,7 @@ export default function ReturnOrderModal({ order, ownerId, onClose, onReturned, 
                             <p id={nameId} className="font-semibold text-navy-900">{line.productName}</p>
                             <p id={ruleId} className="text-sm text-muted">
                               {max > 0 ? `Up to ${max} of ${line.purchased} can be returned. ` : "Already in a return request. "}
-                              {returnRuleText(line.returnRule, eligibility.policy.windowDays)}
+                              {returnRuleText(line.returnRule, eligibility.policy.windowDays, order.deliveryMethod)}
                             </p>
                           </div>
                           {max > 0 && (
@@ -235,15 +238,15 @@ export default function ReturnOrderModal({ order, ownerId, onClose, onReturned, 
 
               <div>
                 <label htmlFor={`${id}-reason`} className={labelClass}>Reason for return</label>
-                <select
+                <WrappingSelect
                   ref={reasonField} id={`${id}-reason`} value={effectiveReason ?? ""}
                   aria-invalid={problem === "reason" || undefined} aria-describedby={faultOnly.length ? `${id}-reason-hint` : undefined}
                   onChange={(event) => { setReason(isReturnReason(event.target.value) ? event.target.value : null); setProblem(null); setError(""); }}
-                  className={`mt-1.5 ${fieldClass}`}
+                  className={reasonBoxClass}
                 >
                   <option value="">Choose a reason</option>
                   {choices.map((choice) => <option key={choice} value={choice}>{RETURN_REASON_LABELS[choice]}</option>)}
-                </select>
+                </WrappingSelect>
                 {faultOnly.length > 0 && (
                   <p id={`${id}-reason-hint`} className="mt-1 text-sm text-muted">
                     {names(faultOnly)} can be returned only if faulty, damaged or wrong.

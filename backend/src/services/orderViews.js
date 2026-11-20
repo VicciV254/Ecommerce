@@ -44,9 +44,16 @@ function orderView(order, { reviewOpen, now }) {
   };
 }
 
-/** Customer order view, with the store-side steps the owner may play for a sample order. */
-export function customerOrderView(order, { reviewOpen = new Set(), now = new Date() } = {}) {
-  return { ...orderView(order, { reviewOpen, now }), demonstrationActions: demonstrationActions(order, reviewOpen.has(order.id)) };
+/**
+ * Customer order view, with the store-side steps the owner may play for a sample order and whether it is a sample order
+ * the store deletes after the retention period (`scheduled`, from `sampleOrdersScheduledForDeletion`).
+ */
+export function customerOrderView(order, { reviewOpen = new Set(), now = new Date(), scheduled = new Set() } = {}) {
+  return {
+    ...orderView(order, { reviewOpen, now }),
+    demonstrationActions: demonstrationActions(order, reviewOpen.has(order.id)),
+    scheduledForDeletion: scheduled.has(order.id),
+  };
 }
 
 /** Staff order view: adds actor details, internal notes, permitted fulfilment actions and review state. */

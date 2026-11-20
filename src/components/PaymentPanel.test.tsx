@@ -479,7 +479,10 @@ describe("customer demonstration payment", () => {
   const offered = (overrides: Partial<PaymentOverview> = {}) => fixtureDemonstrationOverview(sample, overrides);
   const paidOrder = fixtureCustomerOrder({ ...sample, paymentMethod: "DEMONSTRATION", paymentStatus: "PAID", reservationStatus: "COMMITTED" });
   const payButton = () => screen.findByRole("button", { name: named("Pay with a demonstration payment") }, WAIT);
-  const sandboxDisclosure = () => screen.getByText("Pay with M-Pesa sandbox instead").closest("details")!;
+  // The summary keeps "M-Pesa" in a no-wrap span, so its text is matched whole, not node by node.
+  const sandboxSummary = () => screen.queryByText((_content, element) =>
+    element?.tagName === "SUMMARY" && element.textContent === "Pay with M-Pesa sandbox instead");
+  const sandboxDisclosure = () => sandboxSummary()!.closest("details")!;
   const NO_MONEY = "No money is taken and no phone prompt is sent.";
 
   it("offers the demonstration payment first, with the M-Pesa sandbox form closed in a disclosure below", async () => {
@@ -521,7 +524,7 @@ describe("customer demonstration payment", () => {
     expect(screen.getByRole("status").textContent).toBe("Demonstration payment recorded. No money was taken.");
     expect(screen.getByText(/^No money was taken\. Your order is waiting to be prepared\.$/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: named("Pay with a demonstration payment") })).toBeNull();
-    expect(screen.queryByText("Pay with M-Pesa sandbox instead")).toBeNull();
+    expect(sandboxSummary()).toBeNull();
     expect(document.activeElement).toBe(screen.getByRole("heading", { name: "Payment" }));
     expect(onOrderChange).toHaveBeenLastCalledWith(expect.objectContaining({ paymentMethod: "DEMONSTRATION", paymentStatus: "PAID" }));
   });
@@ -580,7 +583,7 @@ describe("customer demonstration payment", () => {
     render(<PaymentPanel orderId={order.id} />);
     await sendButton();
     expect(screen.getByRole("region", { name: "Pay with M-Pesa" })).toBeTruthy();
-    expect(screen.queryByText("Pay with M-Pesa sandbox instead")).toBeNull();
+    expect(sandboxSummary()).toBeNull();
     expect(screen.queryByRole("button", { name: named("Pay with a demonstration payment") })).toBeNull();
   });
 });

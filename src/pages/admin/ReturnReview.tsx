@@ -9,9 +9,9 @@ import { Feedback, inputClass } from "./shared";
 
 const MAX_NOTE = 1000;
 const UNREADABLE = "The change was sent, but the updated order could not be read. It has been reloaded; check it before acting again.";
-const labelClass = "mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-600";
-const approveClass = "min-h-11 rounded-sm bg-brand-primary px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-white hover:bg-brand-secondary hover:text-brand-primary aria-disabled:cursor-not-allowed aria-disabled:opacity-60";
-const rejectClass = "min-h-11 rounded-sm border border-error px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-error hover:bg-error hover:text-white aria-disabled:cursor-not-allowed aria-disabled:opacity-60";
+const labelClass = "mb-1 block text-[0.625rem] font-bold uppercase tracking-wider text-gray-600";
+const approveClass = "min-h-11 rounded-sm bg-brand-primary px-4 py-2 text-[0.6875rem] font-bold uppercase tracking-wider text-white hover:bg-brand-secondary hover:text-brand-primary aria-disabled:cursor-not-allowed aria-disabled:opacity-60";
+const rejectClass = "min-h-11 rounded-sm border border-error px-4 py-2 text-[0.6875rem] font-bold uppercase tracking-wider text-error hover:bg-error hover:text-white aria-disabled:cursor-not-allowed aria-disabled:opacity-60";
 
 const FEE_ON_FAULT: Record<DeliveryFeeRefund, string> = {
   MERCHANT_FAULT_ONLY: "Confirming a fault also refunds the delivery fee, once per order.",
@@ -65,7 +65,7 @@ function DecisionForm({ order, item, onOutcome }: { order: StaffOrder; item: Sta
         <label htmlFor={`${id}-note`} className={labelClass}>Note to the customer (required to reject)</label>
         <textarea ref={noteRef} id={`${id}-note`} rows={2} maxLength={MAX_NOTE} value={note} onChange={(event) => setNote(event.target.value)}
           aria-describedby={`${id}-hint`} className={`${inputClass} min-h-11 text-base`} />
-        <p id={`${id}-hint`} className="mt-1 text-[11px] text-gray-600">The customer sees this note with your decision.</p>
+        <p id={`${id}-hint`} className="mt-1 text-[0.6875rem] text-gray-600">The customer sees this note with your decision.</p>
       </div>
       <Feedback message={error} tone="error" />
       <p role="status" className="sr-only">{busy ? "Saving…" : ""}</p>
@@ -165,7 +165,7 @@ function ReceiptForm({ order, item, onOutcome }: { order: StaffOrder; item: Staf
       {item.lines.map((line) => (
         <fieldset key={line.id} className="rounded-md border border-light-gray p-3">
           <legend className="px-1 text-sm font-semibold text-brand-primary">{line.quantity} × {line.productName}</legend>
-          <p className="text-[11px] text-gray-600">{returnRuleText(line.returnRule, order.returnEligibility.policy.windowDays)}</p>
+          <p className="text-[0.6875rem] text-gray-600">{returnRuleText(line.returnRule, order.returnEligibility.policy.windowDays, order.deliveryMethod)}</p>
           <div className="mt-2 grid grid-cols-3 gap-2">
             {(["received", "restock", "refundable"] as const).map((field) => (
               <div key={field} className="min-w-0">

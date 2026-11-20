@@ -7,6 +7,8 @@ import { runMaintenance } from './maintenanceService.js';
 const JOBS = [
   { interval: 15_000, steps: ['payments'] },
   { interval: 60_000, steps: ['reservations', 'notifications'] },
+  // Sample orders become due a day at a time; the serverless cron runs this once a day.
+  { interval: 3_600_000, steps: ['sampleOrders'] },
 ];
 
 export function startBackgroundJobs() {

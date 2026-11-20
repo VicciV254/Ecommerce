@@ -30,7 +30,7 @@ function catalogWith(products: CatalogProduct[], status: CatalogValue["status"] 
     designers: [],
     discounts: [],
     returnPolicy: status === "ready" ? fixtureReturnPolicy : null, delivery: status === "ready" ? fixtureDelivery : null,
-    demonstrationOrders: status === "ready" ? false : null,
+    demonstrationOrders: status === "ready" ? false : null, sampleOrderRetentionDays: null,
     reload: vi.fn(),
   };
 }
@@ -130,7 +130,7 @@ describe("StorefrontSections", () => {
     expect(within(phones).getByRole("img", { name: "No department image" })).toBeTruthy();
     const tile = fashion.querySelector("img")!;
     // Rail tiles: 42% of the rail on phones, 22% from 768px, 15% from 1280px.
-    expect(tile.getAttribute("sizes")).toBe("(min-width: 1440px) 208px, (min-width: 1280px) 15vw, (min-width: 768px) 22vw, 42vw");
+    expect(tile.getAttribute("sizes")).toBe("(min-width: 90em) 208px, (min-width: 80em) 15vw, (min-width: 48em) 22vw, 42vw");
     expect(tile.getAttribute("srcset")!.split(", ").map((entry) => entry.split(" ")[1])).toEqual(["240w", "320w", "480w", "640w", "960w"]);
     expect([tile.getAttribute("loading"), tile.getAttribute("alt")]).toEqual(["lazy", ""]);
     expect(tile.getAttribute("class")).toContain("group-hover:scale-110");
@@ -223,7 +223,7 @@ describe("published composition", () => {
     const band = screen.getByRole("region", { name: "Later offer" });
     expect(within(band).getByRole("heading", { name: "Later offer" }).className).toContain("type-h3");
     expect(within(band).getByText("While stocks last.")).toBeTruthy();
-    expect(band.querySelector("picture img")?.getAttribute("sizes")).toBe("(min-width: 90rem) 459px, (min-width: 48rem) 33vw, 100vw");
+    expect(band.querySelector("picture img")?.getAttribute("sizes")).toBe("(min-width: 90em) 459px, (min-width: 48em) 33vw, 100vw");
   });
 
   it("shows 4, 6 then 8 products by breakpoint and links the rest through View all", () => {

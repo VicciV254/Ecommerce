@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { adminAPI, type PromotionalSendResult, type Subscription } from "../../api/admin";
 import { describeApiError } from "../../api/errors";
-import { Feedback, TableRegion } from "./shared";
+import { Feedback, TableRegion, WrappingSelect } from "./shared";
 import { useUnsavedChanges } from "./unsavedChanges";
 
 /** The same inline padding on every cell, so neighbouring headings and values never run together. */
@@ -69,8 +69,10 @@ export function PromotionsManager({ showToast }: { showToast: (message: string) 
     }
   };
 
+  // A filter change reloads the list; the event always uses the latest loader.
+  const reloadForFilter = useEffectEvent(() => { void loadSubscriptions(); });
   useEffect(() => {
-    loadSubscriptions();
+    reloadForFilter();
   }, [activeFilter]);
 
   const sendPromotionalEmail = async () => {
@@ -109,18 +111,18 @@ export function PromotionsManager({ showToast }: { showToast: (message: string) 
     <div className="rounded-lg bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h3 className="text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Promotions & subscriptions</h3>
+          <h3 className="text-[0.6875rem] font-bold uppercase tracking-[0.15em] text-brand-primary">Promotions & subscriptions</h3>
           <p className="mt-1 text-xs text-gray-500">Manage email subscriptions and send promotional emails to subscribers.</p>
-          <p className="mt-1 text-[11px] font-bold uppercase tracking-wider text-brand-accent">Showing {subscriptions.length} subscription(s)</p>
+          <p className="mt-1 text-[0.6875rem] font-bold uppercase tracking-wider text-brand-accent">Showing {subscriptions.length} subscription(s)</p>
         </div>
-        <button type="button" onClick={loadSubscriptions} className="min-h-[44px] min-w-[44px] rounded-sm border border-brand-primary px-[14px] py-2 text-[11px] font-bold uppercase text-brand-primary hover:bg-brand-primary hover:text-white">Refresh</button>
+        <button type="button" onClick={loadSubscriptions} className="min-h-[44px] min-w-[44px] rounded-sm border border-brand-primary px-[14px] py-2 text-[0.6875rem] font-bold uppercase text-brand-primary hover:bg-brand-primary hover:text-white">Refresh</button>
       </div>
       <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-        <select aria-label="Filter subscriptions" value={activeFilter} onChange={(e) => setActiveFilter(e.target.value)} className="rounded-sm border border-light-gray px-3 py-2 text-xs">
+        <WrappingSelect aria-label="Filter subscriptions" value={activeFilter} onChange={(e) => setActiveFilter(e.target.value)} className="rounded-sm border border-light-gray px-3 py-2 text-xs">
           <option value="">All subscriptions</option>
           <option value="true">Active only</option>
           <option value="false">Inactive only</option>
-        </select>
+        </WrappingSelect>
       </div>
     </div>
 
@@ -128,14 +130,14 @@ export function PromotionsManager({ showToast }: { showToast: (message: string) 
     {loading && <div className="rounded-lg bg-white p-6 text-sm text-gray-500 shadow-sm">Loading subscriptions...</div>}
 
     <div className="rounded-lg bg-white p-5 shadow-sm">
-      <h3 className="text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary mb-4">Send promotional email</h3>
+      <h3 className="text-[0.6875rem] font-bold uppercase tracking-[0.15em] text-brand-primary mb-4">Send promotional email</h3>
       <div className="space-y-3">
         <div>
-          <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">Subject</label>
+          <label className="block text-[0.625rem] font-bold uppercase tracking-wider text-gray-400 mb-1">Subject</label>
           <input aria-label="Subject" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Email subject line" className="w-full rounded-sm border border-light-gray px-3 py-2 text-xs" />
         </div>
         <div>
-          <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">Content (HTML supported)</label>
+          <label className="block text-[0.625rem] font-bold uppercase tracking-wider text-gray-400 mb-1">Content (HTML supported)</label>
           <div className="rounded-sm border border-light-gray">
             <div className="flex flex-wrap items-center gap-1 border-b border-light-gray bg-off-white p-2">
               <button onClick={() => insertHTML('<strong>')} className="rounded px-2 py-1 text-xs font-bold hover:bg-gray-200" title="Bold">B</button>
@@ -162,7 +164,7 @@ export function PromotionsManager({ showToast }: { showToast: (message: string) 
           </div>
         </div>
         <div className="flex gap-2">
-          <button type="button" onClick={sendPromotionalEmail} disabled={sending || subscriptions.length === 0} className="min-h-[44px] rounded-sm bg-brand-primary px-[16px] py-2 text-[11px] font-bold uppercase text-white hover:bg-brand-secondary hover:text-brand-primary disabled:opacity-50">
+          <button type="button" onClick={sendPromotionalEmail} disabled={sending || subscriptions.length === 0} className="min-h-[44px] rounded-sm bg-brand-primary px-[16px] py-2 text-[0.6875rem] font-bold uppercase text-white hover:bg-brand-secondary hover:text-brand-primary disabled:opacity-50">
             {sending ? "Sending..." : `Send to ${subscriptions.length} subscribers`}
           </button>
         </div>
@@ -172,14 +174,14 @@ export function PromotionsManager({ showToast }: { showToast: (message: string) 
 
     {!loading && (
       <div className="rounded-lg bg-white p-5 shadow-sm">
-        <h3 className="text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary mb-4">Subscriptions</h3>
+        <h3 className="text-[0.6875rem] font-bold uppercase tracking-[0.15em] text-brand-primary mb-4">Subscriptions</h3>
         {subscriptions.length === 0 ? (
           <p className="text-sm text-gray-500">No subscriptions found.</p>
         ) : (
           <TableRegion label="Subscriptions table" className="-my-[6px]">
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b border-light-gray text-left text-[10px] font-bold uppercase tracking-wider text-muted">
+                <tr className="border-b border-light-gray text-left text-[0.625rem] font-bold uppercase tracking-wider text-muted">
                   <th className={headCell}>Email</th>
                   <th className={headCell}>Status</th>
                   <th className={headCell}>Subscribed</th>

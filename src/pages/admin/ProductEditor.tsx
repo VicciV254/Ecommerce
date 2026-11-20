@@ -17,16 +17,7 @@ import { productReadiness, visibilityLabel } from "./catalogReadiness";
 import { ProductDetails } from "./ProductDetails";
 import { ProductImagesSection, buildImages, imageProblems, initialGallery, placeUpload, uploadedImageRow, type ImageRow } from "./ProductImages";
 import { PublishChecklist } from "./PublishChecklist";
-import {
-  Feedback,
-  Field,
-  TableRegion,
-  categoryOptions,
-  dangerButtonClass,
-  inputClass,
-  primaryButtonClass,
-  smallButtonClass,
-} from "./shared";
+import { Feedback, Field, TableRegion, WrappingSelect, categoryOptions, dangerButtonClass, inputClass, primaryButtonClass, smallButtonClass } from "./shared";
 import { useUnsavedChanges } from "./unsavedChanges";
 import { MAX_PRODUCT_IMAGES, useImageUploads } from "./useImageUploads";
 
@@ -41,6 +32,11 @@ const MAX_SPEC_NAME = 60;
 const MAX_SPEC_VALUE = 500;
 /** Room left above a section heading brought to the top of the editor body (the body's own padding). */
 const SECTION_TOP_GAP_PX = 20;
+/** Two fields side by side, stacked when the details column is too narrow for their labels' longest words. */
+const fieldPairClass = "grid grid-cols-1 gap-3 @min-[12rem]:grid-cols-2";
+/** A picker and its "+ New" button: side by side while the picker keeps 10rem, otherwise the button wraps below. */
+const pickerRowClass = "flex flex-wrap gap-2";
+const pickerClass = "min-w-0 flex-[1_1_10rem]";
 /** Refusals that reloading the product answers: someone else saved it, or another save raced this one. */
 const RELOAD_CODES = new Set(["PRODUCT_CHANGED", "CATALOG_CHANGED"]);
 /** The catalog API's rule and wording: a "was" price is shown only above the price. */
@@ -142,6 +138,8 @@ function ProductForm({ product, canWrite, onClose, onSaved, onDelete, onReload, 
   const [reloading, setReloading] = useState(false);
   const [creating, setCreating] = useState<"category" | "designer" | null>(null);
   const body = useRef<HTMLDivElement>(null);
+  /** Header and body together: the scroller where the header is not pinned (see the JSX). */
+  const frame = useRef<HTMLDivElement>(null);
   const variantsHeading = useRef<HTMLHeadingElement>(null);
   const visibilityHintId = useId();
   const compareAtErrorId = useId();
@@ -252,11 +250,12 @@ function ProductForm({ product, canWrite, onClose, onSaved, onDelete, onReload, 
           : Math.max(0, Number(row.initialStock) || 0),
       })),
   }, categories);
-  // Scrolls only the editor body: `scrollIntoView` would also scroll the dialog around it and hide the header with Save.
+  // Scrolls only the editor's own scroller: the body below the pinned header, or, on a phone with enlarged text where the
+  // header scrolls with the form, the whole editor. `scrollIntoView` would also scroll the dialog around it.
   const goTo = (heading: HTMLElement | null | undefined) => {
-    const scroller = body.current;
-    if (!heading || !scroller) return;
-    scroller.scrollTop += heading.getBoundingClientRect().top - scroller.getBoundingClientRect().top - SECTION_TOP_GAP_PX;
+    if (!heading) return;
+    const scroller = [body.current, frame.current].find((element) => element && getComputedStyle(element).overflowY !== "visible") ?? body.current;
+    if (scroller) scroller.scrollTop += heading.getBoundingClientRect().top - scroller.getBoundingClientRect().top - SECTION_TOP_GAP_PX;
     heading.focus({ preventScroll: true });
   };
 
@@ -329,249 +328,253 @@ function ProductForm({ product, canWrite, onClose, onSaved, onDelete, onReload, 
 
   return (
     <ModalDialog open label={product ? "Edit product" : "Add product"} onClose={onClose}>
-      <div className="relative flex h-full max-h-[calc(100dvh-2rem)] w-full max-w-6xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-light-gray px-4 py-3">
-          <div className="min-w-0">
-            <h2 className="truncate font-display text-lg text-brand-primary">{product ? product.name : "Add product"}</h2>
-            {product && <p className="text-xs font-semibold text-navy-800">{visibilityLabel(product.isActive)}</p>}
-            {product?.isDemo && <p className="text-[11px] font-semibold text-ocean-blue">Demo record: it stays a demo listing however it is edited.</p>}
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button type="button" onClick={() => void save()} disabled={saving} className={`min-h-[44px] ${primaryButtonClass}`}>
-              {saving ? "Saving…" : "Save product"}
-            </button>
-            {product && (
-              <Link to={productPreviewRoute(product.id)} className={`inline-flex min-h-[44px] items-center ${smallButtonClass}`}>Preview</Link>
-            )}
-            {onDelete && <button type="button" onClick={() => confirmLeave(onDelete)} className={dangerButtonClass}>Delete</button>}
-            <button type="button" aria-label="Close product editor" onClick={onClose} className="flex size-[44px] shrink-0 items-center justify-center rounded-full hover:bg-warm-beige">
-              <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
-            </button>
-          </div>
-        </div>
-
-        <div ref={body} className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-5">
-          <Feedback message={error} tone="error" />
-          {changedElsewhere && onReload && (
-            <button
-              type="button"
-              disabled={reloading}
-              onClick={() => confirmLeave(() => {
-                release();
-                setReloading(true);
-                onReload();
-              })}
-              className={`min-h-[44px] ${smallButtonClass}`}
-            >
-              {reloading ? "Reloading…" : "Reload product"}
-            </button>
-          )}
-
-          {/* Phones and tablets: the checklist first. From 1024px it sits beside the details column, above the specifications. */}
-          <section className="grid gap-4 lg:grid-cols-2 lg:grid-rows-[auto_1fr]">
-            <PublishChecklist
-              className="lg:col-start-2 lg:row-start-1"
-              readiness={readiness}
-              isNew={!product}
-              stockCategory={product ? { id: product.categoryId, name: categories.byId.get(product.categoryId)?.name ?? product.categoryName } : null}
-              onGoToImages={() => goTo(body.current?.querySelector<HTMLElement>('[data-editor-section="images"]'))}
-              onGoToVariants={() => goTo(variantsHeading.current)}
-              onShowCategory={onShowCategory && ((id) => confirmLeave(() => {
-                release();
-                onShowCategory(id);
-              }))}
-            />
-            <div className="min-w-0 space-y-3 lg:col-start-1 lg:row-span-2 lg:row-start-1">
-              <h3 className="text-[11px] font-bold uppercase tracking-wider text-brand-primary">Details</h3>
-              <Field label="Name">{(id) => <input id={id} value={name} onChange={(event) => setName(event.target.value)} className={inputClass} />}</Field>
-              <Field label="Description">{(id) => <textarea id={id} rows={5} value={description} onChange={(event) => setDescription(event.target.value)} className={inputClass} />}</Field>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Price (KES)">
-                  {(id) => (
-                    <input id={id} type="number" min={0.01} step={0.01} value={price} className={inputClass}
-                      onChange={(event) => { setPrice(event.target.value); setCompareAtRefused(false); }} />
-                  )}
-                </Field>
-                <Field label="Compare-at price (optional)">
-                  {(id) => (
-                    <>
-                      <input id={id} type="number" min={0.01} step={0.01} value={compareAt}
-                        onChange={(event) => { setCompareAt(event.target.value); setCompareAtRefused(false); }}
-                        aria-invalid={compareAtError ? true : undefined} aria-describedby={compareAtError ? compareAtErrorId : undefined}
-                        className={`${inputClass} aria-[invalid=true]:border-error`} />
-                      {compareAtError && <p id={compareAtErrorId} className="mt-1 text-xs font-semibold text-error [overflow-wrap:break-word]">{compareAtError}</p>}
-                    </>
-                  )}
-                </Field>
-              </div>
-              <Field label="Category">
-                {(id) => (
-                  <div className="flex gap-2">
-                    <select id={id} value={categoryId} onChange={(event) => setCategoryId(event.target.value)} className={`min-w-0 flex-1 ${inputClass}`}>
-                      <option value="">Choose a category…</option>
-                      {options.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
-                    </select>
-                    <button type="button" aria-label="Create category" onClick={() => setCreating("category")} className={smallButtonClass}>+ New</button>
-                  </div>
-                )}
-              </Field>
-              <Field label="Designer">
-                {(id) => (
-                  <div className="flex gap-2">
-                    <select id={id} value={designerId} onChange={(event) => setDesignerId(event.target.value)} className={`min-w-0 flex-1 ${inputClass}`}>
-                      <option value="">None</option>
-                      {designers.map((designer: CatalogDesigner) => (
-                        <option key={designer.id} value={designer.id}>{designer.name}{designer.isDemo ? " (demo)" : ""}</option>
-                      ))}
-                    </select>
-                    <button type="button" aria-label="Create designer" onClick={() => setCreating("designer")} className={smallButtonClass}>+ New</button>
-                  </div>
-                )}
-              </Field>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Tags (comma separated)">{(id) => <input id={id} value={tags} onChange={(event) => setTags(event.target.value)} className={inputClass} />}</Field>
-                <Field label="Collection (optional)">{(id) => <input id={id} value={collection} onChange={(event) => setCollection(event.target.value)} className={inputClass} />}</Field>
-              </div>
-              <div className="flex flex-wrap gap-5">
-                <label className="flex items-center gap-2 text-xs font-semibold text-brand-primary">
-                  <input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} aria-describedby={visibilityHintId} className="h-4 w-4 accent-brand-secondary" />
-                  Visible to shoppers
-                </label>
-                <label className="flex items-center gap-2 text-xs font-semibold text-brand-primary">
-                  <input type="checkbox" checked={isFeatured} onChange={(event) => setIsFeatured(event.target.checked)} className="h-4 w-4 accent-brand-secondary" />
-                  Featured
-                </label>
-              </div>
-              <p id={visibilityHintId} className="text-[11px] text-gray-600">
-                Off, the product is a hidden draft that only staff can see{product ? " (Preview shows it as shoppers would)" : ""}. Turn this on and save to publish it.
-              </p>
+      <div className="@container relative flex h-full max-h-[calc(100dvh-2rem)] w-full max-w-6xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
+        {/* The header with Save stays pinned above the form, except where it would take most of the screen (a phone
+            with enlarged text, under 16rem): there header and form scroll together, and Save is at the top. */}
+        <div ref={frame} data-editor-scroller className="flex min-h-0 flex-1 flex-col @max-[16rem]:overflow-y-auto @max-[16rem]:overscroll-contain">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-light-gray px-4 py-3">
+            <div className="min-w-0">
+              <h2 className="truncate font-display text-lg text-brand-primary">{product ? product.name : "Add product"}</h2>
+              {product && <p className="text-xs font-semibold text-navy-800">{visibilityLabel(product.isActive)}</p>}
+              {product?.isDemo && <p className="text-[0.6875rem] font-semibold text-ocean-blue">Demo record: it stays a demo listing however it is edited.</p>}
             </div>
-
-            <div className="min-w-0 space-y-3 lg:col-start-2 lg:row-start-2">
-              <h3 className="text-[11px] font-bold uppercase tracking-wider text-brand-primary">Specifications</h3>
-              {specs.map((spec, index) => (
-                <div key={spec.rowKey} className="grid grid-cols-[1fr_1.4fr_auto] gap-2">
-                  <input aria-label={`Specification ${index + 1} name`} maxLength={MAX_SPEC_NAME} value={spec.name} onChange={(event) => setSpecs((rows) => rows.map((row) => row.rowKey === spec.rowKey ? { ...row, name: event.target.value } : row))} placeholder="Name" className={inputClass} />
-                  <input aria-label={`Specification ${index + 1} value`} maxLength={MAX_SPEC_VALUE} value={spec.value} onChange={(event) => setSpecs((rows) => rows.map((row) => row.rowKey === spec.rowKey ? { ...row, value: event.target.value } : row))} placeholder="Value" className={inputClass} />
-                  <button type="button" aria-label={`Remove specification ${index + 1}`} onClick={() => setSpecs((rows) => rows.filter((row) => row.rowKey !== spec.rowKey))} className={dangerButtonClass}>×</button>
-                </div>
-              ))}
-              <div className="flex flex-wrap gap-2">
-                <button type="button" disabled={specs.length >= MAX_SPECS} onClick={() => setSpecs((rows) => [...rows, { rowKey: nextKey(), name: "", value: "" }])} className={smallButtonClass}>+ Specification</button>
-                {suggestedSpecs.map((key) => (
-                  <button key={key} type="button" disabled={specs.length >= MAX_SPECS} onClick={() => setSpecs((rows) => [...rows, { rowKey: nextKey(), name: key, value: "" }])} className="rounded-full border border-light-gray px-2.5 py-1 text-[11px] text-charcoal hover:border-brand-primary disabled:opacity-50">
-                    + {key}
-                  </button>
-                ))}
-              </div>
-              {!specs.length && <p className="text-[11px] text-gray-600">Only add facts you can verify for this product.</p>}
-            </div>
-          </section>
-
-          <section className="space-y-3">
-            <h3 ref={variantsHeading} tabIndex={-1} className="text-[11px] font-bold uppercase tracking-wider text-brand-primary">Variants (sellable SKUs)</h3>
-            <p className="text-[11px] text-gray-600">
-              {product
-                ? "On-hand stock for existing SKUs is managed on the Stock tab; reserved units are held for unpaid orders. Removing a row deactivates that SKU."
-                : "Leave empty to create one default SKU with zero stock. Add only the combinations you actually sell."}
-            </p>
             <div className="flex flex-wrap items-center gap-2">
-              {optionKeys.map((key) => (
-                <span key={key} className="flex items-center gap-1 rounded-full border border-light-gray bg-off-white px-3 py-1 text-[11px]">
-                  {key}
-                  <button type="button" aria-label={`Remove option ${key}`} onClick={() => removeOptionKey(key)} className="text-gray-500 hover:text-error">×</button>
-                </span>
-              ))}
-              <input aria-label="New option name" value={newOption} onChange={(event) => setNewOption(event.target.value.toLowerCase())} placeholder="Option, e.g. size" className="w-[min(100%,10rem)] min-w-0 rounded-sm border border-light-gray bg-off-white px-2 py-1.5 text-xs" />
-              <button type="button" onClick={addOptionKey} disabled={!OPTION_KEY.test(newOption.trim()) || optionKeys.includes(newOption.trim()) || optionKeys.length >= MAX_OPTION_KEYS} className={smallButtonClass}>Add option</button>
+              <button type="button" onClick={() => void save()} disabled={saving} className={`min-h-[44px] ${primaryButtonClass}`}>
+                {saving ? "Saving…" : "Save product"}
+              </button>
+              {product && (
+                <Link to={productPreviewRoute(product.id)} className={`inline-flex min-h-[44px] items-center ${smallButtonClass}`}>Preview</Link>
+              )}
+              {onDelete && <button type="button" onClick={() => confirmLeave(onDelete)} className={`min-h-[44px] ${dangerButtonClass}`}>Delete</button>}
+              <button type="button" aria-label="Close product editor" onClick={onClose} className="flex size-[44px] shrink-0 items-center justify-center rounded-full hover:bg-warm-beige">
+                <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+              </button>
             </div>
-            {variants.length > 0 && (
-              <TableRegion label="Variants" className="-my-[6px]">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-light-gray text-left text-[10px] font-bold uppercase tracking-wider text-gray-600">
-                      <th className="py-2">SKU</th>
-                      {optionKeys.map((key) => <th key={key}>{key}</th>)}
-                      <th>Price override</th>
-                      <th>Active</th>
-                      <th>{product ? "On hand" : "Initial on hand"}</th>
-                      <th><span className="sr-only">Remove</span></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {variants.map((row, index) => {
-                      const current = product?.variants.find((variant) => variant.id === row.id);
-                      return (
-                        <tr key={row.rowKey} className="border-b border-light-gray/60">
-                          <td className="py-2 pr-2">
-                            {row.id
-                              ? <code className="text-[11px]">{row.sku}</code>
-                              : <input aria-label={`SKU for new variant ${index + 1}`} value={row.sku} onChange={(event) => editVariants((rows) => rows.map((item) => item.rowKey === row.rowKey ? { ...item, sku: event.target.value } : item))} placeholder="Auto" className="w-28 rounded-sm border border-light-gray px-2 py-1" />}
-                          </td>
-                          {optionKeys.map((key) => (
-                            <td key={key} className="pr-2">
-                              <input
-                                aria-label={`${key} for variant ${index + 1}`}
-                                value={row.values[key] ?? ""}
-                                onChange={(event) => editVariants((rows) => rows.map((item) => item.rowKey === row.rowKey ? { ...item, values: { ...item.values, [key]: event.target.value } } : item))}
-                                className="w-24 rounded-sm border border-light-gray px-2 py-1"
-                              />
-                            </td>
-                          ))}
-                          <td className="pr-2">
-                            <input aria-label={`Price override for variant ${index + 1}`} type="number" min={0.01} step={0.01} value={row.priceOverride} placeholder="Base price" onChange={(event) => editVariants((rows) => rows.map((item) => item.rowKey === row.rowKey ? { ...item, priceOverride: event.target.value } : item))} className="w-28 rounded-sm border border-light-gray px-2 py-1" />
-                          </td>
-                          <td>
-                            <input aria-label={`Variant ${index + 1} active`} type="checkbox" checked={row.isActive} onChange={(event) => editVariants((rows) => rows.map((item) => item.rowKey === row.rowKey ? { ...item, isActive: event.target.checked } : item))} className="h-4 w-4 accent-brand-secondary" />
-                          </td>
-                          <td className="pr-2">
-                            {row.id ? (
-                              current ? (
-                                <span className="whitespace-nowrap text-gray-600">
-                                  <span className="font-semibold text-charcoal">{current.onHand}</span>
-                                  <span className="block text-[10px]">{current.reserved} reserved · {current.stock} available</span>
-                                </span>
-                              ) : <span className="text-gray-600">—</span>
-                            ) : <input aria-label={`Initial on-hand stock for new variant ${index + 1}`} type="number" min={0} value={row.initialStock} placeholder="0" onChange={(event) => editVariants((rows) => rows.map((item) => item.rowKey === row.rowKey ? { ...item, initialStock: event.target.value } : item))} className="w-20 rounded-sm border border-light-gray px-2 py-1" />}
-                          </td>
-                          <td>
-                            <button type="button" aria-label={`Remove variant ${index + 1}`} onClick={() => editVariants((rows) => rows.filter((item) => item.rowKey !== row.rowKey))} className={dangerButtonClass}>×</button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </TableRegion>
-            )}
-            <button
-              type="button"
-              disabled={variants.length >= MAX_VARIANTS}
-              onClick={() => editVariants((rows) => [...rows, { rowKey: nextKey(), sku: "", values: {}, priceOverride: "", initialOverride: "", isActive: true, initialStock: "" }])}
-              className={smallButtonClass}
-            >
-              + Variant
-            </button>
-          </section>
+          </div>
 
-          <ProductImagesSection
-            rows={images}
-            mainImage={mainImage}
-            canWrite={canWrite}
-            locked={saving}
-            variants={product?.variants ?? []}
-            variantHint={!product
-              ? "Images can be linked to variants after the product is saved."
-              : variants.some((row) => !row.id) ? "Images can be linked to new variants after the product is saved." : null}
-            uploads={uploads}
-            onEdit={editImages}
-            onMainChange={(index) => {
-              setMainImage(index);
-              setImagesDirty(true);
-            }}
-            onMove={moveImage}
-            onRemove={removeImage}
-          />
+          <div ref={body} data-editor-scroller className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-5 @max-[16rem]:flex-none @max-[16rem]:overflow-visible">
+            <Feedback message={error} tone="error" />
+            {changedElsewhere && onReload && (
+              <button
+                type="button"
+                disabled={reloading}
+                onClick={() => confirmLeave(() => {
+                  release();
+                  setReloading(true);
+                  onReload();
+                })}
+                className={`min-h-[44px] ${smallButtonClass}`}
+              >
+                {reloading ? "Reloading…" : "Reload product"}
+              </button>
+            )}
+
+            {/* Phones and tablets: the checklist first. From 1024px it sits beside the details column, above the specifications. */}
+            <section className="grid gap-4 lg:grid-cols-2 lg:grid-rows-[auto_1fr]">
+              <PublishChecklist
+                className="lg:col-start-2 lg:row-start-1"
+                readiness={readiness}
+                isNew={!product}
+                stockCategory={product ? { id: product.categoryId, name: categories.byId.get(product.categoryId)?.name ?? product.categoryName } : null}
+                onGoToImages={() => goTo(body.current?.querySelector<HTMLElement>('[data-editor-section="images"]'))}
+                onGoToVariants={() => goTo(variantsHeading.current)}
+                onShowCategory={onShowCategory && ((id) => confirmLeave(() => {
+                  release();
+                  onShowCategory(id);
+                }))}
+              />
+              <div className="min-w-0 space-y-3 @container lg:col-start-1 lg:row-span-2 lg:row-start-1">
+                <h3 className="text-[0.6875rem] font-bold uppercase tracking-wider text-brand-primary">Details</h3>
+                <Field label="Name">{(id) => <input id={id} value={name} onChange={(event) => setName(event.target.value)} className={inputClass} />}</Field>
+                <Field label="Description">{(id) => <textarea id={id} rows={5} value={description} onChange={(event) => setDescription(event.target.value)} className={inputClass} />}</Field>
+                <div className={fieldPairClass}>
+                  <Field label="Price (KES)">
+                    {(id) => (
+                      <input id={id} type="number" min={0.01} step={0.01} value={price} className={inputClass}
+                        onChange={(event) => { setPrice(event.target.value); setCompareAtRefused(false); }} />
+                    )}
+                  </Field>
+                  <Field label="Compare-at price (optional)">
+                    {(id) => (
+                      <>
+                        <input id={id} type="number" min={0.01} step={0.01} value={compareAt}
+                          onChange={(event) => { setCompareAt(event.target.value); setCompareAtRefused(false); }}
+                          aria-invalid={compareAtError ? true : undefined} aria-describedby={compareAtError ? compareAtErrorId : undefined}
+                          className={`${inputClass} aria-[invalid=true]:border-error`} />
+                        {compareAtError && <p id={compareAtErrorId} className="mt-1 text-xs font-semibold text-error [overflow-wrap:break-word]">{compareAtError}</p>}
+                      </>
+                    )}
+                  </Field>
+                </div>
+                <Field label="Category">
+                  {(id) => (
+                    <div className={pickerRowClass}>
+                      <WrappingSelect id={id} value={categoryId} onChange={(event) => setCategoryId(event.target.value)} className={`${pickerClass} ${inputClass}`}>
+                        <option value="">Choose a category…</option>
+                        {options.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+                      </WrappingSelect>
+                      <button type="button" aria-label="Create category" onClick={() => setCreating("category")} className={smallButtonClass}>+ New</button>
+                    </div>
+                  )}
+                </Field>
+                <Field label="Designer">
+                  {(id) => (
+                    <div className={pickerRowClass}>
+                      <WrappingSelect id={id} value={designerId} onChange={(event) => setDesignerId(event.target.value)} className={`${pickerClass} ${inputClass}`}>
+                        <option value="">None</option>
+                        {designers.map((designer: CatalogDesigner) => (
+                          <option key={designer.id} value={designer.id}>{designer.name}{designer.isDemo ? " (demo)" : ""}</option>
+                        ))}
+                      </WrappingSelect>
+                      <button type="button" aria-label="Create designer" onClick={() => setCreating("designer")} className={smallButtonClass}>+ New</button>
+                    </div>
+                  )}
+                </Field>
+                <div className={fieldPairClass}>
+                  <Field label="Tags (comma separated)">{(id) => <input id={id} value={tags} onChange={(event) => setTags(event.target.value)} className={inputClass} />}</Field>
+                  <Field label="Collection (optional)">{(id) => <input id={id} value={collection} onChange={(event) => setCollection(event.target.value)} className={inputClass} />}</Field>
+                </div>
+                <div className="flex flex-wrap gap-5">
+                  <label className="flex items-center gap-2 text-xs font-semibold text-brand-primary">
+                    <input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} aria-describedby={visibilityHintId} className="h-4 w-4 accent-brand-secondary" />
+                    Visible to shoppers
+                  </label>
+                  <label className="flex items-center gap-2 text-xs font-semibold text-brand-primary">
+                    <input type="checkbox" checked={isFeatured} onChange={(event) => setIsFeatured(event.target.checked)} className="h-4 w-4 accent-brand-secondary" />
+                    Featured
+                  </label>
+                </div>
+                <p id={visibilityHintId} className="text-[0.6875rem] text-gray-600">
+                  Off, the product is a hidden draft that only staff can see{product ? " (Preview shows it as shoppers would)" : ""}. Turn this on and save to publish it.
+                </p>
+              </div>
+
+              <div className="min-w-0 space-y-3 lg:col-start-2 lg:row-start-2">
+                <h3 className="text-[0.6875rem] font-bold uppercase tracking-wider text-brand-primary">Specifications</h3>
+                {specs.map((spec, index) => (
+                  <div key={spec.rowKey} className="grid grid-cols-[1fr_1.4fr_auto] gap-2">
+                    <input aria-label={`Specification ${index + 1} name`} maxLength={MAX_SPEC_NAME} value={spec.name} onChange={(event) => setSpecs((rows) => rows.map((row) => row.rowKey === spec.rowKey ? { ...row, name: event.target.value } : row))} placeholder="Name" className={inputClass} />
+                    <input aria-label={`Specification ${index + 1} value`} maxLength={MAX_SPEC_VALUE} value={spec.value} onChange={(event) => setSpecs((rows) => rows.map((row) => row.rowKey === spec.rowKey ? { ...row, value: event.target.value } : row))} placeholder="Value" className={inputClass} />
+                    <button type="button" aria-label={`Remove specification ${index + 1}`} onClick={() => setSpecs((rows) => rows.filter((row) => row.rowKey !== spec.rowKey))} className={dangerButtonClass}>×</button>
+                  </div>
+                ))}
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" disabled={specs.length >= MAX_SPECS} onClick={() => setSpecs((rows) => [...rows, { rowKey: nextKey(), name: "", value: "" }])} className={smallButtonClass}>+ Specification</button>
+                  {suggestedSpecs.map((key) => (
+                    <button key={key} type="button" disabled={specs.length >= MAX_SPECS} onClick={() => setSpecs((rows) => [...rows, { rowKey: nextKey(), name: key, value: "" }])} className="rounded-full border border-light-gray px-2.5 py-1 text-[0.6875rem] text-charcoal hover:border-brand-primary disabled:opacity-50">
+                      + {key}
+                    </button>
+                  ))}
+                </div>
+                {!specs.length && <p className="text-[0.6875rem] text-gray-600">Only add facts you can verify for this product.</p>}
+              </div>
+            </section>
+
+            <section className="space-y-3">
+              <h3 ref={variantsHeading} tabIndex={-1} className="text-[0.6875rem] font-bold uppercase tracking-wider text-brand-primary">Variants (sellable SKUs)</h3>
+              <p className="text-[0.6875rem] text-gray-600">
+                {product
+                  ? "On-hand stock for existing SKUs is managed on the Stock tab; reserved units are held for unpaid orders. Removing a row deactivates that SKU."
+                  : "Leave empty to create one default SKU with zero stock. Add only the combinations you actually sell."}
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                {optionKeys.map((key) => (
+                  <span key={key} className="flex items-center gap-1 rounded-full border border-light-gray bg-off-white px-3 py-1 text-[0.6875rem]">
+                    {key}
+                    <button type="button" aria-label={`Remove option ${key}`} onClick={() => removeOptionKey(key)} className="text-gray-500 hover:text-error">×</button>
+                  </span>
+                ))}
+                <input aria-label="New option name" value={newOption} onChange={(event) => setNewOption(event.target.value.toLowerCase())} placeholder="Option, e.g. size" className="w-[min(100%,10rem)] min-w-0 rounded-sm border border-light-gray bg-off-white px-2 py-1.5 text-xs" />
+                <button type="button" onClick={addOptionKey} disabled={!OPTION_KEY.test(newOption.trim()) || optionKeys.includes(newOption.trim()) || optionKeys.length >= MAX_OPTION_KEYS} className={smallButtonClass}>Add option</button>
+              </div>
+              {variants.length > 0 && (
+                <TableRegion label="Variants" className="-my-[6px]">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-light-gray text-left text-[0.625rem] font-bold uppercase tracking-wider text-gray-600">
+                        <th className="py-2">SKU</th>
+                        {optionKeys.map((key) => <th key={key}>{key}</th>)}
+                        <th>Price override</th>
+                        <th>Active</th>
+                        <th>{product ? "On hand" : "Initial on hand"}</th>
+                        <th><span className="sr-only">Remove</span></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {variants.map((row, index) => {
+                        const current = product?.variants.find((variant) => variant.id === row.id);
+                        return (
+                          <tr key={row.rowKey} className="border-b border-light-gray/60">
+                            <td className="py-2 pr-2">
+                              {row.id
+                                ? <code className="text-[0.6875rem]">{row.sku}</code>
+                                : <input aria-label={`SKU for new variant ${index + 1}`} value={row.sku} onChange={(event) => editVariants((rows) => rows.map((item) => item.rowKey === row.rowKey ? { ...item, sku: event.target.value } : item))} placeholder="Auto" className="w-28 rounded-sm border border-light-gray px-2 py-1" />}
+                            </td>
+                            {optionKeys.map((key) => (
+                              <td key={key} className="pr-2">
+                                <input
+                                  aria-label={`${key} for variant ${index + 1}`}
+                                  value={row.values[key] ?? ""}
+                                  onChange={(event) => editVariants((rows) => rows.map((item) => item.rowKey === row.rowKey ? { ...item, values: { ...item.values, [key]: event.target.value } } : item))}
+                                  className="w-24 rounded-sm border border-light-gray px-2 py-1"
+                                />
+                              </td>
+                            ))}
+                            <td className="pr-2">
+                              <input aria-label={`Price override for variant ${index + 1}`} type="number" min={0.01} step={0.01} value={row.priceOverride} placeholder="Base price" onChange={(event) => editVariants((rows) => rows.map((item) => item.rowKey === row.rowKey ? { ...item, priceOverride: event.target.value } : item))} className="w-28 rounded-sm border border-light-gray px-2 py-1" />
+                            </td>
+                            <td>
+                              <input aria-label={`Variant ${index + 1} active`} type="checkbox" checked={row.isActive} onChange={(event) => editVariants((rows) => rows.map((item) => item.rowKey === row.rowKey ? { ...item, isActive: event.target.checked } : item))} className="h-4 w-4 accent-brand-secondary" />
+                            </td>
+                            <td className="pr-2">
+                              {row.id ? (
+                                current ? (
+                                  <span className="whitespace-nowrap text-gray-600">
+                                    <span className="font-semibold text-charcoal">{current.onHand}</span>
+                                    <span className="block text-[0.625rem]">{current.reserved} reserved · {current.stock} available</span>
+                                  </span>
+                                ) : <span className="text-gray-600">—</span>
+                              ) : <input aria-label={`Initial on-hand stock for new variant ${index + 1}`} type="number" min={0} value={row.initialStock} placeholder="0" onChange={(event) => editVariants((rows) => rows.map((item) => item.rowKey === row.rowKey ? { ...item, initialStock: event.target.value } : item))} className="w-20 rounded-sm border border-light-gray px-2 py-1" />}
+                            </td>
+                            <td>
+                              <button type="button" aria-label={`Remove variant ${index + 1}`} onClick={() => editVariants((rows) => rows.filter((item) => item.rowKey !== row.rowKey))} className={dangerButtonClass}>×</button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </TableRegion>
+              )}
+              <button
+                type="button"
+                disabled={variants.length >= MAX_VARIANTS}
+                onClick={() => editVariants((rows) => [...rows, { rowKey: nextKey(), sku: "", values: {}, priceOverride: "", initialOverride: "", isActive: true, initialStock: "" }])}
+                className={smallButtonClass}
+              >
+                + Variant
+              </button>
+            </section>
+
+            <ProductImagesSection
+              rows={images}
+              mainImage={mainImage}
+              canWrite={canWrite}
+              locked={saving}
+              variants={product?.variants ?? []}
+              variantHint={!product
+                ? "Images can be linked to variants after the product is saved."
+                : variants.some((row) => !row.id) ? "Images can be linked to new variants after the product is saved." : null}
+              uploads={uploads}
+              onEdit={editImages}
+              onMainChange={(index) => {
+                setMainImage(index);
+                setImagesDirty(true);
+              }}
+              onMove={moveImage}
+              onRemove={removeImage}
+            />
+          </div>
         </div>
       </div>
 

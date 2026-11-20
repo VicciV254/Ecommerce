@@ -71,11 +71,11 @@ export function ProductCard({ product, imageSizes, previewRoute }: { product: Ca
           <ProductImage product={product} sizes={imageSizes} className="transition-transform duration-700 group-hover:scale-110" />
           {product.isDemo && <DemoBadge className="absolute left-3 top-3 shadow-sm" />}
           {price && price.discountPercent > 0 ? (
-            <span className="absolute right-3 top-3 rounded-sm bg-coral px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-sm">
+            <span className="absolute right-3 top-3 rounded-sm bg-coral px-2 py-0.5 text-[0.625rem] font-bold uppercase tracking-wider text-white shadow-sm">
               -{price.discountPercent}%
             </span>
           ) : price?.comparePrice != null ? (
-            <span className="absolute right-3 top-3 rounded-sm bg-brand-secondary px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-brand-primary shadow-sm">
+            <span className="absolute right-3 top-3 rounded-sm bg-brand-secondary px-2 py-0.5 text-[0.625rem] font-bold uppercase tracking-wider text-brand-primary shadow-sm">
               Sale
             </span>
           ) : null}
@@ -99,7 +99,7 @@ export function ProductCard({ product, imageSizes, previewRoute }: { product: Ca
       )}
 
       <div className="flex flex-1 flex-col p-4">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-brand-accent">{product.categoryName}</p>
+        <p className="text-[0.625rem] font-semibold uppercase tracking-[0.12em] text-brand-accent">{product.categoryName}</p>
         <Link to={productRoute}>
           <h3 className="mt-1 line-clamp-2 font-body text-sm font-medium leading-snug text-brand-primary transition-colors hover:text-brand-secondary">
             {product.name}
@@ -108,7 +108,7 @@ export function ProductCard({ product, imageSizes, previewRoute }: { product: Ca
         {product.reviewsCount > 0 && (
           <p className="mt-1.5 flex items-center gap-1.5">
             <Stars rating={product.rating} size={12} />
-            <span className="text-[10px] text-gray-500">
+            <span className="text-[0.625rem] text-gray-500">
               {product.rating.toFixed(1)} ({product.reviewsCount} {product.reviewsCount === 1 ? "review" : "reviews"})
             </span>
           </p>

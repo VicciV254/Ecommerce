@@ -33,7 +33,7 @@ beforeEach(() => {
   const products = [linenShirt, poloShirt];
   mocks.catalog = {
     status: "ready", error: null, mode: "live", products, productsById: new Map(products.map((product) => [product.id, product])),
-    categories: buildCategoryTree(fixtureCategories), designers: [], discounts: [], returnPolicy: fixtureReturnPolicy, delivery: fixtureDelivery, demonstrationOrders: false, reload: vi.fn(),
+    categories: buildCategoryTree(fixtureCategories), designers: [], discounts: [], returnPolicy: fixtureReturnPolicy, delivery: fixtureDelivery, demonstrationOrders: false, sampleOrderRetentionDays: null, reload: vi.fn(),
   };
 });
 

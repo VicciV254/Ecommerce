@@ -272,3 +272,70 @@ test('unknown types and incomplete contexts fail with stable error codes', () =>
     assert.throws(() => renderNotification(type, context), { code: 'INVALID_NOTIFICATION_CONTEXT' }, type);
   }
 });
+
+test("sample orders' emails word demonstration refunds and returns as the order pages do", () => {
+  const DEMONSTRATION_REFUND = { ...REQUESTED_REFUND, method: 'DEMONSTRATION' };
+  const sample = (overrides, paymentMethod = 'DEMONSTRATION') => withOrder({ isDemo: true, paymentMethod }, overrides);
+  const NO_MONEY = 'Refunds of demonstration payments move no money.';
+
+  const cancelled = renderNotification('ORDER_CANCELLED', sample({ refund: DEMONSTRATION_REFUND }));
+  assert.match(cancelled.text, /A refund of KES 1,244 has been requested\. Refunds of demonstration payments move no money\./);
+  assert.match(cancelled.text, /Refund status: Requested - not recorded yet/);
+  assert.doesNotMatch(everything(cancelled), /M-Pesa|email you again|not sent yet/);
+
+  const approved = renderNotification('RETURN_APPROVED', sample({ returnRequest: RETURN_REQUEST }));
+  assert.match(approved.text, /your return request RMA-0001 for order AC-1001 has been approved in the demonstration\./);
+  assert.match(approved.text, /Nothing needs to be sent back\./);
+  assert.doesNotMatch(everything(approved), /staff|contact you|inspected|email you/i);
+
+  const received = renderNotification('RETURN_RECEIVED', sample({ returnRequest: RECEIVED_RETURN, refund: { ...DEMONSTRATION_REFUND, source: 'RETURN' } }));
+  assert.equal(received.subject, 'Return RMA-0001 received - order AC-1001');
+  assert.match(received.text, /the items returned under RMA-0001 for order AC-1001 were marked as received in the demonstration\./);
+  assert.ok(received.text.includes(NO_MONEY));
+  assert.doesNotMatch(everything(received), /M-Pesa|inspected|staff/i);
+  const nothingDue = renderNotification('RETURN_RECEIVED', sample({ returnRequest: RECEIVED_RETURN }));
+  assert.match(nothingDue.text, /marked as received in the demonstration\.[\s\S]*No refund is due for this return\./);
+
+  // A sample order paid through the M-Pesa sandbox: its return is the demonstration's, its refund M-Pesa's.
+  const sandbox = renderNotification('RETURN_RECEIVED', sample({
+    returnRequest: RECEIVED_RETURN, refund: { ...REQUESTED_REFUND, source: 'RETURN', method: 'MPESA_MANUAL' },
+  }, 'MPESA'));
+  assert.match(sandbox.text, /marked as received in the demonstration/);
+  assert.match(sandbox.text, /It will be sent to you via M-Pesa, and we will email you again once it is sent\./);
+  assert.ok(!sandbox.text.includes(NO_MONEY));
+
+  // Live orders keep their wording.
+  assert.match(renderNotification('RETURN_APPROVED', contextFor('RETURN_APPROVED')).text, /Our staff will contact you to arrange the return\./);
+  for (const rendered of [cancelled, approved, received, nothingDue]) assert.doesNotMatch(everything(rendered), MONEY_SENT_CLAIM);
+});
+
+test("sample orders' fulfilment emails say what was marked in the demonstration, never that anything was sent or handed over", () => {
+  const sample = (changes) => withOrder({ isDemo: true, paymentMethod: 'DEMONSTRATION', ...changes });
+
+  const dispatched = renderNotification('ORDER_DISPATCHED', sample({ status: 'SHIPPED' }));
+  assert.equal(dispatched.subject, 'Order AC-1001 marked as dispatched');
+  assert.match(dispatched.text, /order AC-1001 was marked as dispatched in the demonstration\./);
+  assert.match(dispatched.text, /Sample products are not sent\. Mark it as delivered from your order's demonstration controls\./);
+  assert.doesNotMatch(everything(dispatched), /on its way|has been dispatched|email you again/i);
+
+  const delivered = renderNotification('ORDER_DELIVERED', sample({ status: 'DELIVERED' }));
+  assert.equal(delivered.subject, 'Order AC-1001 marked as delivered');
+  assert.match(delivered.text, /order AC-1001 was marked as delivered in the demonstration\./);
+  assert.doesNotMatch(everything(delivered), /we have confirmed|thank you for shopping/i);
+
+  const ready = renderNotification('ORDER_READY_FOR_PICKUP', sample({ deliveryMethod: 'STORE_PICKUP', status: 'READY_FOR_PICKUP' }));
+  assert.equal(ready.subject, 'Order AC-1001 marked as ready for pickup');
+  assert.match(ready.text, /order AC-1001 was marked as ready for pickup in the demonstration\./);
+  assert.match(ready.text, /Nothing is handed over\. Mark it as collected from your order's demonstration controls\./);
+  assert.doesNotMatch(everything(ready), /quote order number|our staff/i);
+
+  const collected = renderNotification('ORDER_PICKED_UP', sample({ deliveryMethod: 'STORE_PICKUP', status: 'PICKED_UP' }));
+  assert.equal(collected.subject, 'Order AC-1001 marked as collected');
+  assert.match(collected.text, /order AC-1001 was marked as collected in the demonstration\./);
+  assert.doesNotMatch(everything(collected), /we have confirmed|thank you for shopping/i);
+
+  // Live orders keep their wording.
+  assert.match(renderNotification('ORDER_DISPATCHED', contextFor('ORDER_DISPATCHED')).text, /has been dispatched and is on its way to you\./);
+  assert.match(renderNotification('ORDER_READY_FOR_PICKUP', contextFor('ORDER_READY_FOR_PICKUP')).text, /Our staff will confirm the handover with you\./);
+  assert.match(renderNotification('ORDER_PICKED_UP', contextFor('ORDER_PICKED_UP')).text, /we have confirmed that order AC-1001 has been collected/);
+});

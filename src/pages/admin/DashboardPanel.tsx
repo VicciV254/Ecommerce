@@ -4,6 +4,7 @@ import { Link, navigate, useRoute } from "../../router";
 import { customerName, orderStatusLabel } from "../../store/orderCopy";
 import { formatKES } from "../../utils/format";
 import { nairobiDate } from "../../utils/nairobiDate";
+import { useOptionalAdminCatalog } from "./AdminCatalogContext";
 import { adminModuleRoute, ordersRoute, parsePeriodParam, periodRoute, type ReportPeriod } from "./adminRoutes";
 import { FIGURES, needsActionRows, parseDashboard, type FigureKey } from "./overviewModel";
 import { FigureCard, PeriodChoice, RangeLine, usePeriodReport, type ReportPhase } from "./PeriodControls";
@@ -90,12 +91,20 @@ export function DashboardPanel({ activeDiscounts }: { activeDiscounts: number | 
   const report = usePeriodReport(period, loadDashboard, "The figures could not be loaded.");
   const { data, phase } = report;
   const rows = data ? needsActionRows(data.current) : [];
+  // Sample orders never count here; while the store takes them (a demonstration store), say so and where they are.
+  const takesSampleOrders = useOptionalAdminCatalog()?.data?.snapshot.demonstrationOrders === true;
 
   return (
     <div className="@container space-y-6">
       <div className={`${panelClass} space-y-4`}>
         <PeriodChoice module="dashboard" current={period} />
         <RangeLine report={report} what="The figures" />
+        {takesSampleOrders && (
+          <p className="text-sm text-muted">
+            Sample orders are left out of these figures. You'll find them in{" "}
+            <Link to={adminModuleRoute("orders")} className="font-semibold text-link underline underline-offset-4 hover:text-link-hover">Orders</Link>.
+          </p>
+        )}
       </div>
 
       <section aria-label="Figures for this period">

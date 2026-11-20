@@ -18,7 +18,7 @@ import {
 import { AttentionPanel } from "./AttentionPanel";
 import { OrderQueue, RefundsQueue, ReturnsQueue, type OpenTarget } from "./OrderWorklists";
 import { OrderWorkspace } from "./OrderWorkspace";
-import { Field } from "./shared";
+import { Field, WrappingSelect } from "./shared";
 
 const ORDER_NOT_FOUND = "That order wasn't found.";
 type Queue = { title: string; filters: StaffOrderFilters; empty: string };
@@ -169,7 +169,7 @@ export function OrdersManager({ module = "orders", canWrite, showToast }: {
         }} />
 
         <section aria-labelledby={headingId} className="rounded-lg bg-white p-4 shadow-sm sm:p-5">
-          <h3 id={headingId} ref={heading} tabIndex={-1} className="font-body text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">
+          <h3 id={headingId} ref={heading} tabIndex={-1} className="font-body text-[0.6875rem] font-bold uppercase tracking-[0.15em] text-brand-primary">
             {module === "orders" ? "Orders" : module === "returns" ? "Returns" : "Refunds"}
           </h3>
           <p className="mt-1 text-xs text-gray-600">
@@ -182,7 +182,7 @@ export function OrdersManager({ module = "orders", canWrite, showToast }: {
               <nav aria-label="Order worklists" className="mt-4 flex flex-wrap gap-1 border-b border-light-gray">
                 {ORDER_VIEWS.map((item) => (
                   <Link key={item.id} to={ordersRoute("orders", { view: item.id, filters })} replace aria-current={view === item.id ? "page" : undefined}
-                    className={`inline-flex min-h-11 items-center whitespace-nowrap px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] ${
+                    className={`inline-flex min-h-11 items-center whitespace-nowrap px-3 py-2 text-[0.6875rem] font-bold uppercase tracking-[0.12em] ${
                       view === item.id ? "border-b-2 border-brand-primary text-brand-primary" : "text-gray-600 hover:text-charcoal"
                     }`}>
                     {item.label}
@@ -192,10 +192,10 @@ export function OrdersManager({ module = "orders", canWrite, showToast }: {
               <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-3">
                 <Field label="Delivery">
                   {(id) => (
-                    <select id={id} value={filters.delivery ?? ""} onChange={(event) => changeFilters({ delivery: isDeliveryMethod(event.target.value) ? event.target.value : null })} className={selectClass}>
+                    <WrappingSelect id={id} value={filters.delivery ?? ""} onChange={(event) => changeFilters({ delivery: isDeliveryMethod(event.target.value) ? event.target.value : null })} className={selectClass}>
                       <option value="">All delivery methods</option>
                       {DELIVERY_METHODS.map((method) => <option key={method} value={method}>{DELIVERY_LABELS[method]}</option>)}
-                    </select>
+                    </WrappingSelect>
                   )}
                 </Field>
                 <Field label="Ordered from">
@@ -214,18 +214,18 @@ export function OrdersManager({ module = "orders", canWrite, showToast }: {
                   <>
                     <Field label="Order status">
                       {(id) => (
-                        <select id={id} value={filters.status ?? ""} onChange={(event) => changeFilters({ status: isOrderStatus(event.target.value) ? event.target.value : null })} className={selectClass}>
+                        <WrappingSelect id={id} value={filters.status ?? ""} onChange={(event) => changeFilters({ status: isOrderStatus(event.target.value) ? event.target.value : null })} className={selectClass}>
                           <option value="">All statuses</option>
                           {ORDER_STATUS_OPTIONS.map((value) => <option key={value} value={value}>{ORDER_STATUS_LABELS[value]}</option>)}
-                        </select>
+                        </WrappingSelect>
                       )}
                     </Field>
                     <Field label="Payment">
                       {(id) => (
-                        <select id={id} value={filters.payment ?? ""} onChange={(event) => changeFilters({ payment: isPaymentStatus(event.target.value) ? event.target.value : null })} className={selectClass}>
+                        <WrappingSelect id={id} value={filters.payment ?? ""} onChange={(event) => changeFilters({ payment: isPaymentStatus(event.target.value) ? event.target.value : null })} className={selectClass}>
                           <option value="">All payments</option>
                           {PAYMENT_STATUS_OPTIONS.map((value) => <option key={value} value={value}>{PAYMENT_STATUS_LABELS[value]}</option>)}
-                        </select>
+                        </WrappingSelect>
                       )}
                     </Field>
                   </>

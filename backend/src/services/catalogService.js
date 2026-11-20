@@ -1,6 +1,8 @@
 import prisma from '../config/database.js';
 import { storefrontSchema, STOREFRONT_KEY } from '../utils/catalogValidation.js';
-import { checkoutPolicy, demoOrdersEnabled, demonstrationStore, offeredDelivery } from '../config/checkoutPolicy.js';
+import {
+  checkoutPolicy, demoOrdersEnabled, demonstrationStore, offeredDelivery, publicSampleOrderRetentionDays,
+} from '../config/checkoutPolicy.js';
 import { effectiveReturnRule, policySnapshot, returnPolicy } from '../config/returnPolicy.js';
 import { unitPrice } from './pricingService.js';
 
@@ -181,6 +183,8 @@ export async function catalogSnapshot(db, admin = false) {
     version: 2, mode: admin ? 'admin' : demoCatalogEnabled() ? 'demo' : 'live',
     // Whether sample orders can be placed and paid with a demonstration payment; public wording follows it.
     demonstrationOrders: demoOrdersEnabled(),
+    // Days after which visitors' sample orders are deleted; null where none are (public wording then says nothing).
+    sampleOrderRetentionDays: publicSampleOrderRetentionDays(),
     products, categories: categoryDtos(context, products, admin),
     designers: designers.map(designerDto), discounts: discounts.map(discountDto),
     returnPolicy: (({ hash, ...terms }) => terms)(policySnapshot(returnPolicy())),

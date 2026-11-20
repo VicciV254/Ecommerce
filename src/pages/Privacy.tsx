@@ -22,8 +22,12 @@ const ODPC_COMPLAINTS = "https://cie.odpc.go.ke/";
 export default function Privacy() {
   const { operator } = STORE_FACTS;
   // Where sample orders take demonstration payments the notice says so; otherwise (or until the catalog loads) today's.
-  const { status, demonstrationOrders } = useCatalog();
+  const { status, demonstrationOrders, sampleOrderRetentionDays } = useCatalog();
   const demonstration = demonstrationOrders === true;
+  // Sample-order deletion is stated only where the catalog states its period.
+  const retention = demonstration && sampleOrderRetentionDays !== null
+    ? `${sampleOrderRetentionDays} ${sampleOrderRetentionDays === 1 ? "day" : "days"} after they're placed`
+    : null;
   const contact = (
     <>
       <EmailLink className={inlineLinkClass} /> or <PhoneLink className={inlineLinkClass} /> ({STORE_FACTS.hours})
@@ -60,9 +64,18 @@ export default function Privacy() {
               order then keeps what was ordered, prices, the delivery address and method and its progress, with M-Pesa
               payment details (the phone number paid from, the amount, the receipt number and the results Safaricom sends)
               and any return requests with their reasons and comments.{" "}
-              {demonstration
-                ? "Orders for sample products are kept like any order. A demonstration payment records the method, amount and time, but no mobile-money or provider details."
-                : "The sample products can't be ordered on this site, so checkout saves none of these here."}
+              {!demonstration && "The sample products can't be ordered on this site, so checkout saves none of these here."}
+              {demonstration && (
+                <>
+                  {retention ? (
+                    <>
+                      Orders for sample products record the same details as any order, and are scheduled for deletion{" "}
+                      {retention} unless an M-Pesa sandbox payment was tried for them.
+                    </>
+                  ) : "Orders for sample products are kept like any order."}{" "}
+                  A demonstration payment records the method, amount and time, but no mobile-money or provider details.
+                </>
+              )}
             </Topic>
             <Topic name="Email verification and password resets">
               one-time codes and links. They stop working when they expire (verification codes after 10 minutes,
@@ -146,11 +159,23 @@ export default function Privacy() {
       title: "How long we keep it",
       content: (
         <p className={infoParagraph}>
-          This is a demonstration, and there's no automatic deletion yet. Account, address and checkout records stay until
-          they're deleted on request or the demonstration is reset. Promotional subscriptions stay until you ask us to
-          remove them: unsubscribing stops the emails, and your address stays on the list marked as unsubscribed. Contact
-          messages stay in our mailbox. Request logs are kept by our hosting provider for its standard period. We review
-          stored information when the demonstration is reset or retired and delete what isn't needed.
+          {retention ? (
+            <>
+              This is a demonstration. Sample orders, with the delivery details copied onto them and their history, are
+              scheduled for deletion {retention}, unless an M-Pesa sandbox payment was tried for them. Nothing else is
+              deleted automatically yet: your account, your saved addresses and other checkout records stay until they're
+              deleted on request or the demonstration is reset.
+            </>
+          ) : (
+            <>
+              This is a demonstration, and there's no automatic deletion yet. Account, address and checkout records stay
+              until they're deleted on request or the demonstration is reset.
+            </>
+          )}{" "}
+          Promotional subscriptions stay until you ask us to remove them: unsubscribing stops the emails, and your address
+          stays on the list marked as unsubscribed. Contact messages stay in our mailbox. Request logs are kept by our
+          hosting provider for its standard period. We review stored information when the demonstration is reset or
+          retired and delete what isn't needed.
         </p>
       ),
     },

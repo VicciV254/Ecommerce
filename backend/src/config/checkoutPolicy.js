@@ -89,3 +89,36 @@ export function demoOrderDailyLimit(env = process.env) {
   if (!/^[1-9]\d{0,8}$/.test(value)) throw configurationError('DEMO_ORDER_DAILY_LIMIT must be a positive whole number');
   return Number(value);
 }
+
+const DEFAULT_SAMPLE_ORDER_RETENTION_DAYS = 7;
+const MAX_SAMPLE_ORDER_RETENTION_DAYS = 3650;
+export const SAMPLE_RETENTION_CONFIGURATION = 'SAMPLE_RETENTION_CONFIGURATION';
+
+/**
+ * Days after which a visitor's sample order is deleted: `SAMPLE_ORDER_RETENTION_DAYS`, a whole number from 1 to 3650
+ * (default 7). Read when used, never at start-up, so an invalid value stops only the deletion.
+ */
+export function sampleOrderRetentionDays(env = process.env) {
+  const value = env.SAMPLE_ORDER_RETENTION_DAYS;
+  if (value === undefined) return DEFAULT_SAMPLE_ORDER_RETENTION_DAYS;
+  if (!/^[1-9]\d{0,3}$/.test(value) || Number(value) > MAX_SAMPLE_ORDER_RETENTION_DAYS) {
+    throw Object.assign(new Error('SAMPLE_ORDER_RETENTION_DAYS must be a whole number from 1 to 3650'), {
+      statusCode: 503, code: SAMPLE_RETENTION_CONFIGURATION,
+    });
+  }
+  return Number(value);
+}
+
+/**
+ * The retention period visitors are told about: the days while sample orders are enabled and the setting is valid,
+ * else null (then no deletion runs and no page mentions one).
+ */
+export function publicSampleOrderRetentionDays() {
+  if (!demoOrdersEnabled()) return null;
+  try {
+    return sampleOrderRetentionDays();
+  } catch (error) {
+    if (error.code === SAMPLE_RETENTION_CONFIGURATION) return null;
+    throw error;
+  }
+}

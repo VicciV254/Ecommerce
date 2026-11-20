@@ -2,7 +2,7 @@ import { useId, useState } from "react";
 import { catalogAdminAPI, type Campaign, type MediaAsset, type StorefrontSettings } from "../../api/catalog";
 import { describeApiError } from "../../api/errors";
 import { headingClaimProblem } from "../../store/storefrontClaims";
-import { Feedback, Field, dangerButtonClass, inputClass, isAcceptedImageUrl, smallButtonClass } from "./shared";
+import { Feedback, Field, WrappingSelect, dangerButtonClass, inputClass, isAcceptedImageUrl, smallButtonClass } from "./shared";
 
 /** Limits enforced by the storefront API, mirrored so the editor stays within them. */
 export const STOREFRONT_LIMITS = { sections: 12, campaigns: 8, productIds: 24, categoryIds: 30 } as const;
@@ -40,7 +40,7 @@ export function IdPicker({
 
   return (
     <div className="space-y-2">
-      <label htmlFor={searchId} className="block text-[10px] font-bold uppercase tracking-wider text-gray-600">
+      <label htmlFor={searchId} className="block text-[0.625rem] font-bold uppercase tracking-wider text-gray-600">
         {label} ({selected.length}/{max})
       </label>
       {selected.length ? (
@@ -51,7 +51,7 @@ export function IdPicker({
               <li key={id} className="flex items-center justify-between gap-2 rounded-sm bg-off-white px-2 py-1 text-xs">
                 <span className={item ? "text-charcoal" : "font-semibold text-error"}>
                   {item ? item.label : `Unavailable reference ${id}`}
-                  {item?.note && <span className="ml-1.5 text-[10px] font-bold uppercase text-ocean-blue">{item.note}</span>}
+                  {item?.note && <span className="ml-1.5 text-[0.625rem] font-bold uppercase text-ocean-blue">{item.note}</span>}
                 </span>
                 <span className="flex shrink-0 gap-1">
                   <button type="button" aria-label={`Move ${item?.label ?? id} up`} disabled={index === 0} onClick={() => move(index, -1)} className={smallButtonClass}>↑</button>
@@ -63,7 +63,7 @@ export function IdPicker({
           })}
         </ol>
       ) : (
-        <p className="text-[11px] text-gray-600">{emptyHint}</p>
+        <p className="text-[0.6875rem] text-gray-600">{emptyHint}</p>
       )}
       <input id={searchId} value={term} onChange={(event) => setTerm(event.target.value)} placeholder="Search to add…" disabled={selected.length >= max} className={inputClass} />
       {matches.length > 0 && (
@@ -72,7 +72,7 @@ export function IdPicker({
             <li key={item.id}>
               <button type="button" onClick={() => { onChange([...selected, item.id]); setTerm(""); }} className="block w-full px-2 py-1.5 text-left text-xs hover:bg-off-white">
                 {item.label}
-                {item.note && <span className="ml-1.5 text-[10px] font-bold uppercase text-ocean-blue">{item.note}</span>}
+                {item.note && <span className="ml-1.5 text-[0.625rem] font-bold uppercase text-ocean-blue">{item.note}</span>}
               </button>
             </li>
           ))}
@@ -81,6 +81,12 @@ export function IdPicker({
     </div>
   );
 }
+
+/**
+ * A section or campaign card. In a column narrower than 17rem at the current text size (a phone with enlarged text) it
+ * keeps only a top rule, so its fields get the panel's whole width instead of a card inside the panel's card.
+ */
+const editorCardClass = "space-y-3 rounded-md border border-light-gray p-4 @max-[17rem]:rounded-none @max-[17rem]:border-x-0 @max-[17rem]:border-b-0 @max-[17rem]:px-0 @max-[17rem]:pb-0";
 
 export function SectionEditor({
   section, index, count, campaigns, products, categories, onChange, onMove, onRemove,
@@ -99,9 +105,9 @@ export function SectionEditor({
   const claimId = useId();
   const claim = headingClaimProblem(section.title);
   return (
-    <article className="space-y-3 rounded-md border border-light-gray p-4">
+    <article className={editorCardClass}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-brand-accent">{index + 1}. {typeLabel}</p>
+        <p className="text-[0.625rem] font-bold uppercase tracking-wider text-brand-accent">{index + 1}. {typeLabel}</p>
         <div className="flex flex-wrap items-center gap-2">
           <label className="flex items-center gap-1.5 text-xs font-semibold text-brand-primary">
             <input type="checkbox" checked={section.enabled} onChange={(event) => onChange({ ...section, enabled: event.target.checked })} className="h-4 w-4 accent-brand-secondary" />
@@ -134,10 +140,10 @@ export function SectionEditor({
       {section.type === "campaign" && (
         <Field label="Campaign">
           {(id) => (
-            <select id={id} value={section.campaignId ?? ""} onChange={(event) => onChange({ ...section, campaignId: event.target.value || null })} className={inputClass}>
+            <WrappingSelect id={id} value={section.campaignId ?? ""} onChange={(event) => onChange({ ...section, campaignId: event.target.value || null })} className={inputClass}>
               <option value="">Choose a campaign…</option>
               {campaigns.map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.title}</option>)}
-            </select>
+            </WrappingSelect>
           )}
         </Field>
       )}
@@ -202,14 +208,14 @@ export function MediaPicker({
     <div className="space-y-2">
       <Field label={label}>
         {(id) => (
-          <select id={id} value={value ?? ""} disabled={disabled} onChange={(event) => onChange(event.target.value || null)} className={inputClass}>
+          <WrappingSelect id={id} value={value ?? ""} disabled={disabled} onChange={(event) => onChange(event.target.value || null)} className={inputClass}>
             <option value="">None</option>
             {!known && value && <option value={value}>Unavailable media {value}</option>}
             {media.map((asset) => <option key={asset.id} value={asset.id}>{mediaLabel(asset)}</option>)}
-          </select>
+          </WrappingSelect>
         )}
       </Field>
-      {!known && <p className="text-[11px] font-semibold text-error">The selected media is not loaded; choose another image.</p>}
+      {!known && <p className="text-[0.6875rem] font-semibold text-error">The selected media is not loaded; choose another image.</p>}
       {!disabled && (
         adding ? (
           <div className="space-y-2 rounded-sm border border-light-gray p-2">
@@ -245,7 +251,7 @@ function FocalInputs({ label, value, onChange }: { label: string; value: Campaig
   const clamp = (input: string) => Math.min(PERCENT_MAX, Math.max(0, Number(input) || 0));
   return (
     <fieldset className="grid grid-cols-2 gap-2">
-      <legend className="mb-1 text-[10px] font-bold uppercase tracking-wider text-gray-600">{label} (0–100%)</legend>
+      <legend className="mb-1 text-[0.625rem] font-bold uppercase tracking-wider text-gray-600">{label} (0–100%)</legend>
       <input aria-label={`${label} horizontal`} type="number" min={0} max={PERCENT_MAX} value={value.x} onChange={(event) => onChange({ ...value, x: clamp(event.target.value) })} className={inputClass} />
       <input aria-label={`${label} vertical`} type="number" min={0} max={PERCENT_MAX} value={value.y} onChange={(event) => onChange({ ...value, y: clamp(event.target.value) })} className={inputClass} />
     </fieldset>
@@ -266,9 +272,9 @@ export function CampaignEditor({
 }) {
   const targets = campaign.cta.target === "category" ? categories : products;
   return (
-    <article className="space-y-3 rounded-md border border-light-gray p-4">
+    <article className={editorCardClass}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-brand-accent">Campaign “{campaign.id}”</p>
+        <p className="text-[0.625rem] font-bold uppercase tracking-wider text-brand-accent">Campaign “{campaign.id}”</p>
         <button
           type="button"
           onClick={onRemove}
@@ -279,16 +285,16 @@ export function CampaignEditor({
           Remove
         </button>
       </div>
-      {usedBy.length > 0 && <p className="text-[11px] text-gray-600">Shown by: {usedBy.join(", ")}. Remove those sections before deleting it.</p>}
-      <div className="grid gap-3 md:grid-cols-2">
+      {usedBy.length > 0 && <p className="text-[0.6875rem] text-gray-600">Shown by: {usedBy.join(", ")}. Remove those sections before deleting it.</p>}
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <Field label="Headline">{(id) => <input id={id} value={campaign.title} onChange={(event) => onChange({ ...campaign, title: event.target.value })} className={inputClass} />}</Field>
         <Field label="Layout">
           {(id) => (
-            <select id={id} value={campaign.layout} onChange={(event) => onChange({ ...campaign, layout: event.target.value === "overlay" ? "overlay" : event.target.value === "banner" ? "banner" : "split" })} className={inputClass}>
+            <WrappingSelect id={id} value={campaign.layout} onChange={(event) => onChange({ ...campaign, layout: event.target.value === "overlay" ? "overlay" : event.target.value === "banner" ? "banner" : "split" })} className={inputClass}>
               <option value="split">Split (text beside image)</option>
               <option value="overlay">Overlay (text on image)</option>
               <option value="banner">Banner (compact)</option>
-            </select>
+            </WrappingSelect>
           )}
         </Field>
       </div>
@@ -296,11 +302,11 @@ export function CampaignEditor({
       <Field label="Conditions" hint="Shown at every screen size alongside the call to action.">
         {(id) => <textarea id={id} rows={2} value={campaign.conditions} onChange={(event) => onChange({ ...campaign, conditions: event.target.value })} className={inputClass} />}
       </Field>
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <Field label="Button label">{(id) => <input id={id} value={campaign.cta.label} onChange={(event) => onChange({ ...campaign, cta: { ...campaign.cta, label: event.target.value } })} className={inputClass} />}</Field>
         <Field label="Button destination">
           {(id) => (
-            <select
+            <WrappingSelect
               id={id}
               value={campaign.cta.target}
               onChange={(event) => {
@@ -312,24 +318,24 @@ export function CampaignEditor({
               <option value="shop">All products</option>
               <option value="category">A category</option>
               <option value="product">A product</option>
-            </select>
+            </WrappingSelect>
           )}
         </Field>
         {campaign.cta.target !== "shop" && (
           <Field label={campaign.cta.target === "category" ? "Category" : "Product"}>
             {(id) => (
-              <select id={id} value={campaign.cta.targetId ?? ""} onChange={(event) => onChange({ ...campaign, cta: { ...campaign.cta, targetId: event.target.value || null } })} className={inputClass}>
+              <WrappingSelect id={id} value={campaign.cta.targetId ?? ""} onChange={(event) => onChange({ ...campaign, cta: { ...campaign.cta, targetId: event.target.value || null } })} className={inputClass}>
                 <option value="">Choose…</option>
                 {campaign.cta.targetId && !targets.some((item) => item.id === campaign.cta.targetId) && (
                   <option value={campaign.cta.targetId}>Unavailable reference {campaign.cta.targetId}</option>
                 )}
                 {targets.map((item) => <option key={item.id} value={item.id}>{item.label}{item.note ? ` (${item.note})` : ""}</option>)}
-              </select>
+              </WrappingSelect>
             )}
           </Field>
         )}
       </div>
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div className="space-y-2">
           <MediaPicker label="Desktop image" value={campaign.desktopMediaId} media={media} onRegistered={onRegistered}
             onChange={(desktopMediaId) => onChange({ ...campaign, desktopMediaId, mobileMediaId: desktopMediaId ? campaign.mobileMediaId : null })} />
@@ -339,7 +345,7 @@ export function CampaignEditor({
           <MediaPicker label="Mobile image (optional)" value={campaign.mobileMediaId} media={media} disabled={!campaign.desktopMediaId} onRegistered={onRegistered}
             onChange={(mobileMediaId) => onChange({ ...campaign, mobileMediaId })} />
           <FocalInputs label="Mobile focal point" value={campaign.mobileFocal} onChange={(mobileFocal) => onChange({ ...campaign, mobileFocal })} />
-          <p className="text-[11px] text-gray-600">Without mobile artwork, phones show the desktop image cropped at the mobile focal point.</p>
+          <p className="text-[0.6875rem] text-gray-600">Without mobile artwork, phones show the desktop image cropped at the mobile focal point.</p>
         </div>
       </div>
     </article>

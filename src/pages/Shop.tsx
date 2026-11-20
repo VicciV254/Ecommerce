@@ -4,20 +4,21 @@ import { ActiveFilterChips, FilterPanel, applyListingChange } from "../component
 import { ModalDialog } from "../components/Modal";
 import { ProductCard } from "../components/ProductCard";
 import { Breadcrumb, Container, DemoCatalogNotice, ErrorPanel } from "../components/ui";
+import { WrappingSelect } from "../components/WrappingSelect";
 import { Link, parseRoute, useRouteState, type RouteState } from "../router";
 import { useCatalog } from "../store/CatalogContext";
 import { CLEAR_FILTERS, LISTING_PAGE_SIZE, activeFilters, buildListing, type ActiveFilter, type Listing } from "../store/listingModel";
 import { LISTING_SORTS, changeListing, listingRoute, parseListingQuery, type ListingQuery } from "../store/listingQuery";
 import { recallListingScroll, rememberListingScroll } from "../store/listingScroll";
 
-/** From this width the filters sit beside the results; below it they open in a sheet. */
-const SIDEBAR_QUERY = "(min-width: 1280px)";
+/** From this width the filters sit beside the results; below it they open in a sheet. In em, like the `xl` breakpoint. */
+const SIDEBAR_QUERY = "(min-width: 80em)";
 /**
  * Card images in the results: from 1280px four columns share what the 240px filter column and its 32px gap leave
  * (64px container padding and 36px of gaps: 372px in all, capped by the 1440px container); below, the card preset's grid.
  */
 const LISTING_CARD_SIZES =
-  "(min-width: 1440px) 267px, (min-width: 1280px) calc((100vw - 372px) / 4), (min-width: 768px) calc((100vw - 72px) / 3), calc((100vw - 44px) / 2)";
+  "(min-width: 90em) 267px, (min-width: 80em) calc((100vw - 372px) / 4), (min-width: 48em) calc((100vw - 72px) / 3), calc((100vw - 44px) / 2)";
 /** Page links shown on each side of the current page before the rest are shortened to an ellipsis. */
 const PAGE_WINDOW = 1;
 const SKELETON_CARDS = 12;
@@ -105,15 +106,15 @@ function ShopListing({ query, category, designer }: { query: ListingQuery; categ
         <div className="flex min-w-0 max-w-full flex-wrap items-end gap-3">
           <label className="flex min-w-0 max-w-full flex-col text-sm font-semibold text-navy-900">
             Sort by
-            <select
+            <WrappingSelect
               value={applied.sort}
               onChange={(event) => applyListingChange(applied, {
                 sort: LISTING_SORTS.find((option) => option.value === event.target.value)?.value ?? "featured",
               })}
-              className="mt-1 min-h-[44px] min-w-0 max-w-full rounded-sm border border-control bg-surface px-3 font-normal text-navy-900"
+              className="mt-1 min-h-[44px] w-[11rem] min-w-0 max-w-full rounded-sm border border-control bg-surface px-3 py-1.5 font-normal text-navy-900"
             >
               {LISTING_SORTS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
+            </WrappingSelect>
           </label>
           <button
             type="button"

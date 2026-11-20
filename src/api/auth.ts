@@ -22,6 +22,9 @@ export interface User {
   promotionalEmails?: boolean;
 }
 
+/** The API's limits on names and phone (backend/src/utils/validators.js); sign-up also needs two letters per name. */
+export const PERSON_LIMITS = { nameMin: 2, nameMax: 100, phoneMax: 20 } as const;
+
 export interface RegisterData {
   email: string;
   password: string;
@@ -51,7 +54,6 @@ export interface LoginErrorBody {
 
 export interface VerificationResult {
   message: string;
-  verificationEmailSent?: boolean;
 }
 
 export const authAPI = {

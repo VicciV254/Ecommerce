@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
+import { PERSON_LIMITS } from '../api/auth';
 import { fieldClass, fieldLabelClass } from '../components/AddressForm';
 import { useAuth } from '../contexts/AuthContext';
 import { useEntryFocus } from '../router';
@@ -96,16 +97,16 @@ export default function AccountProfile() {
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label htmlFor="firstName" className={fieldLabelClass}>First name</label>
-            <input id="firstName" name="firstName" type="text" autoComplete="given-name" required value={formData.firstName} onChange={handleChange} className={fieldClass} />
+            <input id="firstName" name="firstName" type="text" autoComplete="given-name" required maxLength={PERSON_LIMITS.nameMax} value={formData.firstName} onChange={handleChange} className={fieldClass} />
           </div>
           <div>
             <label htmlFor="lastName" className={fieldLabelClass}>Last name</label>
-            <input id="lastName" name="lastName" type="text" autoComplete="family-name" required value={formData.lastName} onChange={handleChange} className={fieldClass} />
+            <input id="lastName" name="lastName" type="text" autoComplete="family-name" required maxLength={PERSON_LIMITS.nameMax} value={formData.lastName} onChange={handleChange} className={fieldClass} />
           </div>
         </div>
         <div>
           <label htmlFor="phone" className={fieldLabelClass}>Phone</label>
-          <input id="phone" name="phone" type="tel" inputMode="tel" autoComplete="tel" value={formData.phone} onChange={handleChange} className={fieldClass} />
+          <input id="phone" name="phone" type="tel" inputMode="tel" autoComplete="tel" maxLength={PERSON_LIMITS.phoneMax} value={formData.phone} onChange={handleChange} className={fieldClass} />
         </div>
         <div>
           <label htmlFor="profile-email" className={fieldLabelClass}>Email</label>

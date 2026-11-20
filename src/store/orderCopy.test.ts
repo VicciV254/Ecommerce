@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { DeliveryMethod, OrderStatus, PaymentStatus, RefundStatus } from "../api/orders";
 import { fixturePendingOrder, fixtureQuote } from "../test-support/checkoutFixtures";
-import { fixtureDeliveredOrder, fixtureRefund, fixtureReturn } from "../test-support/orderFixtures";
+import { fixtureCustomerOrder, fixtureDeliveredOrder, fixtureRefund, fixtureReturn } from "../test-support/orderFixtures";
 import { REFUND_STATUSES } from "./orderModel";
 import {
   ACTOR_LABELS, ORDER_STATUS_LABELS, REFUND_METHOD_LABELS, STAFF_REFUND_STATUS, cancellationNotice, cancellationRefund,
-  orderStatusLabel, paymentLabel, productReturnFact, refundStatusText, returnNotice, returnPolicyTerms, returnStatusText,
-  shopperOrderStatusLabel,
+  orderStatusLabel, paymentLabel, productReturnFact, refundStatusText, returnNotice, returnPolicyTerms, returnRuleText,
+  returnStatusText, returnWindowText, sampleRetentionText, shopperOrderStatusLabel,
 } from "./orderCopy";
 
 const PAYMENT_STATUSES: PaymentStatus[] = ["PENDING", "PAID", "FAILED", "REFUNDED", "PARTIALLY_REFUNDED"];
@@ -147,5 +147,28 @@ describe("demonstration labels and wording", () => {
     expect(productReturnFact("STANDARD", terms, true).refunds).toBe(`Refunds of demonstration payments move no money; ${fee}`);
     expect(productReturnFact("STANDARD", terms, false).refunds).toBe(`Refunds by M-Pesa; ${fee}`);
     expect(productReturnFact("FAULT_ONLY", terms).refunds).toBe(`Refunds by M-Pesa; ${fee}`);
+  });
+});
+
+describe("sample-order deletion", () => {
+  it("says when a sample order scheduled for deletion is deleted, only while the catalog states a period", () => {
+    expect(sampleRetentionText({ scheduledForDeletion: true }, 7)).toBe("Sample orders are scheduled for deletion 7 days after they're placed.");
+    expect(sampleRetentionText({ scheduledForDeletion: true }, 1)).toBe("Sample orders are scheduled for deletion 1 day after they're placed.");
+    expect(sampleRetentionText({ scheduledForDeletion: true }, null)).toBeNull();
+    // Kept orders (an M-Pesa attempt or money evidence), live orders and older backends that omit the answer.
+    expect(sampleRetentionText({ scheduledForDeletion: false }, 7)).toBeNull();
+    expect(sampleRetentionText({}, 7)).toBeNull();
+  });
+});
+
+describe("an order's return wording", () => {
+  it("names the order's own handover: delivery for delivered orders, collection for pickup orders", () => {
+    const window = (deliveryMethod: DeliveryMethod) => returnWindowText(fixtureCustomerOrder(fixturePendingOrder(fixtureQuote())).returnEligibility, deliveryMethod);
+    expect(DELIVERY_METHODS.map((method) => [method, returnRuleText("STANDARD", 7, method), window(method)])).toEqual([
+      ["STANDARD", "Returnable for any reason within 7 days of delivery.", "Returns open for 7 days after delivery."],
+      ["SAME_DAY", "Returnable for any reason within 7 days of delivery.", "Returns open for 7 days after delivery."],
+      ["STORE_PICKUP", "Returnable for any reason within 7 days of collection.", "Returns open for 7 days after collection."],
+    ]);
+    for (const method of DELIVERY_METHODS) expect(window(method)).not.toContain("delivery or collection");
   });
 });

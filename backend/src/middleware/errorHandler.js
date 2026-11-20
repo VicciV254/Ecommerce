@@ -33,11 +33,10 @@ export const errorHandler = (err, req, res, next) => {
     return res.status(400).json({ error: err.message });
   }
   
-  // Default error
-  const statusCode = err.statusCode || 500;
-  const message = err.message || 'Internal server error';
-  
-  res.status(statusCode).json({ error: message, ...(err.statusCode && err.code && { code: err.code }) });
+  // Default error. Only an error raised on purpose with a status (`httpError`) is meant for the client; any other error's
+  // own text (a database failure, a timeout, a bug) can name internal operations, queries and timings.
+  if (!err.statusCode) return res.status(500).json({ error: 'Internal server error' });
+  res.status(err.statusCode).json({ error: err.message || 'Internal server error', ...(err.code && { code: err.code }) });
 };
 
 export const notFound = (req, res) => {

@@ -113,16 +113,30 @@ describe("verification wording", () => {
     return new AxiosError("Bad Request", "ERR_BAD_REQUEST", config, undefined, { status: 400, statusText: "Bad Request", data: { error }, headers: new AxiosHeaders(), config });
   };
 
+  // The API words its answers for shoppers ("verification code", never "OTP"), so they are shown as they come.
   it.each([
-    ["Invalid OTP. 4 attempt(s) remaining.", "Invalid code. 4 attempt(s) remaining."],
-    ["OTP expired. Request a new code.", "Code expired. Request a new code."],
-    ["Enter the 6-digit OTP code", "Enter the 6-digit code"],
-  ])("shows the API's %j as %j, never saying OTP", async (api, shown) => {
+    "Invalid verification code. 4 attempts remaining.",
+    "Verification code expired. Request a new code.",
+    "Enter the 6-digit verification code",
+  ])("shows the API's %j as it is", async (api) => {
     mocks.verifyOtp.mockRejectedValue(refusal(api));
     window.location.hash = `#/verify-email?email=${encodeURIComponent(EMAIL)}`;
     render(<VerifyEmail />);
     enterCode();
-    expect((await screen.findByRole("alert")).textContent).toBe(shown);
+    expect((await screen.findByRole("alert")).textContent).toBe(api);
     expect(document.body.textContent).not.toMatch(/\bOTP\b/);
+  });
+});
+
+describe("refused sign-ups", () => {
+  it("say why in the refusal's own words, and the form stays filled in", async () => {
+    window.location.hash = "#/register";
+    const limit = "Too many accounts were opened from this network. Try again in an hour.";
+    mocks.register.mockResolvedValue({ error: limit });
+    render(<Register />);
+    fillRegistration();
+    expect((await screen.findByRole("alert")).textContent).toBe(limit);
+    expect(screen.getByLabelText<HTMLInputElement>("Email address").value).toBe(EMAIL);
+    expect(current().path).toBe("/register");
   });
 });

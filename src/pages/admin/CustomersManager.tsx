@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import { adminAPI, type AdminUser } from "../../api/admin";
 import { describeApiError } from "../../api/errors";
 import { ConfirmModal } from "../../components/Modal";
-import { TableRegion } from "./shared";
+import { TableRegion, WrappingSelect } from "./shared";
 
 /** The same inline padding on every cell, so neighbouring headings and values never run together. */
 const headCell = "px-3 py-2";
@@ -19,7 +19,9 @@ export function CustomersManager({ canWrite, showToast }: { canWrite: boolean; s
   const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
   // A reload keeps only the selected accounts it still shows, so a bulk action never reaches a row no longer listed.
   const loadUsers = async () => { setLoading(true); setError(""); try { const { data } = await adminAPI.users.getAll({ q: q || undefined, verified: verified || undefined, disabled: disabled || undefined }); setUsers(data.users); setSelected((current) => current.filter((id) => data.users.some((user) => user.id === id))); } catch (err) { const message = describeApiError(err, "Could not load users."); setError(message); showToast(message); } finally { setLoading(false); } };
-  useEffect(() => { loadUsers(); }, [verified, disabled]);
+  // Filters reload the list at once; the typed search waits for Search. The event reads the latest search text.
+  const reloadForFilters = useEffectEvent(() => { void loadUsers(); });
+  useEffect(() => { reloadForFilters(); }, [verified, disabled]);
   const toggleSelected = (id: string) => setSelected((cur) => cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]);
   const shownSelected = selected.filter((id) => users.some((user) => user.id === id));
   const sendBulk = async () => { try { const { data } = await adminAPI.users.sendVerificationBulk(shownSelected); const sent = data.results.filter((result) => result.sent).length; showToast(`Verification sent to ${plural(sent, "account", "accounts")}`); await loadUsers(); } catch (err) { showToast(describeApiError(err, "Could not send verification links.")); } };
@@ -32,7 +34,7 @@ export function CustomersManager({ canWrite, showToast }: { canWrite: boolean; s
       <div className="rounded-lg bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h3 className="text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Users</h3>
+            <h3 className="text-[0.6875rem] font-bold uppercase tracking-[0.15em] text-brand-primary">Users</h3>
             <p className="mt-1 text-xs text-gray-500">
               {canWrite
                 ? "View accounts, send verification links, disable accounts, or delete accounts without orders."
@@ -44,12 +46,12 @@ export function CustomersManager({ canWrite, showToast }: { canWrite: boolean; s
                 Bulk actions apply only to the selected accounts.
               </p>
             ) : (
-              <p className="mt-1 text-[11px] font-bold uppercase tracking-wider text-brand-accent">Showing {plural(users.length, "user", "users")}</p>
+              <p className="mt-1 text-[0.6875rem] font-bold uppercase tracking-wider text-brand-accent">Showing {plural(users.length, "user", "users")}</p>
             )}
           </div>
           {canWrite && (
             <button type="button" onClick={sendBulk} disabled={!shownSelected.length}
-              className="min-h-[44px] rounded-sm bg-brand-primary px-[14px] py-2 text-[11px] font-bold uppercase text-white hover:bg-brand-secondary hover:text-brand-primary disabled:cursor-not-allowed disabled:opacity-50">
+              className="min-h-[44px] rounded-sm bg-brand-primary px-[14px] py-2 text-[0.6875rem] font-bold uppercase text-white hover:bg-brand-secondary hover:text-brand-primary disabled:cursor-not-allowed disabled:opacity-50">
               Send verification to {shownSelected.length} selected
             </button>
           )}
@@ -57,22 +59,22 @@ export function CustomersManager({ canWrite, showToast }: { canWrite: boolean; s
         {/* Sized to their text, so the row wraps at larger text sizes instead of widening the page. */}
         <div className="mt-4 flex flex-wrap gap-3">
           <input aria-label="Search users" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search users" className="min-w-0 flex-[1_1_16rem] rounded-sm border border-light-gray px-3 py-2 text-xs" />
-          <select aria-label="Filter by verification" value={verified} onChange={(e) => setVerified(e.target.value)} className="min-w-0 flex-[1_1_10rem] rounded-sm border border-light-gray px-3 py-2 text-xs">
+          <WrappingSelect aria-label="Filter by verification" value={verified} onChange={(e) => setVerified(e.target.value)} className="min-w-0 flex-[1_1_10rem] rounded-sm border border-light-gray px-3 py-2 text-xs">
             <option value="">All verification</option>
             <option value="true">Verified</option>
             <option value="false">Unverified</option>
-          </select>
-          <select aria-label="Filter by account status" value={disabled} onChange={(e) => setDisabled(e.target.value)} className="min-w-0 flex-[1_1_10rem] rounded-sm border border-light-gray px-3 py-2 text-xs">
+          </WrappingSelect>
+          <WrappingSelect aria-label="Filter by account status" value={disabled} onChange={(e) => setDisabled(e.target.value)} className="min-w-0 flex-[1_1_10rem] rounded-sm border border-light-gray px-3 py-2 text-xs">
             <option value="">All accounts</option>
             <option value="false">Active</option>
             <option value="true">Disabled</option>
-          </select>
-          <button onClick={loadUsers} className="flex-none rounded-sm border border-brand-primary px-3 py-2 text-[10px] font-bold uppercase text-brand-primary hover:bg-brand-primary hover:text-white">Search</button>
+          </WrappingSelect>
+          <button onClick={loadUsers} className="flex-none rounded-sm border border-brand-primary px-3 py-2 text-[0.625rem] font-bold uppercase text-brand-primary hover:bg-brand-primary hover:text-white">Search</button>
         </div>
         <TableRegion label="Customer accounts table" className="mt-[14px]">
           <table className="w-full text-xs">
             <thead>
-              <tr className="border-b border-light-gray text-left text-[10px] font-bold uppercase tracking-wider text-muted">
+              <tr className="border-b border-light-gray text-left text-[0.625rem] font-bold uppercase tracking-wider text-muted">
                 {canWrite && <th className={headCell}>Select</th>}
                 <th className={headCell}>User</th>
                 <th className={headCell}>Status</th>
@@ -88,9 +90,10 @@ export function CustomersManager({ canWrite, showToast }: { canWrite: boolean; s
                 <tr key={user.id} className="border-b border-light-gray/70">
                   {canWrite && (
                     <td className={bodyCell}>
-                      {/* The whole 44px square selects; the visible box stays small. */}
+                      {/* The whole 44px square selects; the box inside is the 20px size of the other checkboxes. */}
                       <label className="inline-flex size-[44px] cursor-pointer items-center justify-center rounded-sm hover:bg-surface-soft">
-                        <input type="checkbox" aria-label={`Select ${accountName(user)}`} checked={selected.includes(user.id)} onChange={() => toggleSelected(user.id)} />
+                        <input type="checkbox" aria-label={`Select ${accountName(user)}`} checked={selected.includes(user.id)} onChange={() => toggleSelected(user.id)}
+                          className="h-5 w-5 shrink-0 accent-brand-primary" />
                       </label>
                     </td>
                   )}

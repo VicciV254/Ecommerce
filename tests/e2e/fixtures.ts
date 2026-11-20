@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from "node:fs";
+import { resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import { expect, test as base, type BrowserContext, type Locator, type Page, type Route } from "@playwright/test";
 import type { User } from "../../src/api/auth";
 import type { StaffOrder } from "../../src/api/admin";
@@ -164,6 +167,23 @@ async function respond(route: Route, url: URL) {
   return route.fulfill({ status: 503, json: { error: "No live API is available in this browser test" } });
 }
 
+/**
+ * The site's own fonts (Jost and Marcellus; SIL Open Font License, see brand-fonts/OFL.txt), served in place of Google
+ * Fonts so text is laid out and measured as shoppers see it: the fallback fonts are narrower and hide overflow.
+ */
+const BRAND_FONTS = fileURLToPath(new URL("./brand-fonts/", import.meta.url));
+
+function serveBrandFonts(route: Route, url: URL) {
+  // Fonts are fetched cross-origin, so they need the CORS header Google sends.
+  const headers = { "access-control-allow-origin": "*" };
+  if (url.host === "fonts.googleapis.com") {
+    return route.fulfill({ headers, contentType: "text/css", body: readFileSync(`${BRAND_FONTS}fonts.css`, "utf8") });
+  }
+  const file = resolve(BRAND_FONTS, `.${url.pathname}`);
+  if (!file.startsWith(BRAND_FONTS.replace(/[\\/]$/, "") + sep) || !existsSync(file)) return route.fulfill({ status: 404, body: "" });
+  return route.fulfill({ headers, contentType: "font/woff2", body: readFileSync(file) });
+}
+
 export const test = base.extend({
   page: async ({ page, context }, provide) => {
     const errors: string[] = [];
@@ -178,6 +198,7 @@ export const test = base.extend({
         if (url.pathname.startsWith("/api/")) return respond(route, url);
         return route.continue();
       }
+      if (url.host === "fonts.googleapis.com" || url.host === "fonts.gstatic.com") return serveBrandFonts(route, url);
       if (request.resourceType() === "image") {
         return route.fulfill({
           contentType: "image/svg+xml",
@@ -288,18 +309,22 @@ export async function serveStaffOrders(context: BrowserContext, orders: () => re
   });
 }
 
-/** Page-level horizontal overflow in CSS pixels; 0 or less means nothing scrolls sideways. */
-export const pageOverflow = (page: Page) =>
-  page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+/** Page-level horizontal overflow in CSS pixels, once the fonts have loaded; 0 or less means nothing scrolls sideways. */
+export const pageOverflow = (page: Page) => page.evaluate(async () => {
+  await document.fonts.ready;
+  return document.documentElement.scrollWidth - document.documentElement.clientWidth;
+});
 
-/** Elements inside `scope` whose content is wider than their box, ignoring form fields that scroll their own value,
- * 1px visually hidden text and intentional horizontal scrollers. */
-export const clippedWithin = (scope: Locator) => scope.evaluate((root) =>
-  [root, ...root.querySelectorAll<HTMLElement>("*")]
+/** Elements inside `scope` whose content is wider than their box once the fonts have loaded, ignoring form fields that
+ * scroll their own value, 1px visually hidden text and intentional horizontal scrollers. */
+export const clippedWithin = (scope: Locator) => scope.evaluate(async (root) => {
+  await document.fonts.ready;
+  return [root, ...root.querySelectorAll<HTMLElement>("*")]
     .filter((element) => element instanceof HTMLElement && !element.matches("input, textarea, select") &&
       element.clientWidth > 1 && element.scrollWidth > element.clientWidth + 1 && getComputedStyle(element).overflowX !== "auto")
     .slice(0, 10)
-    .map((element) => ({ tag: element.tagName, text: element.textContent?.slice(0, 40), client: element.clientWidth, scroll: element.scrollWidth })));
+    .map((element) => ({ tag: element.tagName, text: element.textContent?.slice(0, 40), client: element.clientWidth, scroll: element.scrollWidth }));
+});
 
 /**
  * The focused control once it has stopped moving: its name, whether it shows the focus ring, and how far the ring (the
@@ -363,6 +388,20 @@ export async function tabThroughRings(page: Page, presses: number) {
     visited.push(await expectWholeFocusRing(page));
   }
   return visited;
+}
+
+/**
+ * Makes Tab from `from` move focus to `to` with no scrolling at all, as Firefox does for a control it counts as visible
+ * and Safari does (ignoring the scroll padding) for a text field partly in view, so the page's own correction is tested.
+ */
+export async function tabWithoutBrowserScrolling(page: Page, from: Locator, to: Locator) {
+  await from.evaluate((element) => element.setAttribute("data-emulated-from", ""));
+  await to.evaluate((element) => element.setAttribute("data-emulated-to", ""));
+  await page.evaluate(() => document.addEventListener("keydown", (event) => {
+    if (event.key !== "Tab" || !document.activeElement?.hasAttribute("data-emulated-from")) return;
+    event.preventDefault();
+    document.querySelector<HTMLElement>("[data-emulated-to]")?.focus({ preventScroll: true });
+  }, true));
 }
 
 export type StoredShopper = {

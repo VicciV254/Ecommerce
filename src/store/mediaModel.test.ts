@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { IMAGE_PRESETS, ZOOM_WIDTH, imageRendition, zoomSource, type ImagePreset } from "./mediaModel";
 
@@ -13,9 +15,9 @@ const candidates = (srcSet: string | undefined) => (srcSet ?? "").split(", ").ma
 describe("image presets", () => {
   it("match the contract's widths and sizes, with a middle fallback width", () => {
     expect(IMAGE_PRESETS).toEqual({
-      card: { widths: [240, 320, 480, 640, 960], fallbackWidth: 480, sizes: "(min-width: 1440px) 335px, (min-width: 1280px) calc((100vw - 100px) / 4), (min-width: 768px) calc((100vw - 72px) / 3), calc((100vw - 44px) / 2)" },
+      card: { widths: [240, 320, 480, 640, 960], fallbackWidth: 480, sizes: "(min-width: 90em) 335px, (min-width: 80em) calc((100vw - 100px) / 4), (min-width: 48em) calc((100vw - 72px) / 3), calc((100vw - 44px) / 2)" },
       thumbnail: { widths: [96, 160, 240], fallbackWidth: 160, sizes: "80px" },
-      detail: { widths: [480, 640, 960, 1280, 1600], fallbackWidth: 960, sizes: "(min-width: 1024px) 50vw, 100vw" },
+      detail: { widths: [480, 640, 960, 1280, 1600], fallbackWidth: 960, sizes: "(min-width: 64em) 50vw, 100vw" },
       hero: { widths: [640, 960, 1280, 1920, 2560], fallbackWidth: 1280, sizes: "100vw" },
     });
     for (const { widths, fallbackWidth } of Object.values(IMAGE_PRESETS)) {
@@ -30,7 +32,7 @@ describe("Cloudinary renditions", () => {
     expect(imageRendition(STORED, "card")).toEqual({
       src: resizedStored(480),
       srcSet: [240, 320, 480, 640, 960].map((width) => `${resizedStored(width)} ${width}w`).join(", "),
-      sizes: "(min-width: 1440px) 335px, (min-width: 1280px) calc((100vw - 100px) / 4), (min-width: 768px) calc((100vw - 72px) / 3), calc((100vw - 44px) / 2)",
+      sizes: "(min-width: 90em) 335px, (min-width: 80em) calc((100vw - 100px) / 4), (min-width: 48em) calc((100vw - 72px) / 3), calc((100vw - 44px) / 2)",
     });
     expect(candidates(imageRendition(STORED, "thumbnail").srcSet)).toEqual([[resizedStored(96), "96w"], [resizedStored(160), "160w"], [resizedStored(240), "240w"]]);
     expect(imageRendition(STORED, "detail").src).toBe(resizedStored(960));
@@ -140,5 +142,34 @@ describe("zoom", () => {
         expect(IMAGE_PRESETS[preset].widths).not.toContain(ZOOM_WIDTH);
       }
     }
+  });
+});
+
+describe("image sizes follow the layout's breakpoints at any browser text size", () => {
+  /** Every source file of the app (tests aside). */
+  const sources = (directory: string): string[] => readdirSync(directory).flatMap((name) => {
+    const path = join(directory, name);
+    if (statSync(path).isDirectory()) return sources(path);
+    return /\.(ts|tsx)$/.test(name) && !/\.test\.tsx?$/.test(name) ? [path] : [];
+  });
+  /** A `sizes` entry: a width condition followed by the slot's length (a matchMedia query has no length after it). */
+  const ENTRY = /\((?:min|max)-width:\s*([\d.]+)([a-z]+)\)\s+[^,"'`]+/g;
+
+  it("states every sizes condition in em, as the rem-based layout breakpoints scale with the text size", () => {
+    const found: string[] = [];
+    for (const path of sources(resolve(process.cwd(), "src"))) {
+      for (const [entry, , unit] of readFileSync(path, "utf8").matchAll(ENTRY)) found.push(`${path.replace(process.cwd(), "")}: ${unit}: ${entry.trim()}`);
+    }
+    expect(found.length, "sizes strings were found").toBeGreaterThan(10);
+    expect(found.filter((entry) => !/: em: /.test(entry))).toEqual([]);
+  });
+
+  it("keeps each preset's slots and the default text size's breakpoints exactly", () => {
+    expect(IMAGE_PRESETS.card.sizes).toBe(
+      "(min-width: 90em) 335px, (min-width: 80em) calc((100vw - 100px) / 4), (min-width: 48em) calc((100vw - 72px) / 3), calc((100vw - 44px) / 2)",
+    );
+    expect(IMAGE_PRESETS.detail.sizes).toBe("(min-width: 64em) 50vw, 100vw");
+    expect(IMAGE_PRESETS.thumbnail.sizes).toBe("80px");
+    expect(IMAGE_PRESETS.hero.sizes).toBe("100vw");
   });
 });

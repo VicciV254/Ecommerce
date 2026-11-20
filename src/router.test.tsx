@@ -1,4 +1,4 @@
-import { createRef } from "react";
+import { createRef, useLayoutEffect } from "react";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Link, navigate, setNavigationBlocker, useRoute, useRouteState, type HeldNavigation } from "./router";
@@ -155,7 +155,24 @@ describe("navigation kinds and history entries", () => {
     act(() => { window.location.hash = "#/contact"; });
     await screen.findByText("traverse /contact from /about");
   });
+
+  it("takes up an address change made after the first render but before anything listened", async () => {
+    window.history.replaceState(null, "", "#/about");
+    // Any hash change events still queued from earlier tests fire now, while nothing listens.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    render(<><NavigationProbe /><MovesBeforeListening to="#/shop?cat=fashion" /></>);
+    await screen.findByText("traverse /shop?cat=fashion from /about");
+  });
 });
+
+/**
+ * Changes the address after the first render has read it but before anything listens (layout effects run before the
+ * router subscribes), as a link followed or Back pressed at that moment does: its events are already over.
+ */
+function MovesBeforeListening({ to }: { to: string }) {
+  useLayoutEffect(() => { window.history.pushState(null, "", to); }, [to]);
+  return null;
+}
 
 describe("navigation blocker", () => {
   let release: (() => void) | null = null;
@@ -266,5 +283,24 @@ describe("navigation blocker", () => {
     act(() => window.history.back());
     await screen.findByText("traverse / from /shop");
     expect(held).toEqual([]);
+  });
+
+  it("reverses a held Back to the entry it left after an address change taken up late", async () => {
+    window.history.replaceState(null, "", "#/about");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    render(<><NavigationProbe /><MovesBeforeListening to="#/shop?cat=fashion" /></>);
+    await screen.findByText("traverse /shop?cat=fashion from /about");
+    const entries = window.history.length;
+    const held = holdAll();
+    act(() => window.history.back());
+    await waitFor(() => expect(held).toHaveLength(1));
+    expect(held[0]).toMatchObject({ to: "/about", kind: "traverse" });
+    // Forward again, to the entry Back left: the address and the history are as they were.
+    await waitFor(() => expect(window.location.hash).toBe("#/shop?cat=fashion"));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(window.location.hash).toBe("#/shop?cat=fashion");
+    expect(window.history.length).toBe(entries);
+    act(() => held[0].proceed());
+    await screen.findByText("traverse /about from /shop?cat=fashion");
   });
 });

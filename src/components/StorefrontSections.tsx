@@ -19,9 +19,9 @@ type Section = StorefrontSettings["sections"][number];
 /** Viewport where campaign artwork switches to its mobile composition (Tailwind `md`). */
 const MOBILE_ARTWORK_QUERY = "(width < 48rem)";
 /** Split heroes show their artwork in one of two columns from 768px. */
-const SPLIT_HERO_SIZES = "(min-width: 48rem) 50vw, 100vw";
+const SPLIT_HERO_SIZES = "(min-width: 48em) 50vw, 100vw";
 /** Promotion bands give their artwork a third of the band from 768px (the page Container is 1440px at most). */
-const BAND_SIZES = "(min-width: 90rem) 459px, (min-width: 48rem) 33vw, 100vw";
+const BAND_SIZES = "(min-width: 90em) 459px, (min-width: 48em) 33vw, 100vw";
 /** Product cards a section shows: 4 on phones, 6 from 768px and 8 from 1280px; "View all" leads to the rest. */
 const VISIBLE_FROM: readonly string[] = ["", "", "", "", "hidden md:block", "hidden md:block", "hidden xl:block", "hidden xl:block"];
 

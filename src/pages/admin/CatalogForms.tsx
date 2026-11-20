@@ -10,7 +10,7 @@ import {
 import { apiErrorCode, describeApiError } from "../../api/errors";
 import { ConfirmModal } from "../../components/Modal";
 import { useAdminCatalog } from "./AdminCatalogContext";
-import { Feedback, Field, categoryOptions, descendantIds, inputClass, isAcceptedImageUrl, smallButtonClass } from "./shared";
+import { Feedback, Field, WrappingSelect, categoryOptions, descendantIds, inputClass, isAcceptedImageUrl, smallButtonClass } from "./shared";
 import { useUnsavedChanges } from "./unsavedChanges";
 
 const DESIGNER_HANDLE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -98,10 +98,10 @@ export function CategoryForm({
         </Field>
         <Field label="Parent" hint="Leave empty to make a top-level department. Hiding a parent hides everything below it.">
           {(id) => (
-            <select id={id} value={parentId} onChange={(event) => setParentId(event.target.value)} className={inputClass}>
+            <WrappingSelect id={id} value={parentId} onChange={(event) => setParentId(event.target.value)} className={inputClass}>
               <option value="">None (department)</option>
               {parents.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
-            </select>
+            </WrappingSelect>
           )}
         </Field>
         <label className="flex min-h-[44px] items-center gap-2 text-xs font-semibold text-brand-primary">
@@ -114,7 +114,7 @@ export function CategoryForm({
         <Field label="Specification keys (comma separated)" hint="Suggested fields when editing products in this category.">
           {(id) => <input id={id} value={keys} onChange={(event) => setKeys(event.target.value)} placeholder="Brand, Screen size, Storage" className={inputClass} />}
         </Field>
-        {category && <p className="text-[11px] text-gray-600">Slug: <code>{category.slug}</code> (kept when the name changes)</p>}
+        {category && <p className="text-[0.6875rem] text-gray-600">Slug: <code>{category.slug}</code> (kept when the name changes)</p>}
         <Feedback message={error} tone="error" />
         {changedElsewhere && onReload && (
           <button

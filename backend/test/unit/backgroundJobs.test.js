@@ -15,7 +15,7 @@ function configure(t, environment, enabled) {
 }
 
 function mockSteps(t, overrides = {}) {
-  return Object.fromEntries(['payments', 'reservations', 'notifications'].map((name) => [
+  return Object.fromEntries(['payments', 'reservations', 'notifications', 'sampleOrders'].map((name) => [
     name, t.mock.method(maintenanceTasks, name, overrides[name] ?? (async () => ({}))),
   ]));
 }
@@ -79,9 +79,11 @@ test('one failing maintenance step does not block the others and reports only a 
     reservations: async () => { throw Object.assign(new Error('connection detail'), { code: 'P1001' }); },
     payments: async () => undefined,
     notifications: async () => ({ sent: 1, failed: 0, dead: 0 }),
+    sampleOrders: async () => ({ deleted: 2, unchanged: 0, failed: {} }),
   });
   assert.deepEqual(await runMaintenance(), {
     reservations: { error: 'P1001' }, payments: { ok: true }, notifications: { sent: 1, failed: 0, dead: 0 },
+    sampleOrders: { deleted: 2, unchanged: 0, failed: {} },
   });
 });
 

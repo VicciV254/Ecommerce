@@ -22,11 +22,11 @@ const REFUSED_STATUSES = [400, 403, 404];
 const isMissingOrder = (error: unknown) => REFUSED_STATUSES.includes(apiStatus(error) ?? 0) || apiErrorCode(error) === "ORDER_NOT_FOUND";
 type OpenDialog = { kind: "order"; action: StaffAction } | { kind: "refund"; refund: StaffRefund; action: RefundAction };
 
-const toolClass = "min-h-11 rounded-sm border border-brand-primary px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-brand-primary hover:bg-brand-primary hover:text-white";
-const stepClass = "min-h-11 rounded-sm bg-brand-primary px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-white hover:bg-brand-secondary hover:text-brand-primary";
-const cancelClass = "min-h-11 rounded-sm border border-error px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-error hover:bg-error hover:text-white";
+const toolClass = "min-h-11 rounded-sm border border-brand-primary px-4 py-2 text-[0.6875rem] font-bold uppercase tracking-wider text-brand-primary hover:bg-brand-primary hover:text-white";
+const stepClass = "min-h-11 rounded-sm bg-brand-primary px-4 py-2 text-[0.6875rem] font-bold uppercase tracking-wider text-white hover:bg-brand-secondary hover:text-brand-primary";
+const cancelClass = "min-h-11 rounded-sm border border-error px-4 py-2 text-[0.6875rem] font-bold uppercase tracking-wider text-error hover:bg-error hover:text-white";
 const sectionClass = "rounded-lg bg-white p-4 shadow-sm sm:p-5";
-const sectionTitle = "font-body text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary";
+const sectionTitle = "font-body text-[0.6875rem] font-bold uppercase tracking-[0.15em] text-brand-primary";
 
 /** Why no fulfilment step is offered, so staff know what the order is waiting for. */
 function waitingFor(order: StaffOrder) {
@@ -212,10 +212,10 @@ export function OrderWorkspace({ orderId, focus, canWrite, focusOnOpen = true, o
                   return (
                     <li key={item.id}>
                       <div className="flex justify-between gap-3">
-                        <span>{item.quantity} × {item.productName}{item.sku ? <span className="block font-mono text-[11px] text-gray-600">{item.sku}</span> : null}</span>
+                        <span>{item.quantity} × {item.productName}{item.sku ? <span className="block font-mono text-[0.6875rem] text-gray-600">{item.sku}</span> : null}</span>
                         <span className="shrink-0 font-semibold">{formatKES(item.subtotal)}</span>
                       </div>
-                      {line && <p className="text-xs text-gray-600">{returnRuleText(line.returnRule, order.returnEligibility.policy.windowDays)}</p>}
+                      {line && <p className="text-xs text-gray-600">{returnRuleText(line.returnRule, order.returnEligibility.policy.windowDays, order.deliveryMethod)}</p>}
                     </li>
                   );
                 })}
@@ -237,7 +237,7 @@ export function OrderWorkspace({ orderId, focus, canWrite, focusOnOpen = true, o
           </div>
 
           <Disclosure title="Returns" summary={String(order.returns.length)} defaultOpen={focus?.kind === "return"}>
-            <p className="mb-3 text-xs text-gray-600">{returnWindowText(order.returnEligibility) ?? "No return window is open."}</p>
+            <p className="mb-3 text-xs text-gray-600">{returnWindowText(order.returnEligibility, order.deliveryMethod) ?? "No return window is open."}</p>
             {order.returns.length ? (
               <ul className="space-y-3">
                 {order.returns.map((item) => (

@@ -3,8 +3,8 @@ import type { Order, OrderFulfilment, TrackingEvent } from "../api/orders";
 import { ACTOR_LABELS, ORDER_STATUS_TONES, orderStatusLabel, shopperOrderStatusLabel, shopperOrderStatusTone } from "../store/orderCopy";
 import { formatDateTime, formatKES } from "../utils/format";
 
-/** Wider layouts open every section by default; phones start collapsed. */
-const OPEN_FROM = "(min-width: 768px)";
+/** Wider layouts open every section by default; phones start collapsed. In em, like the `md` breakpoint (48rem). */
+const OPEN_FROM = "(min-width: 48em)";
 
 /**
  * A native disclosure. Closed content is not rendered, so it never holds invisible focus targets;

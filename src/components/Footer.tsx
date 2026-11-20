@@ -1,10 +1,10 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link } from "../router";
 import { Container } from "./ui";
 import { BrandLogo } from "./Brand";
 import { useCatalog } from "../store/CatalogContext";
 import { useStorefront } from "../store/StorefrontContext";
-import { SHOPPING_FACTS, deliveryFact, paymentFact, returnsFact } from "../store/shoppingFacts";
+import { SHOPPING_FACTS, deliveryFact, paymentFact, returnRestrictions, returnsFact } from "../store/shoppingFacts";
 import { STORE_FACTS } from "../store/storeFacts";
 import { subscriptionsAPI } from "../api/subscriptions";
 import { describeApiError } from "../api/errors";
@@ -33,6 +33,7 @@ const BOTTOM_LINKS = [
 
 export function Footer() {
   const { categories, returnPolicy, delivery, demonstrationOrders } = useCatalog();
+  const restrictions = useMemo(() => returnRestrictions([...categories.byId.values()]), [categories]);
   const { brandName } = useStorefront();
   const { user, refreshUser } = useAuth();
   const emailId = useId();
@@ -150,7 +151,7 @@ export function Footer() {
                 <li>{SHOPPING_FACTS.vat}</li>
                 <li>{paymentFact(demonstrationOrders)}</li>
                 <li>{deliveryFact(delivery)}</li>
-                <li>{returnsFact(returnPolicy?.windowDays ?? null, demonstrationOrders)}</li>
+                <li>{returnsFact(returnPolicy?.windowDays ?? null, demonstrationOrders, restrictions)}</li>
               </ul>
             </section>
           </div>

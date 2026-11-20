@@ -127,8 +127,8 @@ export function AnalyticsPanel() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="rounded-lg bg-white p-6 shadow-sm">
-          <h2 className="mb-1 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Inventory value by department</h2>
-          <p className="mb-5 text-[11px] text-gray-600">Active SKUs at current list price; demo records are excluded.</p>
+          <h2 className="mb-1 text-[0.6875rem] font-bold uppercase tracking-[0.15em] text-brand-primary">Inventory value by department</h2>
+          <p className="mb-5 text-[0.6875rem] text-gray-600">Active SKUs at current list price; demo records are excluded.</p>
           {catalog.data ? (
             <>
               <div className="space-y-3">
@@ -154,7 +154,7 @@ export function AnalyticsPanel() {
         </div>
 
         <div className="rounded-lg bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">Report orders</h2>
+          <h2 className="mb-4 text-[0.6875rem] font-bold uppercase tracking-[0.15em] text-brand-primary">Report orders</h2>
           <div className="max-h-80 overflow-y-auto text-xs">
             {rows.slice(0, REPORT_PREVIEW_LIMIT).map((row) => (
               <div key={row.orderNumber} className="flex flex-wrap justify-between gap-x-3 border-b border-light-gray py-2">

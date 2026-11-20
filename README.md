@@ -59,7 +59,7 @@ With the example configuration, the backend runs on `http://127.0.0.1:5000`.
 Importing the app/server does not start a listener or operational jobs.
 Background jobs are **off by default**; deliberately set
 `BACKGROUND_JOBS_ENABLED=true` only on an always-on host that should check
-pending payments, expire holds and retry customer emails. Serverless deployments use the protected daily maintenance endpoint
+pending payments, expire holds, retry customer emails and delete old sample orders. Serverless deployments use the protected daily maintenance endpoint
 instead (see [Backend setup](backend/SETUP.md)). Orders never advance on a
 timer: staff confirm each fulfilment step.
 
@@ -95,7 +95,10 @@ automatically managed Vite preview server and fixture API/media responses,
 not the live site. The port-scoped build is kept under `.cache/`; ordinary
 development still uses `npm run dev`. This avoids development-module loading
 overhead during browser checks without changing interaction assertions or
-their timeouts. The fixtures also cover newly opened tabs.
+their timeouts. The fixtures also cover newly opened tabs, and serve the site's
+own fonts (Jost and Marcellus, under the SIL Open Font License, from
+`tests/e2e/brand-fonts/`) in place of Google Fonts, so text is laid out and
+measured as shoppers see it rather than in narrower fallback fonts.
 Interaction checks include narrow-phone/tablet drawer resizing, keyboard
 search, modifier-click navigation, nested dialogs, focus restoration and
 feedback inside active dialogs. Native dialog behavior is checked in the
@@ -278,6 +281,13 @@ no Safaricom request. M-Pesa stays in the sandbox, behind a closed "Pay with
 M-Pesa sandbox instead" disclosure, and prompts go only to the approved test
 numbers; production M-Pesa is refused. Each account can create up to
 `DEMO_ORDER_DAILY_LIMIT` sample orders (default 10) in 24 hours.
+
+Sample orders are deleted `SAMPLE_ORDER_RETENTION_DAYS` (default 7) after
+they're placed, by the daily maintenance step, and their sample stock is given
+back; orders with an M-Pesa sandbox attempt or other money evidence are kept.
+The catalog's `sampleOrderRetentionDays` states the period (or `null`), and the
+account's orders and the Privacy notice mention deletion only then. See
+[Sample-order deletion](backend/SETUP.md#sample-order-deletion).
 
 The owner of a sample order then plays the store's part from **Demonstration
 controls** in the order's receipt details: preparing, dispatching and

@@ -40,6 +40,11 @@ import { formatKES } from "../utils/format";
 
 const CRUMBS = [{ label: "Cart", to: "/cart" }, { label: "Checkout" }];
 const cardClass = "rounded-lg bg-surface p-4 shadow-card sm:p-6";
+/**
+ * A step's card. In a column narrower than 18rem at the current text size (a phone with enlarged text) it gives up its
+ * frame and padding, so the choices inside are not cards inside a card.
+ */
+const stepCardClass = `${cardClass} @max-[18rem]:rounded-none @max-[18rem]:bg-transparent @max-[18rem]:p-0 @max-[18rem]:shadow-none`;
 const stepHeadingClass = "type-h2 text-navy-900";
 /** How a line is named once its product has left the catalog. */
 const MISSING_NAME = "Item no longer in the catalog";
@@ -410,7 +415,7 @@ function CheckoutFrame({ view, stepKey, notices, summary, summaryClassName, asid
       </div>
       <div className="mt-6 grid items-start gap-6 md:grid-cols-[minmax(0,1fr)_300px] xl:grid-cols-[minmax(0,1fr)_360px] xl:gap-8">
         {summary && <CheckoutSummary lines={summary.lines} figures={summary.figures} className={summaryClassName} />}
-        <section aria-labelledby={id} className="min-w-0 md:col-start-1 md:row-start-1">{children({ ref, id })}</section>
+        <section aria-labelledby={id} className="@container min-w-0 md:col-start-1 md:row-start-1">{children({ ref, id })}</section>
         {aside}
       </div>
     </Container>
@@ -493,7 +498,7 @@ function DeliveryStep({ user, choices, quote, heading, onContinue }: {
   );
 
   return (
-    <div className={`space-y-6 ${cardClass}`}>
+    <div className={`space-y-6 ${stepCardClass}`}>
       <div>
         <h2 id={heading.id} ref={heading.ref} tabIndex={-1} className={stepHeadingClass}>Delivery</h2>
         <p className="mt-1 text-navy-800">
@@ -564,7 +569,7 @@ function ReviewStep({
   const itemsId = useId();
   const count = views.reduce((sum, view) => sum + view.line.quantity, 0);
   return (
-    <div className={`space-y-6 ${cardClass}`}>
+    <div className={`space-y-6 ${stepCardClass}`}>
       <h2 id={heading.id} ref={heading.ref} tabIndex={-1} className={stepHeadingClass}>Review and reserve</h2>
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1 rounded-md bg-surface-page p-3 [overflow-wrap:anywhere]">
         <div className="min-w-0">

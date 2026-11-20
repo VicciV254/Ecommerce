@@ -25,10 +25,10 @@ const TRACKING_NUMBER = /^[\w .:#/-]+$/;
 const MPESA_REFERENCE = /^[A-Z0-9]{8,32}$/;
 const UNREADABLE = "The change was sent, but the updated order could not be read. It has been reloaded; check it before acting again.";
 
-const backClass = "min-h-11 rounded-sm border border-light-gray px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-charcoal hover:bg-off-white aria-disabled:opacity-50";
-const confirmClass = "min-h-11 rounded-sm bg-brand-primary px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-white hover:bg-brand-secondary hover:text-brand-primary aria-disabled:cursor-not-allowed aria-disabled:opacity-60";
-const destructiveClass = "min-h-11 rounded-sm bg-error px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-white hover:bg-red-700 aria-disabled:cursor-not-allowed aria-disabled:opacity-60";
-const labelClass = "mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-600";
+const backClass = "min-h-11 rounded-sm border border-light-gray px-4 py-2 text-[0.6875rem] font-bold uppercase tracking-wider text-charcoal hover:bg-off-white aria-disabled:opacity-50";
+const confirmClass = "min-h-11 rounded-sm bg-brand-primary px-4 py-2 text-[0.6875rem] font-bold uppercase tracking-wider text-white hover:bg-brand-secondary hover:text-brand-primary aria-disabled:cursor-not-allowed aria-disabled:opacity-60";
+const destructiveClass = "min-h-11 rounded-sm bg-error px-4 py-2 text-[0.6875rem] font-bold uppercase tracking-wider text-white hover:bg-red-700 aria-disabled:cursor-not-allowed aria-disabled:opacity-60";
+const labelClass = "mb-1 block text-[0.625rem] font-bold uppercase tracking-wider text-gray-600";
 
 function failureOf(error: unknown, fallback: string): StaffFailure {
   return error instanceof OrderFormatError ? { message: UNREADABLE, reload: true } : describeStaffFailure(error, fallback);
@@ -87,7 +87,7 @@ function ReasonField({ id, label, hint, value, invalid, fieldRef, onChange }: {
       <textarea ref={fieldRef} id={id} rows={3} maxLength={MAX_REASON} value={value} aria-invalid={invalid || undefined}
         aria-describedby={hint ? `${id}-hint` : undefined} onChange={(event) => onChange(event.target.value)}
         className={`${inputClass} min-h-11 text-base aria-[invalid=true]:border-error`} />
-      {hint && <p id={`${id}-hint`} className="mt-1 text-[11px] text-gray-600">{hint}</p>}
+      {hint && <p id={`${id}-hint`} className="mt-1 text-[0.6875rem] text-gray-600">{hint}</p>}
     </div>
   );
 }
@@ -315,7 +315,7 @@ export function RefundActionDialog({ refund, action, onClose, onOutcome }: {
             min={1} max={refund.requestedAmount} step={1} value={amount} aria-invalid={invalid === "amount" || undefined}
             aria-describedby={`${id}-amount-hint`} onChange={(event) => setAmount(event.target.value)}
             className={`${inputClass} min-h-11 text-base aria-[invalid=true]:border-error`} />
-          <p id={`${id}-amount-hint`} className="mt-1 text-[11px] text-gray-600">
+          <p id={`${id}-amount-hint`} className="mt-1 text-[0.6875rem] text-gray-600">
             Requested {formatKES(refund.requestedAmount)}. A lower amount needs a reason.
           </p>
         </div>
@@ -331,7 +331,7 @@ export function RefundActionDialog({ refund, action, onClose, onOutcome }: {
             autoComplete="off" autoCapitalize="characters" spellCheck={false} aria-invalid={invalid === "reference" || undefined}
             aria-describedby={`${id}-reference-hint`} onChange={(event) => setReference(event.target.value.toUpperCase())}
             className={`${inputClass} min-h-11 font-mono text-base uppercase aria-[invalid=true]:border-error`} />
-          <p id={`${id}-reference-hint`} className="mt-1 text-[11px] text-gray-600">8 to 32 letters and numbers, from the M-Pesa transaction.</p>
+          <p id={`${id}-reference-hint`} className="mt-1 text-[0.6875rem] text-gray-600">8 to 32 letters and numbers, from the M-Pesa transaction.</p>
         </div>
       )}
     </ActionDialogFrame>

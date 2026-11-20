@@ -7,6 +7,7 @@ import type {
   ActorType,
   CustomerOrder,
   DeliveryFeeRefund,
+  DeliveryMethod,
   DemonstrationAction,
   DemonstrationOrderStep,
   Order,
@@ -101,6 +102,15 @@ export function paymentLabel(order: Pick<Order, "paymentMethod" | "paymentStatus
   return `${paymentMethodLabel(order.paymentMethod)} (${PAYMENT_STATUS_LABELS[order.paymentStatus]})`;
 }
 
+/**
+ * When the store deletes a sample order it does not keep, from the catalog's period; `null` for orders it keeps or where
+ * the catalog states no period.
+ */
+export function sampleRetentionText(order: { scheduledForDeletion?: boolean }, retentionDays: number | null) {
+  if (retentionDays === null || order.scheduledForDeletion !== true) return null;
+  return `Sample orders are scheduled for deletion ${retentionDays} ${retentionDays === 1 ? "day" : "days"} after they're placed.`;
+}
+
 /** Paid with a demonstration payment: its refunds move no money and it sends no emails. */
 export const isDemonstrationOrder = (order: Pick<Order, "paymentMethod">) => order.paymentMethod === "DEMONSTRATION";
 
@@ -143,15 +153,18 @@ export const RETURN_REASON_LABELS: Record<ReturnReason, string> = {
 export const FAULT_REASONS: readonly ReturnReason[] = ["FAULTY", "DAMAGED", "WRONG_ITEM"];
 export const isFaultReason = (reason: ReturnReason) => FAULT_REASONS.includes(reason);
 
-/** One line per ordered item: which returns its rule accepts. */
-export function returnRuleText(rule: ReturnRule, windowDays: number) {
+/** How an order reached its customer, for return wording: collected at the store, otherwise delivered. */
+const handover = (deliveryMethod: DeliveryMethod) => (deliveryMethod === "STORE_PICKUP" ? "collection" : "delivery");
+
+/** One line per ordered item: which returns its rule accepts, counted from the order's delivery or collection. */
+export function returnRuleText(rule: ReturnRule, windowDays: number, deliveryMethod: DeliveryMethod) {
   switch (rule) {
     case "FAULT_ONLY":
       return "Returnable only if faulty, damaged or wrong.";
     case "UNOPENED_OR_FAULT":
       return "Returnable if unopened, or if faulty, damaged or wrong.";
     default:
-      return `Returnable for any reason within ${windowDays} days of delivery or collection.`;
+      return `Returnable for any reason within ${windowDays} days of ${handover(deliveryMethod)}.`;
   }
 }
 
@@ -200,7 +213,7 @@ export function returnPolicyTerms(policy: ReturnPolicyTerms, paymentMethod?: str
 }
 
 /** Where the order stands with returns, or `null` when there is nothing to say yet. */
-export function returnWindowText(eligibility: ReturnEligibility): string | null {
+export function returnWindowText(eligibility: ReturnEligibility, deliveryMethod: DeliveryMethod): string | null {
   const { windowEndsAt, policy } = eligibility;
   switch (eligibility.reasonCode) {
     case null:
@@ -212,7 +225,7 @@ export function returnWindowText(eligibility: ReturnEligibility): string | null 
     case "NOT_PAID":
       return "There is no paid amount left to return on this order.";
     default:
-      return `Returns open for ${policy.windowDays} days after delivery or collection.`;
+      return `Returns open for ${policy.windowDays} days after ${handover(deliveryMethod)}.`;
   }
 }
 

@@ -1,8 +1,9 @@
+import { randomInt } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import prisma from '../config/database.js';
 import { generateToken, generateRefreshToken, isCustomerToken, verifyRefreshToken } from '../config/auth.js';
-import { registerSchema, loginSchema, forgotPasswordSchema, resetPasswordSchema, changePasswordSchema, addressSchema } from '../utils/validators.js';
-import { sendOtpVerificationEmail } from '../services/mailService.js';
+import { registerSchema, loginSchema, changePasswordSchema, addressSchema, profileSchema } from '../utils/validators.js';
+import { isMailConfigured, sendOtpVerificationEmail } from '../services/mailService.js';
 import { httpError } from '../services/catalogService.js';
 import {
   activateSubscription, canonicalEmail, lockAddress, sanitizedFailure, syncPromotionalPreference,
@@ -15,25 +16,39 @@ const OTP_MAX_ATTEMPTS = Number(process.env.OTP_MAX_ATTEMPTS || 5);
 const internalError = () => httpError(500, 'Internal server error');
 
 function generateOtp() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return randomInt(100000, 1000000).toString();
 }
 
+/** While the last code is valid and was sent this recently, asking again sends nothing and gives no fresh attempts. */
+const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
+
+/**
+ * Issues and emails a new code, unless the account's current code is still valid and under a minute old. The check and
+ * the write are one conditional update, so neither a caller's partial record nor two requests at once get round it.
+ */
 async function issueVerificationOtp(user) {
+  const now = new Date();
   const otp = generateOtp();
-  const updated = await prisma.user.update({
-    where: { id: user.id },
+  const issued = await prisma.user.updateMany({
+    where: {
+      id: user.id,
+      OR: [
+        { otpCode: null }, { otpExpiresAt: null }, { otpExpiresAt: { lte: now } },
+        { otpLastSentAt: null }, { otpLastSentAt: { lte: new Date(now.getTime() - OTP_RESEND_COOLDOWN_MS) } },
+      ],
+    },
     data: {
       otpCode: otp,
-      otpExpiresAt: new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000),
+      otpExpiresAt: new Date(now.getTime() + OTP_EXPIRY_MINUTES * 60 * 1000),
       otpAttempts: 0,
-      otpLastSentAt: new Date(),
+      otpLastSentAt: now,
       emailVerifyToken: null,
       emailVerifyExpires: null,
     },
-    select: { id: true, email: true, firstName: true },
   });
+  if (!issued.count) return false;
 
-  const sent = await sendOtpVerificationEmail(updated, otp).catch((error) => {
+  const sent = await sendOtpVerificationEmail({ id: user.id, email: user.email, firstName: user.firstName }, otp).catch((error) => {
     console.error('OTP verification email failed:', error.message);
     return false;
   });
@@ -142,7 +157,7 @@ export const login = async (req, res, next) => {
     if (process.env.ENABLE_EMAIL_VERIFICATION === 'true' && !emailVerified) {
       await issueVerificationOtp(user);
       return res.status(403).json({
-        error: 'Please verify your email with the OTP code we sent before signing in',
+        error: 'Please verify your email with the code we sent before signing in',
         requiresOtp: true,
         email: user.email,
       });
@@ -265,24 +280,21 @@ export const verifyOtp = async (req, res, next) => {
   try {
     const { email, code } = req.body;
     if (!email || !code) {
-      return res.status(400).json({ error: 'Email and OTP code are required' });
+      return res.status(400).json({ error: 'Email and verification code are required' });
     }
 
     const normalizedCode = String(code).replace(/\D/g, '');
     if (normalizedCode.length !== 6) {
-      return res.status(400).json({ error: 'Enter the 6-digit OTP code' });
+      return res.status(400).json({ error: 'Enter the 6-digit verification code' });
     }
 
     const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    if (user.emailVerified) {
-      return res.json({ message: 'Email already verified' });
-    }
-    if (!user.otpCode || !user.otpExpiresAt) {
-      return res.status(400).json({ error: 'No OTP found. Request a new code.' });
+    // An unknown address, a verified account and one without a code get one answer, so it doesn't say which exist.
+    if (!user || user.emailVerified || !user.otpCode || !user.otpExpiresAt) {
+      return res.status(400).json({ error: "There's no active code for this email. Request a new code, or sign in if your email is already verified." });
     }
     if (user.otpExpiresAt < new Date()) {
-      return res.status(400).json({ error: 'OTP expired. Request a new code.' });
+      return res.status(400).json({ error: 'Verification code expired. Request a new code.' });
     }
     if ((user.otpAttempts || 0) >= OTP_MAX_ATTEMPTS) {
       return res.status(400).json({ error: 'Too many failed attempts. Request a new code.' });
@@ -290,7 +302,8 @@ export const verifyOtp = async (req, res, next) => {
     if (user.otpCode !== normalizedCode) {
       const attempts = (user.otpAttempts || 0) + 1;
       await prisma.user.update({ where: { id: user.id }, data: { otpAttempts: attempts } });
-      return res.status(400).json({ error: `Invalid OTP. ${Math.max(OTP_MAX_ATTEMPTS - attempts, 0)} attempt(s) remaining.` });
+      const remaining = Math.max(OTP_MAX_ATTEMPTS - attempts, 0);
+      return res.status(400).json({ error: `Invalid verification code. ${remaining} ${remaining === 1 ? 'attempt' : 'attempts'} remaining.` });
     }
 
     await prisma.user.update({
@@ -316,18 +329,14 @@ export const resendVerification = async (req, res, next) => {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: 'Email is required' });
 
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user || user.emailVerified) {
-      return res.json({ message: 'If verification is needed, a new email has been sent' });
+    // Whether mail can be sent at all is the store's setting, not the account's, so anyone may be told.
+    if (!isMailConfigured()) {
+      return res.status(503).json({ error: 'Email delivery is not configured.', code: 'MAIL_NOT_CONFIGURED' });
     }
-
-    const sent = await issueVerificationOtp(user);
-    res.json({
-      message: sent
-        ? 'If verification is needed, a new OTP has been sent'
-        : 'Verification OTP could not be sent. Check email settings.',
-      verificationEmailSent: sent,
-    });
+    // One answer whoever asks; only an account that needs verification is sent a code (a failed send is logged).
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (user && !user.emailVerified) await issueVerificationOtp(user);
+    res.json({ message: 'If this email needs verification, a new code has been sent.' });
   } catch (error) {
     next(error);
   }
@@ -444,10 +453,11 @@ export const setDefaultAddress = async (req, res, next) => {
 
 export const updateProfile = async (req, res, next) => {
   try {
-    const { firstName, lastName, phone, profileImage, promotionalEmails } = req.body;
+    const { promotionalEmails } = req.body;
     if (promotionalEmails !== undefined && typeof promotionalEmails !== 'boolean') {
       return res.status(400).json({ error: 'promotionalEmails must be true or false' });
     }
+    const { firstName, lastName, phone, profileImage } = profileSchema.parse(req.body);
 
     // The preference follows the subscription list: subscribe or unsubscribe the address, then show what is sent. The
     // subscription is written before any account, the order every preference writer uses, so two writers never deadlock.
@@ -506,82 +516,6 @@ export const changePassword = async (req, res, next) => {
     });
     
     res.json({ message: 'Password changed successfully' });
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const forgotPassword = async (req, res, next) => {
-  try {
-    const validatedData = forgotPasswordSchema.parse(req.body);
-    
-    const user = await prisma.user.findUnique({
-      where: { email: validatedData.email },
-    });
-    
-    if (!user) {
-      // Don't reveal if email exists or not
-      return res.json({ message: 'If the email exists, a reset link will be sent' });
-    }
-    
-    // Generate reset token
-    const resetToken = Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
-    const expiresAt = new Date(Date.now() + 3600000); // 1 hour
-    
-    // Delete any existing reset token
-    await prisma.passwordReset.deleteMany({
-      where: { userId: user.id },
-    });
-    
-    // Create password reset record
-    await prisma.passwordReset.create({
-      data: {
-        userId: user.id,
-        token: resetToken,
-        expiresAt,
-      },
-    });
-    
-    // TODO: Send email with reset link
-    // For now, return the token (in production, this should be sent via email)
-    res.json({ 
-      message: 'If the email exists, a reset link will be sent',
-      token: resetToken, // Remove this in production
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const resetPassword = async (req, res, next) => {
-  try {
-    const validatedData = resetPasswordSchema.parse(req.body);
-    
-    const passwordReset = await prisma.passwordReset.findUnique({
-      where: { token: validatedData.token },
-      include: { user: true },
-    });
-    
-    if (!passwordReset || passwordReset.usedAt || new Date(passwordReset.expiresAt) < new Date()) {
-      return res.status(400).json({ error: 'Invalid or expired reset token' });
-    }
-    
-    // Hash new password
-    const hashedPassword = await bcrypt.hash(validatedData.password, 10);
-    
-    // Update user password
-    await prisma.user.update({
-      where: { id: passwordReset.userId },
-      data: { password: hashedPassword },
-    });
-    
-    // Mark token as used
-    await prisma.passwordReset.update({
-      where: { id: passwordReset.id },
-      data: { usedAt: new Date() },
-    });
-    
-    res.json({ message: 'Password reset successfully' });
   } catch (error) {
     next(error);
   }

@@ -235,15 +235,22 @@ function returnWindowBlock(order) {
     : null;
 }
 
-// A requested refund is never described as sent; REFUND_CONFIRMED is the only "sent" message.
+// A requested refund is never described as sent; REFUND_CONFIRMED is the only "sent" message. A refund of a
+// demonstration payment moves no money and sends no later email, as its order page says.
 function refundRequestedBlocks(refund) {
   const amount = formatKes(refund.amount, 'refund.amount');
+  const demonstration = refund.method === 'DEMONSTRATION';
   return [
-    notice(`A refund of ${amount} has been requested. It will be sent to you via M-Pesa, and we will email you again once it is sent.`),
+    notice(demonstration
+      ? `A refund of ${amount} has been requested. Refunds of demonstration payments move no money.`
+      : `A refund of ${amount} has been requested. It will be sent to you via M-Pesa, and we will email you again once it is sent.`),
     refund.includesDeliveryFee === true ? paragraph('This amount includes the delivery fee.') : null,
-    keyValueBlock([['Refund number', optionalText(refund.number)], ['Refund status', 'Requested - not sent yet']]),
+    keyValueBlock([['Refund number', optionalText(refund.number)], ['Refund status', demonstration ? 'Requested - not recorded yet' : 'Requested - not sent yet']]),
   ];
 }
+
+/** A sample order's returns are approved and received in the demonstration, whoever paid for it and however. */
+const isSampleOrder = (order) => order.isDemo === true;
 
 function returnNumber(returnRequest) {
   return requiredText(returnRequest?.number, 'returnRequest.number');
@@ -302,13 +309,18 @@ const templates = {
   },
 
   ORDER_READY_FOR_PICKUP({ order, orderNumber, greeting }) {
+    const sample = isSampleOrder(order);
     return {
-      subject: `Order ${orderNumber} is ready for pickup`,
+      subject: sample ? `Order ${orderNumber} marked as ready for pickup` : `Order ${orderNumber} is ready for pickup`,
       eyebrow: 'Ready for pickup',
-      title: 'Your order is ready for pickup',
-      intro: `${greeting} order ${orderNumber} is ready for pickup.`,
+      title: sample ? 'Order marked as ready for pickup' : 'Your order is ready for pickup',
+      intro: sample
+        ? `${greeting} order ${orderNumber} was marked as ready for pickup in the demonstration.`
+        : `${greeting} order ${orderNumber} is ready for pickup.`,
       blocks: [
-        notice(`When you collect it, quote order number ${orderNumber}. Our staff will confirm the handover with you.`),
+        notice(sample
+          ? 'Nothing is handed over. Mark it as collected from your order\'s demonstration controls.'
+          : `When you collect it, quote order number ${orderNumber}. Our staff will confirm the handover with you.`),
         itemsBlock(order.items),
       ],
     };
@@ -316,35 +328,45 @@ const templates = {
 
   ORDER_DISPATCHED(view) {
     const { order, orderNumber, greeting } = view;
+    const sample = isSampleOrder(order);
     return {
-      subject: `Order ${orderNumber} has been dispatched`,
+      subject: sample ? `Order ${orderNumber} marked as dispatched` : `Order ${orderNumber} has been dispatched`,
       eyebrow: 'Order dispatched',
-      title: 'Your order is on its way',
-      intro: `${greeting} order ${orderNumber} has been dispatched and is on its way to you.`,
+      title: sample ? 'Order marked as dispatched' : 'Your order is on its way',
+      intro: sample
+        ? `${greeting} order ${orderNumber} was marked as dispatched in the demonstration.`
+        : `${greeting} order ${orderNumber} has been dispatched and is on its way to you.`,
       blocks: [
+        sample ? notice('Sample products are not sent. Mark it as delivered from your order\'s demonstration controls.') : null,
         orderDetailsBlock(view, [['Tracking reference', optionalText(order.trackingNumber)]]),
         itemsBlock(order.items),
-        paragraph('We will email you again once delivery is confirmed.'),
+        sample ? null : paragraph('We will email you again once delivery is confirmed.'),
       ],
     };
   },
 
   ORDER_DELIVERED({ order, orderNumber, greeting }) {
+    const sample = isSampleOrder(order);
     return {
-      subject: `Order ${orderNumber} delivered`,
+      subject: sample ? `Order ${orderNumber} marked as delivered` : `Order ${orderNumber} delivered`,
       eyebrow: 'Order delivered',
-      title: 'Your order has been delivered',
-      intro: `${greeting} we have confirmed that order ${orderNumber} has been delivered. Thank you for shopping with ${BRAND_NAME}.`,
+      title: sample ? 'Order marked as delivered' : 'Your order has been delivered',
+      intro: sample
+        ? `${greeting} order ${orderNumber} was marked as delivered in the demonstration.`
+        : `${greeting} we have confirmed that order ${orderNumber} has been delivered. Thank you for shopping with ${BRAND_NAME}.`,
       blocks: [returnWindowBlock(order), itemsBlock(order.items)],
     };
   },
 
   ORDER_PICKED_UP({ order, orderNumber, greeting }) {
+    const sample = isSampleOrder(order);
     return {
-      subject: `Order ${orderNumber} collected`,
+      subject: sample ? `Order ${orderNumber} marked as collected` : `Order ${orderNumber} collected`,
       eyebrow: 'Order collected',
-      title: 'Your order has been collected',
-      intro: `${greeting} we have confirmed that order ${orderNumber} has been collected. Thank you for shopping with ${BRAND_NAME}.`,
+      title: sample ? 'Order marked as collected' : 'Your order has been collected',
+      intro: sample
+        ? `${greeting} order ${orderNumber} was marked as collected in the demonstration.`
+        : `${greeting} we have confirmed that order ${orderNumber} has been collected. Thank you for shopping with ${BRAND_NAME}.`,
       blocks: [returnWindowBlock(order), itemsBlock(order.items)],
     };
   },
@@ -365,17 +387,24 @@ const templates = {
     };
   },
 
-  RETURN_APPROVED({ orderNumber, greeting, returnRequest }) {
+  RETURN_APPROVED({ order, orderNumber, greeting, returnRequest }) {
     const rma = returnNumber(returnRequest);
+    const sample = isSampleOrder(order);
     return {
       subject: `Return request ${rma} approved - order ${orderNumber}`,
       eyebrow: 'Return approved',
       title: 'Return request approved',
-      intro: `${greeting} your return request ${rma} for order ${orderNumber} has been approved.`,
+      intro: sample
+        ? `${greeting} your return request ${rma} for order ${orderNumber} has been approved in the demonstration.`
+        : `${greeting} your return request ${rma} for order ${orderNumber} has been approved.`,
       blocks: [
-        notice('Our staff will contact you to arrange the return.'),
+        notice(sample
+          ? 'Nothing needs to be sent back. Mark the return as received from your order\'s demonstration controls.'
+          : 'Our staff will contact you to arrange the return.'),
         returnLinesBlock(returnRequest.lines),
-        paragraph('Once we have received and inspected the items, we will email you about any refund due.'),
+        paragraph(sample
+          ? 'Any refund due is recorded when the return is marked as received.'
+          : 'Once we have received and inspected the items, we will email you about any refund due.'),
       ],
     };
   },
@@ -392,17 +421,20 @@ const templates = {
     };
   },
 
-  RETURN_RECEIVED({ orderNumber, greeting, returnRequest, refund }) {
+  RETURN_RECEIVED({ order, orderNumber, greeting, returnRequest, refund }) {
     const rma = returnNumber(returnRequest);
     const note = optionalText(returnRequest.decisionNote);
+    const sample = isSampleOrder(order);
     const outcome = refund
       ? refundRequestedBlocks(refund)
       : [notice('No refund is due for this return.'), note ? noteBlock('Note from our team', note) : null];
     return {
       subject: `Return ${rma} received - order ${orderNumber}`,
       eyebrow: 'Return received',
-      title: 'Returned items received',
-      intro: `${greeting} we have received and inspected the items returned under ${rma} for order ${orderNumber}.`,
+      title: sample ? 'Return marked as received' : 'Returned items received',
+      intro: sample
+        ? `${greeting} the items returned under ${rma} for order ${orderNumber} were marked as received in the demonstration.`
+        : `${greeting} we have received and inspected the items returned under ${rma} for order ${orderNumber}.`,
       blocks: [...outcome, returnLinesBlock(returnRequest.lines, { inspected: true })],
     };
   },

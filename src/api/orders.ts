@@ -214,6 +214,11 @@ export interface CustomerOrder extends Order {
   customerActions: CustomerAction[];
   /** The store's part the owner may play for a sample order; empty when none applies. */
   demonstrationActions: DemonstrationAction[];
+  /**
+   * A sample order the store deletes once the catalog's `sampleOrderRetentionDays` have passed; false for orders it keeps
+   * (an M-Pesa attempt or money evidence, live orders) and where an older backend omits it.
+   */
+  scheduledForDeletion: boolean;
 }
 
 /** Body of `POST /orders/:id/returns`; the server rejects unknown keys. */

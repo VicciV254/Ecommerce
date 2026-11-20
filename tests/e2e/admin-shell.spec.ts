@@ -37,6 +37,8 @@ test.describe("routed modules", () => {
   });
 
   test("every module keeps its place through a deep link and a refresh, with its title and current link", async ({ page }) => {
+    // Every module costs a fresh page load: the walk outgrows the default budget on a busy machine.
+    test.setTimeout(ADMIN_PLACES.length * 8_000);
     for (const place of ADMIN_PLACES) {
       await page.goto(`/#${place.route}`);
       await waitForPlace(page, place.h1);

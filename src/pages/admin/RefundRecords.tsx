@@ -10,8 +10,8 @@ import { formatDateTime, formatKES } from "../../utils/format";
 import type { ActionOutcome } from "./OperationDialogs";
 import { Feedback, inputClass } from "./shared";
 
-const actionClass = "min-h-11 rounded-sm border border-brand-primary px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-brand-primary hover:bg-brand-primary hover:text-white";
-const cautionClass = "min-h-11 rounded-sm border border-error/50 px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-error hover:bg-error hover:text-white";
+const actionClass = "min-h-11 rounded-sm border border-brand-primary px-3 py-2 text-[0.6875rem] font-bold uppercase tracking-wider text-brand-primary hover:bg-brand-primary hover:text-white";
+const cautionClass = "min-h-11 rounded-sm border border-error/50 px-3 py-2 text-[0.6875rem] font-bold uppercase tracking-wider text-error hover:bg-error hover:text-white";
 const DESTRUCTIVE: readonly RefundAction[] = ["fail", "cancel"];
 /** A demonstration refund the customer can still record. */
 const RECORDABLE: readonly StaffRefund["status"][] = ["REQUESTED", "APPROVED", "PROCESSING"];
@@ -49,7 +49,7 @@ export function StaffRefundCard({ refund, canWrite, onAction, header, anchorId }
     <li className="rounded-md border border-light-gray p-3 sm:p-4">
       {header}
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <h4 id={anchorId} tabIndex={-1} className="font-mono text-sm font-bold text-brand-primary">{refund.number}</h4>
+        <h4 id={anchorId} tabIndex={-1} className="font-mono text-sm font-bold text-brand-primary [overflow-wrap:anywhere]">{refund.number}</h4>
         <p className="text-sm font-semibold">{staffRefundStatus(refund)}</p>
       </div>
       <p className="mt-1 text-lg font-semibold tabular-nums text-navy-900">
@@ -148,7 +148,7 @@ function PaymentReviewRefund({ order, attempt, canWrite, onOutcome }: {
               from it). No money is sent until the refund is confirmed with an M-Pesa reference.
             </p>
             <div>
-              <label htmlFor={`${id}-reason`} className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-600">Reason (required)</label>
+              <label htmlFor={`${id}-reason`} className="mb-1 block text-[0.625rem] font-bold uppercase tracking-wider text-gray-600">Reason (required)</label>
               <textarea ref={reasonRef} id={`${id}-reason`} rows={2} maxLength={500} value={reason}
                 onChange={(event) => { setReason(event.target.value); setError(""); }} className={`${inputClass} min-h-11 text-base`} />
             </div>
@@ -230,7 +230,7 @@ function OwedRefundRequest({ order, option, onOutcome }: {
               {isDemonstrationOrder(order) ? "It will be a demonstration refund: no money is sent." : "No money is sent until it is approved, sent and confirmed."}
             </p>
             <div>
-              <label htmlFor={`${id}-reason`} className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-600">Reason (required)</label>
+              <label htmlFor={`${id}-reason`} className="mb-1 block text-[0.625rem] font-bold uppercase tracking-wider text-gray-600">Reason (required)</label>
               <textarea ref={reasonRef} id={`${id}-reason`} rows={2} maxLength={500} value={reason}
                 onChange={(event) => { setReason(event.target.value); setError(""); }} className={`${inputClass} min-h-11 text-base`} />
             </div>
@@ -272,7 +272,7 @@ export function OrderPayments({ order, canWrite, defaultOpen, onOutcome }: {
   return (
     <div>
       <button type="button" aria-expanded={open} aria-controls={regionId} onClick={() => setOpen((value) => !value)}
-        className="min-h-11 w-full rounded-sm border border-brand-primary px-4 py-2 text-left text-[11px] font-bold uppercase tracking-wider text-brand-primary hover:bg-brand-primary hover:text-white">
+        className="min-h-11 w-full rounded-sm border border-brand-primary px-4 py-2 text-left text-[0.6875rem] font-bold uppercase tracking-wider text-brand-primary hover:bg-brand-primary hover:text-white">
         M-Pesa payments<span className="sr-only"> for {order.orderNumber}</span>
       </button>
       <div id={regionId} className={open ? "mt-3" : undefined}>

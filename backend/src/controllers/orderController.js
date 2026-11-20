@@ -7,6 +7,7 @@ import { dispatchNotifications } from "../services/notificationService.js";
 import { customerOrderView, staffOrderView } from "../services/orderViews.js";
 import { requestOwedRefund } from "../services/owedRefundService.js";
 import { payWithDemonstration } from "../services/paymentService.js";
+import { sampleOrdersScheduledForDeletion } from "../services/sampleOrderRetentionService.js";
 import {
   completeDemonstrationRefund, createPaymentReviewRefund, listRefunds, refundDto, transitionRefund,
 } from "../services/refundService.js";
@@ -30,7 +31,8 @@ const ORDER_STATUSES = ["PENDING", "PROCESSING", "SHIPPED", "READY_FOR_PICKUP", 
 async function customerOrder(userId, id) {
   const order = await prisma.order.findFirst({ where: { id, userId, ...customerOrderWhere() }, include: orderInclude });
   if (!order) throw httpError(404, "Order not found", "ORDER_NOT_FOUND");
-  return customerOrderView(order, { reviewOpen: await orderReviewState([order.id]) });
+  const [reviewOpen, scheduled] = await Promise.all([orderReviewState([order.id]), sampleOrdersScheduledForDeletion([order.id])]);
+  return customerOrderView(order, { reviewOpen, scheduled });
 }
 
 async function staffOrder(id) {
@@ -68,9 +70,10 @@ export const getUserOrders = async (req, res, next) => {
       prisma.order.findMany({ where, skip: (page - 1) * limit, take: limit, include: orderInclude, orderBy: { createdAt: "desc" } }),
       prisma.order.count({ where }),
     ]);
-    const reviewOpen = await orderReviewState(orders.map((order) => order.id));
+    const ids = orders.map((order) => order.id);
+    const [reviewOpen, scheduled] = await Promise.all([orderReviewState(ids), sampleOrdersScheduledForDeletion(ids)]);
     res.json({
-      orders: orders.map((order) => customerOrderView(order, { reviewOpen })),
+      orders: orders.map((order) => customerOrderView(order, { reviewOpen, scheduled })),
       pagination: { page, limit, total, pages: Math.ceil(total / limit) },
     });
   } catch (error) {

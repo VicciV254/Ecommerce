@@ -592,6 +592,6 @@ test('scheduled maintenance is disabled without a secret and requires the exact 
   const allowed = await run(`Bearer ${process.env.CRON_SECRET}`);
   assert.equal(allowed.status, 200);
   const body = await allowed.json();
-  assert.deepEqual(Object.keys(body.results).sort(), ['notifications', 'payments', 'reservations']);
+  assert.deepEqual(Object.keys(body.results).sort(), ['notifications', 'payments', 'reservations', 'sampleOrders']);
   assert.equal(JSON.stringify(body).includes('@example.test'), false);
 });

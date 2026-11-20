@@ -186,7 +186,7 @@ export function ProductGallery({ name, images, resetKey, layout, priority = fals
                   aria-current={position === current ? "true" : undefined}
                   onClick={() => go(position)}
                   className={`relative block aspect-square w-full overflow-hidden rounded-md border-2 bg-surface-warm transition-colors duration-(--motion-feedback) ${
-                    position === current ? "border-navy-900" : "border-transparent hover:border-gold-600"
+                    position === current ? "border-navy-900" : "border-transparent hover:border-gold-600 forced-colors:border-[color:Canvas]"
                   }`}
                 >
                   <ResponsiveImage url={item.url} preset="thumbnail" sizes={layout.thumbnailSizes} width={item.width} height={item.height} alt="" className="h-full w-full object-cover" />

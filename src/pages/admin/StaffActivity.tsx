@@ -7,6 +7,7 @@ import { activityLink, activitySentence, parseActivityPage } from "./activityMod
 import { ACTIVITY_TYPES, activityRoute, isActivityType, parseActivityParams } from "./adminRoutes";
 import { roleLabel } from "./permissions";
 import { usePage } from "./usePage";
+import { WrappingSelect } from "./shared";
 
 const controlClass =
   "inline-flex min-h-11 items-center justify-center rounded-sm border border-light-gray px-3 py-2 text-sm font-semibold text-navy-900 hover:border-brand-primary hover:text-brand-primary";
@@ -57,14 +58,14 @@ export function StaffActivity() {
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div className="w-full md:w-72">
           <label htmlFor={selectId} className="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-600">Show</label>
-          <select
+          <WrappingSelect
             id={selectId}
             value={type}
             onChange={(event) => { if (isActivityType(event.target.value)) navigate(activityRoute({ type: event.target.value }), { replace: true }); }}
             className="min-h-11 w-full rounded-sm border border-light-gray bg-off-white px-3 py-2 text-sm"
           >
             {ACTIVITY_TYPES.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
-          </select>
+          </WrappingSelect>
         </div>
         {data && <p className="text-sm font-semibold text-gray-600">{data.pagination.total} {data.pagination.total === 1 ? "entry" : "entries"}</p>}
       </div>

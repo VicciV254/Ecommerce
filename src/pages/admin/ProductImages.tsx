@@ -4,7 +4,7 @@ import type { UploadedImage } from "../../api/cloudinaryUpload";
 import { ResponsiveImage } from "../../components/ui";
 import { describeVariant } from "../../store/catalogModel";
 import { formatFileSize } from "../../utils/format";
-import { dangerButtonClass, inputClass, isAcceptedImageUrl, smallButtonClass } from "./shared";
+import { WrappingSelect, dangerButtonClass, inputClass, isAcceptedImageUrl, smallButtonClass } from "./shared";
 import { MAX_PRODUCT_IMAGES, UPLOAD_LIMITS, isActiveUpload, type UploadJob, type UploadTarget, type useImageUploads } from "./useImageUploads";
 
 /** An uploaded file's facts; such an image's file never changes in place. */
@@ -117,7 +117,7 @@ function fileFacts(file: UploadedFile) {
   return ["Uploaded", file.format.toUpperCase(), size, dimensions].filter(Boolean).join(" · ");
 }
 
-const labelClass = "mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-600";
+const labelClass = "mb-1 block text-[0.625rem] font-bold uppercase tracking-wider text-gray-600";
 /** Touch targets are sized in px so doubled text cannot double them. */
 const actionClass = `${smallButtonClass} min-h-[44px] min-w-[44px]`;
 const removeClass = `${dangerButtonClass} min-h-[44px] min-w-[44px]`;
@@ -134,8 +134,11 @@ function Preview({ row, className = "" }: { row: ImageRow; className?: string })
   );
 }
 
+/** Thumbnail beside the facts; on a phone with enlarged text they stack, so a badge's word keeps its width. */
+const imageItemClass = "grid grid-cols-[72px_minmax(0,1fr)] gap-3 rounded-md border border-light-gray p-3 max-md:@max-[12rem]:grid-cols-1 md:grid-cols-[96px_minmax(0,1fr)]";
+
 function ImageHeading({ row, number, isMain }: { row: ImageRow; number: number; isMain: boolean }) {
-  const badge = "rounded-sm px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider";
+  const badge = "rounded-sm px-1.5 py-0.5 text-[0.5625rem] font-bold uppercase tracking-wider";
   return (
     <div className="min-w-0 space-y-1">
       <h4 className="flex flex-wrap items-center gap-1.5 text-xs font-bold text-brand-primary">
@@ -144,7 +147,7 @@ function ImageHeading({ row, number, isMain }: { row: ImageRow; number: number; 
         {row.upload && <span className={`${badge} bg-ocean-blue/15 text-ocean-blue-dark`}>Unsaved upload</span>}
         {!row.id && !row.upload && <span className={`${badge} bg-gray-100 text-gray-600`}>New</span>}
       </h4>
-      <p className="text-[11px] text-gray-600 [overflow-wrap:anywhere]">{row.file ? fileFacts(row.file) : "Image URL"}</p>
+      <p className="text-[0.6875rem] text-gray-600 [overflow-wrap:anywhere]">{row.file ? fileFacts(row.file) : "Image URL"}</p>
     </div>
   );
 }
@@ -174,11 +177,11 @@ function ImageCard({ row, index, count, isMain, radioName, variants, canReplace,
   const variantId = useId();
   const validUrl = row.file !== null || isAcceptedImageUrl(row.url.trim());
   return (
-    <li data-row-list="image" data-row-index={index} className="grid grid-cols-[72px_minmax(0,1fr)] gap-3 rounded-md border border-light-gray p-3 md:grid-cols-[96px_minmax(0,1fr)]">
+    <li data-row-list="image" data-row-index={index} className={imageItemClass}>
       <Preview row={row} className="md:row-span-2" />
       <ImageHeading row={row} number={number} isMain={isMain} />
-      <div className="col-span-2 space-y-3 md:col-span-1 md:col-start-2">
-        <div className="grid gap-3 md:grid-cols-2">
+      <div className="col-span-2 space-y-3 max-md:@max-[12rem]:col-span-1 md:col-span-1 md:col-start-2">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div>
             <label htmlFor={altId} className={labelClass}>Alt text</label>
             <input id={altId} aria-label={`Image ${number} alt text`} value={row.alt} disabled={locked} onChange={(event) => onPatch({ alt: event.target.value })} placeholder="Describe the image" className={inputClass} />
@@ -190,7 +193,7 @@ function ImageCard({ row, index, count, isMain, radioName, variants, canReplace,
             </div>
           )}
         </div>
-        <div className="grid gap-3 md:grid-cols-2 md:items-end">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:items-end">
           <div className="flex flex-wrap items-center gap-x-5 text-xs text-charcoal">
             <label className="flex min-h-[44px] items-center gap-2">
               <input type="radio" name={radioName} checked={isMain} disabled={locked} onChange={onMain} aria-label={`Image ${number} is the cover image`} className="h-4 w-4 accent-brand-secondary" />
@@ -204,10 +207,10 @@ function ImageCard({ row, index, count, isMain, radioName, variants, canReplace,
           {variants.length > 0 && (
             <div>
               <label htmlFor={variantId} className={labelClass}>Variant</label>
-              <select id={variantId} aria-label={`Image ${number} variant`} value={row.variantId ?? ""} disabled={locked} onChange={(event) => onPatch({ variantId: event.target.value || null })} className={inputClass}>
+              <WrappingSelect id={variantId} aria-label={`Image ${number} variant`} value={row.variantId ?? ""} disabled={locked} onChange={(event) => onPatch({ variantId: event.target.value || null })} className={inputClass}>
                 <option value="">All variants</option>
                 {variants.map((variant) => <option key={variant.id} value={variant.id}>{variantLabel(variant)}</option>)}
-              </select>
+              </WrappingSelect>
             </div>
           )}
         </div>
@@ -241,7 +244,7 @@ function ImageCard({ row, index, count, isMain, radioName, variants, canReplace,
 function ImageSummary({ row, index, isMain, variants }: { row: ImageRow; index: number; isMain: boolean; variants: readonly CatalogVariant[] }) {
   const variant = row.variantId ? variants.find((item) => item.id === row.variantId) : undefined;
   return (
-    <li className="grid grid-cols-[72px_minmax(0,1fr)] gap-3 rounded-md border border-light-gray p-3 md:grid-cols-[96px_minmax(0,1fr)]">
+    <li className={imageItemClass}>
       <Preview row={row} />
       <div className="min-w-0 space-y-1 text-xs text-charcoal [overflow-wrap:anywhere]">
         <ImageHeading row={row} number={index + 1} isMain={isMain} />
@@ -292,7 +295,7 @@ function UploadRow({ job, index, replaces, canRetry, locked, onCancel, onRetry, 
     <li data-row-list="upload" data-row-index={index} className="grid gap-2 rounded-md border border-light-gray bg-off-white p-3 md:grid-cols-[minmax(0,1fr)_minmax(112px,176px)_auto] md:items-center">
       <div className="min-w-0">
         <p className="truncate text-xs font-semibold text-brand-primary" title={name}>{name}</p>
-        <p className={`text-[11px] [overflow-wrap:anywhere] ${job.status === "failed" ? "font-semibold text-error" : "text-gray-600"}`}>
+        <p className={`text-[0.6875rem] [overflow-wrap:anywhere] ${job.status === "failed" ? "font-semibold text-error" : "text-gray-600"}`}>
           {replaces && `${replaces} · `}{status}
         </p>
       </div>
@@ -380,8 +383,8 @@ export function ProductImagesSection({
         focusedRow.current = row ? { element: event.target, list: row.dataset.rowList ?? "", index: Number(row.dataset.rowIndex) } : null;
       }}
     >
-      <h3 ref={heading} id={headingId} tabIndex={-1} data-editor-section="images" className="text-[11px] font-bold uppercase tracking-wider text-brand-primary">Images</h3>
-      {!canWrite && <p className="text-[11px] text-gray-600">View only: your role can see these images but cannot change them.</p>}
+      <h3 ref={heading} id={headingId} tabIndex={-1} data-editor-section="images" className="text-[0.6875rem] font-bold uppercase tracking-wider text-brand-primary">Images</h3>
+      {!canWrite && <p className="text-[0.6875rem] text-gray-600">View only: your role can see these images but cannot change them.</p>}
       {canWrite && (
         <div className="space-y-3 rounded-md border border-dashed border-light-gray p-3">
           <div>
@@ -399,9 +402,9 @@ export function ProductImagesSection({
                 event.target.value = "";
                 uploads.addFiles(files, { kind: "add" });
               }}
-              className="block min-h-[44px] w-full text-xs text-charcoal file:mr-3 file:min-h-[44px] file:cursor-pointer file:rounded-sm file:border-0 file:bg-brand-primary file:px-4 file:text-[11px] file:font-bold file:uppercase file:tracking-wider file:text-white disabled:opacity-60"
+              className="block min-h-[44px] w-full text-xs text-charcoal file:mr-3 file:min-h-[44px] file:cursor-pointer file:rounded-sm file:border-0 file:bg-brand-primary file:px-4 file:text-[0.6875rem] file:font-bold file:uppercase file:tracking-wider file:text-white disabled:opacity-60"
             />
-            <p id={uploadHintId} className="mt-1 text-[11px] text-gray-600">
+            <p id={uploadHintId} className="mt-1 text-[0.6875rem] text-gray-600">
               JPEG, PNG, WebP or AVIF, up to {formatFileSize(UPLOAD_LIMITS.maxBytes)} each. Uploads appear below and are kept only when you save the product.
               {full && ` This product has reached the ${MAX_PRODUCT_IMAGES}-image limit.`}
             </p>
@@ -442,12 +445,12 @@ export function ProductImagesSection({
           )}
         </div>
       )}
-      {canWrite && variantHint && <p className="text-[11px] text-gray-600">{variantHint}</p>}
+      {canWrite && variantHint && <p className="text-[0.6875rem] text-gray-600">{variantHint}</p>}
       {!rows.length && (
         <p className="rounded-md bg-warning/10 p-3 text-xs font-semibold text-charcoal">Needs images: shoppers will see an “image not yet available” placeholder.</p>
       )}
       {rows.length > 0 && (
-        <ol aria-label="Product images" className="space-y-3">
+        <ol aria-label="Product images" className="space-y-3 @container">
           {rows.map((row, index) => canWrite ? (
             <ImageCard
               key={row.rowKey}

@@ -21,7 +21,10 @@ import { useCarriedNotice } from "./carriedNotice";
 import { CategoryForm, DesignerForm } from "./CatalogForms";
 import { matchesReadiness, needsImages, productReadiness, readinessLabels, visibilityLabel, type Readiness } from "./catalogReadiness";
 import { ProductEditor } from "./ProductEditor";
-import { Feedback, Panel, categoryOptions, dangerButtonClass, descendantIds, inputClass, primaryButtonClass, smallButtonClass } from "./shared";
+import { Feedback, Panel, WrappingSelect, categoryOptions, dangerButtonClass, descendantIds, inputClass, primaryButtonClass, smallButtonClass } from "./shared";
+
+/** "1 product", "2 products". */
+const productCount = (count: number) => `${count} ${count === 1 ? "product" : "products"}`;
 
 /** The status filter's choices; "all" stands for no filter (the address leaves it out). */
 const STATUS_OPTIONS: readonly { value: ProductStatusFilter | "all"; label: string }[] = [
@@ -46,7 +49,7 @@ const PRODUCT_LIMIT = 120;
  * it sits beside the 240px navigation column and has no maximum width). Tiles use the card renditions (up to 960px).
  */
 const PRODUCT_TILE_SIZES =
-  "(min-width: 1280px) calc(20vw - 82.8px), (min-width: 1024px) calc(25vw - 40px), (min-width: 640px) calc(33.34vw - 43px), calc(50vw - 46px)";
+  "(min-width: 80em) calc(20vw - 82.8px), (min-width: 64em) calc(25vw - 40px), (min-width: 40em) calc(33.34vw - 43px), calc(50vw - 46px)";
 /** Filter controls: 44px tall, a full row each on phones. */
 const filterClass = `min-h-[44px] min-w-0 ${inputClass}`;
 const treeButtonClass = `${smallButtonClass} min-h-[44px] min-w-[44px]`;
@@ -329,8 +332,8 @@ export function CatalogManager({ canWrite, showToast }: { canWrite: boolean; sho
         <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 border-b border-light-gray/60 py-1.5 pr-[6px]" style={{ paddingLeft: `${depth * 16 + 6}px` }}>
           <span data-category-name tabIndex={-1} className="min-w-0 flex-1 basis-[10rem] text-xs [overflow-wrap:break-word]">
             <span className={category.isActive ? "font-semibold text-brand-primary" : "text-gray-500 line-through"}>{category.name}</span>
-            <span className="ml-2 text-[10px] text-gray-500">{category.productCount} products · /{category.slug}</span>
-            {!category.isActive && <span className="ml-2 rounded-sm bg-gray-100 px-1 text-[9px] font-bold uppercase text-gray-600">Hidden</span>}
+            <span className="ml-2 text-[0.625rem] text-gray-500">{productCount(category.productCount)} · /{category.slug}</span>
+            {!category.isActive && <span className="ml-2 rounded-sm bg-gray-100 px-1 text-[0.5625rem] font-bold uppercase text-gray-600">Hidden</span>}
           </span>
           {canWrite && (
             <span className="flex flex-wrap gap-1">
@@ -363,28 +366,29 @@ export function CatalogManager({ canWrite, showToast }: { canWrite: boolean; sho
         {/* One filter per row on phones; side by side from 768px as room allows. */}
         <div className="mb-4 flex flex-wrap items-center gap-3">
           <input aria-label="Search products" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by name or tag…" className={`basis-full md:flex-1 md:basis-48 ${filterClass}`} />
-          <select aria-label="Filter products by category" value={categoryFilter ?? ""} onChange={(event) => changeFilters({ category: event.target.value || null })} className={`basis-full md:w-56 md:flex-none md:basis-auto ${filterClass}`}>
+          <WrappingSelect aria-label="Filter products by category" value={categoryFilter ?? ""} onChange={(event) => changeFilters({ category: event.target.value || null })} className={`basis-full md:w-56 md:flex-none md:basis-auto ${filterClass}`}>
             <option value="">All categories</option>
             {options.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
-          </select>
-          <select aria-label="Filter products by status" value={status ?? "all"} onChange={(event) => changeFilters({ status: STATUS_OPTIONS.find((item) => item.value === event.target.value && item.value !== "all")?.value as ProductStatusFilter | undefined ?? null })} className={`basis-full md:w-48 md:flex-none md:basis-auto ${filterClass}`}>
+          </WrappingSelect>
+          <WrappingSelect aria-label="Filter products by status" value={status ?? "all"} onChange={(event) => changeFilters({ status: STATUS_OPTIONS.find((item) => item.value === event.target.value && item.value !== "all")?.value as ProductStatusFilter | undefined ?? null })} className={`basis-full md:w-48 md:flex-none md:basis-auto ${filterClass}`}>
             {STATUS_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-          </select>
-          <select aria-label="Filter products by readiness" value={readiness ?? "any"} onChange={(event) => changeFilters({ readiness: READINESS_OPTIONS.find((item) => item.value === event.target.value && item.value !== "any")?.value as ProductReadinessFilter | undefined ?? null })} className={`basis-full md:w-48 md:flex-none md:basis-auto ${filterClass}`}>
+          </WrappingSelect>
+          <WrappingSelect aria-label="Filter products by readiness" value={readiness ?? "any"} onChange={(event) => changeFilters({ readiness: READINESS_OPTIONS.find((item) => item.value === event.target.value && item.value !== "any")?.value as ProductReadinessFilter | undefined ?? null })} className={`basis-full md:w-48 md:flex-none md:basis-auto ${filterClass}`}>
             {READINESS_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-          </select>
+          </WrappingSelect>
+          {/* Shrinks and wraps its words on a narrow phone with enlarged text, where a three-digit count no longer fits one line. */}
           <button
             type="button"
             aria-pressed={readiness === "needs-images"}
             onClick={() => changeFilters({ readiness: readiness === "needs-images" ? null : "needs-images" })}
-            className={`min-h-[44px] shrink-0 rounded-full border px-4 text-[11px] font-bold uppercase tracking-wider ${
+            className={`min-h-[44px] max-w-full rounded-full border px-4 py-1 text-[0.6875rem] font-bold uppercase tracking-wider ${
               readiness === "needs-images" ? "border-warning bg-warning text-white" : "border-warning/60 bg-white text-warning hover:bg-warning/10"
             }`}
           >
             Needs images ({needingImages})
           </button>
         </div>
-        <p className="mb-3 text-[11px] text-gray-600">{list.length} of {products.length} products</p>
+        <p className="mb-3 text-[0.6875rem] text-gray-600">{list.length} of {productCount(products.length)}</p>
         {/* Two cards per row on phones while 17rem fits (100% text); with enlarged text one per row, so names and
             labels keep whole words. From 640px the columns follow the viewport (see PRODUCT_TILE_SIZES). */}
         <div className="@container">
@@ -399,20 +403,20 @@ export function CatalogManager({ canWrite, showToast }: { canWrite: boolean; sho
                     <span className="relative block aspect-square overflow-hidden bg-warm-beige">
                       {image
                         ? <ResponsiveImage url={image.url} preset="card" sizes={PRODUCT_TILE_SIZES} width={image.width} height={image.height} alt="" className="h-full w-full object-cover" />
-                        : <span className="flex h-full items-center justify-center p-2 text-center text-[10px] font-bold uppercase text-warning">Needs images</span>}
+                        : <span className="flex h-full items-center justify-center p-2 text-center text-[0.625rem] font-bold uppercase text-warning">Needs images</span>}
                     </span>
                     <span className="block p-2">
-                      <span className="block truncate text-xs font-medium text-brand-primary">{product.name}</span>
-                      <span className="block text-[10px] text-gray-600">{formatKES(product.price)} · {stock.quantity} available</span>
+                      <span data-product-name className="block text-xs font-medium text-brand-primary [overflow-wrap:break-word]">{product.name}</span>
+                      <span className="block text-[0.625rem] text-gray-600">{formatKES(product.price)} · {stock.quantity} available</span>
                       {checks && <ProductLabels product={product} readiness={checks} sampleCover={Boolean(image?.isPlaceholder)} />}
                     </span>
                   </button>
                   <span className="flex flex-wrap border-t border-light-gray">
-                    <Link to={productPreviewRoute(product.id)} aria-label={`Preview ${product.name}`} className="flex min-h-[44px] flex-1 basis-[4.5rem] items-center justify-center px-2 text-[10px] font-bold uppercase tracking-wider text-brand-primary hover:bg-warm-beige">
+                    <Link to={productPreviewRoute(product.id)} aria-label={`Preview ${product.name}`} className="flex min-h-[44px] flex-1 basis-[4.5rem] items-center justify-center px-2 text-[0.625rem] font-bold uppercase tracking-wider text-brand-primary hover:bg-warm-beige">
                       Preview
                     </Link>
                     {canWrite && (
-                      <button type="button" disabled={busy === product.id} onClick={() => setPendingDelete({ kind: "product", item: product })} aria-label={`Delete ${product.name}`} className="min-h-[44px] flex-1 basis-[4.5rem] border-l border-light-gray px-2 text-[10px] font-bold uppercase tracking-wider text-error hover:bg-error hover:text-white disabled:opacity-50">
+                      <button type="button" disabled={busy === product.id} onClick={() => setPendingDelete({ kind: "product", item: product })} aria-label={`Delete ${product.name}`} className="min-h-[44px] flex-1 basis-[4.5rem] border-l border-light-gray px-2 text-[0.625rem] font-bold uppercase tracking-wider text-error hover:bg-error hover:text-white disabled:opacity-50">
                         Delete
                       </button>
                     )}
@@ -447,7 +451,7 @@ export function CatalogManager({ canWrite, showToast }: { canWrite: boolean; sho
               <li key={designer.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-light-gray/60 py-1.5 text-xs">
                 <span className="min-w-0 [overflow-wrap:anywhere]">
                   <span className={designer.isActive ? "font-semibold text-brand-primary" : "text-gray-500 line-through"}>{designer.name}</span>
-                  {designer.isDemo && <span className="ml-1.5 rounded-sm bg-ocean-blue/15 px-1 text-[9px] font-bold uppercase text-ocean-blue">Demo</span>}
+                  {designer.isDemo && <span className="ml-1.5 rounded-sm bg-ocean-blue/15 px-1 text-[0.5625rem] font-bold uppercase text-ocean-blue">Demo</span>}
                 </span>
                 {canWrite && (
                   <span className="flex flex-wrap gap-1">

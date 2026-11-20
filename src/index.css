@@ -174,7 +174,8 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   font-synthesis-weight: none;
-  /* Focus and scroll-into-view stop below the sticky header (height set by useStickyHeaderOffset), ring included. */
+  /* Focus and scroll-into-view stop below the sticky header (height set by useStickyHeaderOffset), ring included;
+     keepKeyboardFocusInView applies this where a browser's own focus scroll does not. */
   scroll-padding-top: calc(var(--sticky-header-height, 0px) + var(--focus-ring-width) + var(--focus-ring-offset) + 0.25rem);
   /* ...and above the bottom edge of the window, ring included (the phone purchase bar adds its height below). */
   scroll-padding-bottom: calc(var(--focus-ring-width) + var(--focus-ring-offset) + 0.25rem);
@@ -239,6 +240,28 @@ html:has([data-purchase-bar] :focus) {
 :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: var(--focus-ring-offset);
+}
+
+/*
+ * Forced colours replace every colour, so a selected, pressed or current control would look like its neighbours.
+ * Unlayered, like the focus ring, so it outranks the utilities. Its parts take its colours, so no author colour is left
+ * on Highlight. A current checkout step marks the step, not the connector line before it; the breadcrumb's current
+ * page stays plain text.
+ */
+@media (forced-colors: active) {
+  :is([aria-pressed="true"], [aria-selected="true"], [aria-current]:not([aria-current="false"], [aria-current="step"]),
+    [aria-current="step"] > :not([aria-hidden="true"])):not(nav[aria-label="Breadcrumb"] *) {
+    forced-color-adjust: none;
+    background-color: Highlight;
+    color: HighlightText;
+    border-color: Highlight;
+
+    & * {
+      color: inherit;
+      background-color: transparent;
+      border-color: currentColor;
+    }
+  }
 }
 
 /* Selection */

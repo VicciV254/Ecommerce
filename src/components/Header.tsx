@@ -14,14 +14,17 @@ import { BrandLogo } from "./Brand";
 import { DepartmentShortcuts, DepartmentsMenu, DrawerMenu } from "./HeaderMenus";
 import { useStickyHeaderOffset } from "./stickyHeader";
 
-/** Below this width the page links live in the drawer; it is also where the drawer closes itself. */
-const INLINE_NAV_QUERY = "(min-width: 1280px)";
+/**
+ * Below this width the page links live in the drawer; it is also where the drawer closes itself. In em, like the `xl`
+ * breakpoint (80rem), so both move with the browser's font-size setting.
+ */
+const INLINE_NAV_QUERY = "(min-width: 80em)";
 /** Pages whose phone layout shows the department shortcuts under the search. */
 const SHORTCUT_PAGES = new Set(["/", "/shop"]);
 const iconButton =
   "relative flex size-[44px] shrink-0 items-center justify-center rounded-full text-white transition-colors duration-(--motion-feedback) hover:bg-white/10";
 const countBadge =
-  "absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-gold-400 px-1 text-[10px] font-bold leading-none text-navy-900";
+  "absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-gold-400 px-1 text-[0.625rem] font-bold leading-none text-navy-900";
 const drawerLink =
   "flex min-h-[44px] items-center rounded-sm px-3 text-sm font-semibold uppercase tracking-wider transition-colors duration-(--motion-feedback)";
 

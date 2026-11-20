@@ -36,7 +36,7 @@ function catalogWith(products: CatalogProduct[]): CatalogValue {
     status: "ready", error: null, mode: "live", products,
     productsById: new Map(products.map((product) => [product.id, product])),
     categories: buildCategoryTree(fixtureCategories), designers: fixtureDesigners, discounts: [],
-    returnPolicy: fixtureReturnPolicy, delivery: fixtureDelivery, demonstrationOrders: false, reload: vi.fn(),
+    returnPolicy: fixtureReturnPolicy, delivery: fixtureDelivery, demonstrationOrders: false, sampleOrderRetentionDays: null, reload: vi.fn(),
   };
 }
 

@@ -131,6 +131,23 @@ beforeEach(() => {
   catalog.publish(staffCatalog());
 });
 
+describe("counts in the catalog", () => {
+  it("counts one product in the singular, in the tree and in the list's total", () => {
+    const counted = staffCatalog().categories.map((category, index) => ({ ...category, productCount: [1, 2, 0][index] ?? 3 }));
+    catalog.publish({ ...staffCatalog(), categories: counted });
+    const view = render(<CatalogManager canWrite showToast={vi.fn()} />);
+    const [one, two, none] = counted;
+    expect(screen.getByText(`1 product · /${one.slug}`)).toBeTruthy();
+    expect(screen.getByText(`2 products · /${two.slug}`)).toBeTruthy();
+    expect(screen.getByText(`0 products · /${none.slug}`)).toBeTruthy();
+    expect(screen.queryByText(/\b1 products\b/)).toBeNull();
+    view.unmount();
+    catalog.publish({ ...staffCatalog(), products: [current().products[0]] });
+    render(<CatalogManager canWrite showToast={vi.fn()} />);
+    expect(screen.getByText("1 of 1 product")).toBeTruthy();
+  });
+});
+
 describe("category order in the tree", () => {
   it("names each move button with its category and disables the ends with a reason, keeping them focusable", () => {
     render(<CatalogManager canWrite showToast={vi.fn()} />);
@@ -265,7 +282,7 @@ describe("products list filters in the address", () => {
   const readiness = () => screen.getByLabelText("Filter products by readiness");
   const pill = () => screen.getByRole("button", { name: /^Needs images \(\d+\)$/ });
   /** The product cards shown, by their open buttons (the list follows its "N of M products" line). */
-  const listed = () => within(screen.getByText(/^\d+ of \d+ products$/).nextElementSibling as HTMLElement)
+  const listed = () => within(screen.getByText(/^\d+ of \d+ products?$/).nextElementSibling as HTMLElement)
     .queryAllByRole("button", { name: /^Edit / }).map((button) => button.getAttribute("aria-label"));
 
   it("keeps status, readiness and category in the address, changing them with a replace", () => {
@@ -422,6 +439,17 @@ describe("product editor: versions, conflicts and the checklist", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "Variant 1 active" }));
     save();
     await waitFor(() => expect(api.updateProduct).toHaveBeenCalledTimes(1));
+  });
+
+  it("says a visible product's publishing checks passed, apart from the field errors that block its save", () => {
+    render(<ProductEditor product={staffRecord({ ...readyCoat, isActive: true })} canWrite onClose={vi.fn()} onSaved={vi.fn()} />);
+    const summary = () => checklist().querySelector("summary")!.textContent;
+    expect(summary()).toBe("Before publishingPublishing checks passed");
+    expect(within(checklist()).queryByText("All checks passed")).toBeNull();
+    // A field error keeps its own status on its field; the checklist speaks only for publishing.
+    fireEvent.change(screen.getByLabelText("Compare-at price (optional)"), { target: { value: "1" } });
+    expect(screen.getByLabelText("Compare-at price (optional)").getAttribute("aria-invalid")).toBe("true");
+    expect(summary()).toBe("Before publishingPublishing checks passed");
   });
 
   it("calls a hidden product with every check passed ready to publish, and starts collapsed", () => {

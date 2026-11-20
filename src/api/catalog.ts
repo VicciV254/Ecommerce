@@ -150,6 +150,8 @@ export type CatalogSnapshot = {
   mode: "live" | "demo" | "admin";
   /** Whether sample orders can be placed and paid with a demonstration payment; public wording follows it. */
   demonstrationOrders: boolean;
+  /** Days after which visitors' sample orders are deleted; null where none are, and then no page mentions it. */
+  sampleOrderRetentionDays: number | null;
   products: CatalogProduct[];
   categories: CatalogCategory[];
   designers: CatalogDesigner[];

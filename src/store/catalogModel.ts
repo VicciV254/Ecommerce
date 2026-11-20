@@ -62,6 +62,11 @@ function isCatalogReturnPolicy(value: unknown): value is CatalogReturnPolicy {
     typeof value.partialReturns === "boolean" && value.refundRounding === "UP_TO_WHOLE_KES";
 }
 
+/** The server deletes sample orders after 1 to 3,650 days (`SAMPLE_ORDER_RETENTION_DAYS`). */
+const MAX_SAMPLE_ORDER_RETENTION_DAYS = 3650;
+const isRetentionDays = (value: unknown): value is number =>
+  Number.isInteger(value) && Number(value) >= 1 && Number(value) <= MAX_SAMPLE_ORDER_RETENTION_DAYS;
+
 /** Every delivery method an order can have, in the order shoppers see them; the catalog names those new orders can use. */
 export const DELIVERY_METHODS: readonly DeliveryMethod[] = ["STANDARD", "SAME_DAY", "STORE_PICKUP"];
 export const isDeliveryMethod = (value: unknown): value is DeliveryMethod =>
@@ -167,9 +172,13 @@ export function parseCatalogSnapshot(data: unknown, modes: readonly CatalogSnaps
   if (!Array.isArray(discounts) || !discounts.every(isDiscount)) throw new CatalogFormatError("discounts");
   if (!isCatalogReturnPolicy(returnPolicy)) throw new CatalogFormatError("return policy");
   if (!isDeliveryList(delivery)) throw new CatalogFormatError("delivery");
-  if (typeof data.demonstrationOrders !== "boolean") throw new CatalogFormatError("demonstration orders");
+  // Fields added to version 2: absent means the backend doesn't offer the feature; a present value must be well formed.
+  const demonstrationOrders = data.demonstrationOrders === undefined ? false : data.demonstrationOrders;
+  if (typeof demonstrationOrders !== "boolean") throw new CatalogFormatError("demonstration orders");
+  const retentionDays = data.sampleOrderRetentionDays === undefined ? null : data.sampleOrderRetentionDays;
+  if (retentionDays !== null && !isRetentionDays(retentionDays)) throw new CatalogFormatError("sample order retention");
   return {
-    version: 2, mode, demonstrationOrders: data.demonstrationOrders,
+    version: 2, mode, demonstrationOrders, sampleOrderRetentionDays: retentionDays,
     products: products.map(withProductMediaDefaults), categories, designers, discounts, returnPolicy, delivery,
   };
 }

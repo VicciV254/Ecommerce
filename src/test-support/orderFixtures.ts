@@ -55,6 +55,7 @@ export function fixtureCustomerOrder(order: Order, overrides: Partial<CustomerOr
     returnEligibility: fixtureEligibility(order),
     customerActions: order.status === "PENDING" || order.status === "PROCESSING" ? ["CANCEL"] : [],
     demonstrationActions: [],
+    scheduledForDeletion: false,
     ...overrides,
   };
 }

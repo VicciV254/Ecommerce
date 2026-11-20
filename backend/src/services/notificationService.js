@@ -64,7 +64,7 @@ async function notificationContext(notification) {
     recipient: { firstName: order.user?.firstName ?? null },
     order: {
       orderNumber: order.orderNumber, createdAt: order.createdAt.toISOString(), deliveryMethod: order.deliveryMethod,
-      status: order.status, paymentStatus: order.paymentStatus,
+      status: order.status, paymentStatus: order.paymentStatus, paymentMethod: order.paymentMethod, isDemo: order.isDemo,
       subtotal: moneyNumber(order.subtotal), discount: moneyNumber(order.discount), tax: moneyNumber(order.tax),
       vatRate: order.pricingSnapshot?.vatRate ?? null, shippingCost: moneyNumber(order.shippingCost), total: moneyNumber(order.total),
       trackingNumber: order.trackingNumber, reservationExpiresAt: order.reservationExpiresAt?.toISOString() ?? null,
@@ -84,7 +84,7 @@ async function notificationContext(notification) {
     } }),
     ...(refund && { refund: {
       number: refund.number, amount: moneyNumber(refund.amount), includesDeliveryFee: refund.includesDeliveryFee,
-      providerReference: refund.status === 'CONFIRMED' ? refund.providerReference : null, source: refund.source,
+      providerReference: refund.status === 'CONFIRMED' ? refund.providerReference : null, source: refund.source, method: refund.method,
     } }),
     links: { order: site ? `${site}/#/account/orders` : null },
   };

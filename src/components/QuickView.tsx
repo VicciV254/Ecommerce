@@ -21,7 +21,7 @@ import { DemoBadge } from "./ui";
  * left column of the 960px two-column dialog from 1280px. Thumbnails are 56px buttons.
  */
 const QUICK_VIEW_GALLERY: GalleryLayout = {
-  sizes: "(min-width: 1280px) 444px, (min-width: 768px) 384px, 288px",
+  sizes: "(min-width: 80em) 444px, (min-width: 48em) 384px, 288px",
   thumbnailSizes: "52px",
   thumbnails: "flex flex-wrap gap-2",
   thumbnailItem: "w-[56px]",

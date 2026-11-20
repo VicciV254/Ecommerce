@@ -1,5 +1,6 @@
 import { FormEvent, useState } from 'react';
 import { Link, navigate, parseRoute, useRoute } from '../router';
+import { PERSON_LIMITS } from '../api/auth';
 import { useAuth } from '../contexts/AuthContext';
 import { PasswordInput } from '../components/PasswordInput';
 import { AuthLayout, authStyles } from '../components/AuthLayout';
@@ -45,7 +46,7 @@ export default function Register() {
       // The account exists now; Back from verification leaves the flow rather than showing this form again.
       navigate(verifyEmailRoute(formData.email, returnTo), { replace: true });
     } else {
-      setError('Registration failed. Email may already be in use.');
+      setError(outcome.error);
     }
   };
 
@@ -59,11 +60,11 @@ export default function Register() {
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label htmlFor="firstName" className={authStyles.label}>First name</label>
-            <input id="firstName" name="firstName" type="text" autoComplete="given-name" required value={formData.firstName} onChange={handleChange} className={authStyles.field} />
+            <input id="firstName" name="firstName" type="text" autoComplete="given-name" required minLength={PERSON_LIMITS.nameMin} maxLength={PERSON_LIMITS.nameMax} value={formData.firstName} onChange={handleChange} className={authStyles.field} />
           </div>
           <div>
             <label htmlFor="lastName" className={authStyles.label}>Last name</label>
-            <input id="lastName" name="lastName" type="text" autoComplete="family-name" required value={formData.lastName} onChange={handleChange} className={authStyles.field} />
+            <input id="lastName" name="lastName" type="text" autoComplete="family-name" required minLength={PERSON_LIMITS.nameMin} maxLength={PERSON_LIMITS.nameMax} value={formData.lastName} onChange={handleChange} className={authStyles.field} />
           </div>
         </div>
         <div>
@@ -72,7 +73,7 @@ export default function Register() {
         </div>
         <div>
           <label htmlFor="phone" className={authStyles.label}>Phone (optional)</label>
-          <input id="phone" name="phone" type="tel" autoComplete="tel" value={formData.phone} onChange={handleChange} className={authStyles.field} />
+          <input id="phone" name="phone" type="tel" autoComplete="tel" maxLength={PERSON_LIMITS.phoneMax} value={formData.phone} onChange={handleChange} className={authStyles.field} />
         </div>
         <div>
           <label htmlFor="password" className={authStyles.label}>Password</label>

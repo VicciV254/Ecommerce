@@ -1,24 +1,35 @@
-import { useId, type ReactNode, type Ref } from "react";
+import { useId, type ComponentProps, type ReactNode, type Ref } from "react";
+import { WrappingSelect as BaseWrappingSelect } from "../../components/WrappingSelect";
 import type { CatalogCategory } from "../../api/catalog";
 import type { CategoryTree } from "../../store/catalogModel";
 
 export const inputClass =
   "w-full rounded-sm border border-light-gray bg-off-white px-3 py-2 text-sm outline-none focus:border-brand-secondary";
 export const smallButtonClass =
-  "rounded-sm border border-brand-primary px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-brand-primary hover:bg-brand-primary hover:text-white disabled:cursor-not-allowed disabled:opacity-50";
+  "rounded-sm border border-brand-primary px-3 py-2 text-[0.625rem] font-bold uppercase tracking-wider text-brand-primary hover:bg-brand-primary hover:text-white disabled:cursor-not-allowed disabled:opacity-50";
 export const primaryButtonClass =
-  "rounded-sm bg-brand-primary px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-white hover:bg-brand-secondary hover:text-brand-primary disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-600";
+  "rounded-sm bg-brand-primary px-4 py-2 text-[0.6875rem] font-bold uppercase tracking-wider text-white hover:bg-brand-secondary hover:text-brand-primary disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-600";
 export const dangerButtonClass =
-  "rounded-sm border border-error/40 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-error hover:bg-error hover:text-white disabled:cursor-not-allowed disabled:opacity-50";
+  "rounded-sm border border-error/40 px-3 py-2 text-[0.625rem] font-bold uppercase tracking-wider text-error hover:bg-error hover:text-white disabled:cursor-not-allowed disabled:opacity-50";
 
 export function Field({ label, hint, children }: { label: string; hint?: string; children: (id: string) => ReactNode }) {
   const id = useId();
   return (
     <div>
-      <label htmlFor={id} className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-600">{label}</label>
+      <label htmlFor={id} className="mb-1 block text-[0.625rem] font-bold uppercase tracking-wider text-gray-600">{label}</label>
       {children(id)}
-      {hint && <p className="mt-1 text-[11px] text-gray-500">{hint}</p>}
+      {hint && <p className="mt-1 text-[0.6875rem] text-gray-500">{hint}</p>}
     </div>
+  );
+}
+
+/** The shared wrapping select, with the admin inputs' focus border on its box and a greyed box while disabled. */
+export function WrappingSelect({ className = "", ...props }: ComponentProps<typeof BaseWrappingSelect>) {
+  return (
+    <BaseWrappingSelect
+      {...props}
+      className={`has-[select:focus]:border-brand-secondary has-[select:disabled]:bg-gray-100 has-[select:disabled]:text-gray-500 ${className}`}
+    />
   );
 }
 
@@ -34,7 +45,7 @@ export function Panel({ title, description, actions, headingRef, children }: {
     <section className="rounded-lg bg-white p-5 shadow-sm sm:p-6">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 ref={headingRef} tabIndex={headingRef ? -1 : undefined} className="text-[11px] font-bold uppercase tracking-[0.15em] text-brand-primary">{title}</h3>
+          <h3 ref={headingRef} tabIndex={headingRef ? -1 : undefined} className="text-[0.6875rem] font-bold uppercase tracking-[0.15em] text-brand-primary">{title}</h3>
           {description && <p className="mt-1 max-w-2xl text-xs text-gray-600">{description}</p>}
         </div>
         {actions}
@@ -42,6 +53,19 @@ export function Panel({ title, description, actions, headingRef, children }: {
       {children}
     </section>
   );
+}
+
+/**
+ * Keyboard focus on a region taller than the window: the browser would centre one it reaches out of view (or align its
+ * bottom from below), hiding its top edge and ring. This runs before that scroll, which then has nothing to do.
+ */
+function showTopOfTallRegion(region: HTMLElement) {
+  if (!region.matches(":focus-visible")) return;
+  const root = getComputedStyle(document.documentElement);
+  const above = Number.parseFloat(root.scrollPaddingTop) || 0;
+  const room = window.innerHeight - above - (Number.parseFloat(root.scrollPaddingBottom) || 0);
+  const box = region.getBoundingClientRect();
+  if (box.height > room && (box.top < above || box.top > above + room)) region.scrollIntoView?.({ block: "start", behavior: "instant" });
 }
 
 /**
@@ -56,7 +80,8 @@ export function TableRegion({ label, className = "", children }: { label: string
       aria-label={label}
       tabIndex={0}
       onFocus={(event) => {
-        if (event.target !== event.currentTarget) event.target.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+        if (event.target === event.currentTarget) showTopOfTallRegion(event.currentTarget);
+        else event.target.scrollIntoView?.({ block: "nearest", inline: "nearest" });
       }}
       className={`relative -mx-[6px] overflow-x-auto p-[6px] [scroll-padding-inline:6px] ${className}`}
     >

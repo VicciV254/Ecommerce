@@ -6,19 +6,7 @@ import { discountAppliesTo, isDiscountActive } from "../../store/catalogModel";
 import { normalizeCouponCode } from "../../store/checkoutModel";
 import { formatKES } from "../../utils/format";
 import { useAdminCatalog } from "./AdminCatalogContext";
-import {
-  Feedback,
-  Field,
-  Panel,
-  categoryOptions,
-  dangerButtonClass,
-  fromDateInput,
-  inputClass,
-  primaryButtonClass,
-  smallButtonClass,
-  toDateInput,
-  todayInput,
-} from "./shared";
+import { Feedback, Field, Panel, WrappingSelect, categoryOptions, dangerButtonClass, fromDateInput, inputClass, primaryButtonClass, smallButtonClass, toDateInput, todayInput } from "./shared";
 import { useUnsavedChanges } from "./unsavedChanges";
 
 const PERCENT_PRESETS = [5, 10, 15, 20, 25, 50];
@@ -162,7 +150,7 @@ export function DiscountManager({ canWrite, showToast }: { canWrite: boolean; sh
       {canWrite && <Panel title="Create discount" description="Automatic discounts are reflected in storefront prices calculated by the server; the strongest offer applies and discounts never stack. A coupon discount applies only in checkout quotes where the shopper enters its code.">
         <div className="space-y-4">
           <fieldset>
-            <legend className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-600">Discount type</legend>
+            <legend className="mb-1.5 text-[0.625rem] font-bold uppercase tracking-wider text-gray-600">Discount type</legend>
             <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,8rem),1fr))] gap-2">
               {([["PERCENTAGE", "Percentage"], ["FIXED", "Fixed amount"]] as const).map(([value, label]) => (
                 <button key={value} type="button" aria-pressed={kind === value} onClick={() => setKind(value)}
@@ -173,7 +161,7 @@ export function DiscountManager({ canWrite, showToast }: { canWrite: boolean; sh
             </div>
           </fieldset>
           <fieldset>
-            <legend className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-600">Apply to</legend>
+            <legend className="mb-1.5 text-[0.625rem] font-bold uppercase tracking-wider text-gray-600">Apply to</legend>
             <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,6rem),1fr))] gap-1">
               {([["ALL", "All"], ["CATEGORY", "Category"], ["SELECTED", "Products"]] as const).map(([value, label]) => (
                 <button
@@ -181,7 +169,7 @@ export function DiscountManager({ canWrite, showToast }: { canWrite: boolean; sh
                   type="button"
                   aria-pressed={scope === value}
                   onClick={() => setScope(value)}
-                  className={`rounded-sm border py-2 text-[11px] font-bold ${scope === value ? "border-brand-primary bg-brand-primary text-white" : "border-light-gray text-gray-600"}`}
+                  className={`rounded-sm border py-2 text-[0.6875rem] font-bold ${scope === value ? "border-brand-primary bg-brand-primary text-white" : "border-light-gray text-gray-600"}`}
                 >
                   {label}
                 </button>
@@ -192,9 +180,9 @@ export function DiscountManager({ canWrite, showToast }: { canWrite: boolean; sh
           {scope === "CATEGORY" && (
             <Field label="Category (includes its sub-categories)">
               {(id) => (
-                <select id={id} value={chosenCategory} onChange={(event) => setCategoryId(event.target.value)} className={inputClass}>
+                <WrappingSelect id={id} value={chosenCategory} onChange={(event) => setCategoryId(event.target.value)} className={inputClass}>
                   {options.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
-                </select>
+                </WrappingSelect>
               )}
             </Field>
           )}
@@ -216,7 +204,7 @@ export function DiscountManager({ canWrite, showToast }: { canWrite: boolean; sh
                         className="h-3.5 w-3.5 accent-brand-secondary"
                       />
                       <span className="flex-1 truncate text-charcoal">{product.name}</span>
-                      {!product.isActive && <span className="text-[9px] font-bold uppercase text-gray-600">Hidden</span>}
+                      {!product.isActive && <span className="text-[0.5625rem] font-bold uppercase text-gray-600">Hidden</span>}
                       <span className="text-gray-500">{formatKES(product.price)}</span>
                     </label>
                   );
@@ -227,7 +215,7 @@ export function DiscountManager({ canWrite, showToast }: { canWrite: boolean; sh
           )}
 
           <fieldset>
-            <legend className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-600">{kind === "PERCENTAGE" ? "Discount %" : "Discount amount (KES)"}</legend>
+            <legend className="mb-1.5 text-[0.625rem] font-bold uppercase tracking-wider text-gray-600">{kind === "PERCENTAGE" ? "Discount %" : "Discount amount (KES)"}</legend>
             {kind === "PERCENTAGE" && <div className="mb-2 flex flex-wrap gap-1">
               {PERCENT_PRESETS.map((value) => (
                 <button
@@ -235,7 +223,7 @@ export function DiscountManager({ canWrite, showToast }: { canWrite: boolean; sh
                   type="button"
                   aria-pressed={discountValue === value}
                   onClick={() => setDiscountValue(value)}
-                  className={`flex-1 rounded-sm border py-1.5 text-[11px] font-bold ${discountValue === value ? "border-brand-primary bg-brand-primary text-white" : "border-light-gray text-gray-600"}`}
+                  className={`flex-1 rounded-sm border py-1.5 text-[0.6875rem] font-bold ${discountValue === value ? "border-brand-primary bg-brand-primary text-white" : "border-light-gray text-gray-600"}`}
                 >
                   {value}%
                 </button>
@@ -267,7 +255,7 @@ export function DiscountManager({ canWrite, showToast }: { canWrite: boolean; sh
                 />
               )}
             </Field>
-            {!validCoupon && <p role="alert" className="mt-1 text-[11px] font-semibold text-error">Use 3–40 letters, numbers, hyphens or underscores.</p>}
+            {!validCoupon && <p role="alert" className="mt-1 text-[0.6875rem] font-semibold text-error">Use 3–40 letters, numbers, hyphens or underscores.</p>}
           </div>
           {kind === "FIXED" && <p className="text-xs text-gray-600">
             {couponCode ? "A fixed coupon is deducted once from eligible merchandise, not once per item." : "An automatic fixed discount applies per eligible unit using the configured catalog rounding."}
@@ -299,11 +287,11 @@ export function DiscountManager({ canWrite, showToast }: { canWrite: boolean; sh
                   <div>
                     <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-brand-primary">
                       {discount.name}
-                      <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${active ? "bg-success/15 text-success" : "bg-gray-100 text-gray-600"}`}>
+                      <span className={`rounded-full px-2 py-0.5 text-[0.5625rem] font-bold uppercase tracking-wider ${active ? "bg-success/15 text-success" : "bg-gray-100 text-gray-600"}`}>
                         {active ? "Active" : discount.isActive ? "Scheduled / Ended" : "Paused"}
                       </span>
-                      {discount.isDemo && <span className="rounded-full bg-ocean-blue/15 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-ocean-blue">Demo: demo products only</span>}
-                      {discount.couponCode && <span className="rounded-full bg-brand-secondary/20 px-2 py-0.5 font-mono text-[10px] font-bold text-brand-accent">Coupon {discount.couponCode}</span>}
+                      {discount.isDemo && <span className="rounded-full bg-ocean-blue/15 px-2 py-0.5 text-[0.5625rem] font-bold uppercase tracking-wider text-ocean-blue">Demo: demo products only</span>}
+                      {discount.couponCode && <span className="rounded-full bg-brand-secondary/20 px-2 py-0.5 font-mono text-[0.625rem] font-bold text-brand-accent">Coupon {discount.couponCode}</span>}
                     </p>
                     <p className="mt-1 text-xs text-gray-600">
                       {affected} {affected === 1 ? "product" : "products"} · {toDateInput(discount.startDate)} → {discount.endDate ? toDateInput(discount.endDate) : "no end date"}
@@ -311,7 +299,7 @@ export function DiscountManager({ canWrite, showToast }: { canWrite: boolean; sh
                   </div>
                   <p className="text-right text-2xl font-semibold tabular-nums text-coral">
                     {discount.type === "PERCENTAGE" ? `${discount.value}%` : formatKES(discount.value)}
-                    <span className="block text-[9px] uppercase tracking-wider text-gray-500">off</span>
+                    <span className="block text-[0.5625rem] uppercase tracking-wider text-gray-500">off</span>
                   </p>
                 </div>
                   {canWrite && <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(min(100%,10rem),1fr))] gap-2 border-t border-light-gray pt-3">

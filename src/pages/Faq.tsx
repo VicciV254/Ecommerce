@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { inlineLinkClass } from "../components/checkout";
 import { InfoPage, infoList, infoParagraph, type InfoSection } from "../components/InfoPage";
 import { EmailLink, PhoneLink } from "../components/StoreContacts";
@@ -6,6 +6,7 @@ import type { CatalogDelivery } from "../api/catalog";
 import { Link } from "../router";
 import { useCatalog } from "../store/CatalogContext";
 import { DELIVERY_LABELS } from "../store/checkoutModel";
+import { returnRestrictions, returnsWindow } from "../store/shoppingFacts";
 import { STORE_FACTS, deliveryDescription } from "../store/storeFacts";
 
 /** A topic's questions, divided by hairlines. */
@@ -54,7 +55,8 @@ function DeliveryAnswer({ delivery }: { delivery: readonly CatalogDelivery[] | n
 
 /** Answers to common questions about this demonstration store; catalog facts fill in delivery and returns. */
 export default function Faq() {
-  const { status, delivery, returnPolicy, demonstrationOrders } = useCatalog();
+  const { status, categories, delivery, returnPolicy, demonstrationOrders } = useCatalog();
+  const restrictions = useMemo(() => returnRestrictions([...categories.byId.values()]), [categories]);
   const { operator } = STORE_FACTS;
   // Where sample orders take demonstration payments the answers say so; otherwise (or until the catalog loads) today's.
   const demonstration = demonstrationOrders === true;
@@ -128,7 +130,7 @@ export default function Faq() {
           <Question question="What can be returned?">
             <p className={infoParagraph}>
               {returnPolicy
-                ? `Most items within ${returnPolicy.windowDays} days of delivery; some only if unopened, or if faulty, damaged or wrong. Each product page shows its rule. `
+                ? `${returnsWindow(returnPolicy.windowDays, restrictions, "")} Each product page shows its rule. `
                 : "Each product page shows its return rule. "}
               <SeeReturns />
             </p>

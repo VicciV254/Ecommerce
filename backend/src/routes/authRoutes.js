@@ -5,8 +5,6 @@ import {
   getMe,
   updateProfile,
   changePassword,
-  forgotPassword,
-  resetPassword,
   refresh,
   verifyEmail,
   verifyOtp,
@@ -18,19 +16,17 @@ import {
   setDefaultAddress,
 } from '../controllers/authController.js';
 import { authenticate } from '../middleware/auth.js';
-import { authLimiter } from '../config/rateLimiter.js';
+import { authLimiter, registrationLimiter } from '../config/rateLimiter.js';
 
 const router = express.Router();
 
-router.post('/register', authLimiter, register);
+router.post('/register', registrationLimiter, authLimiter, register);
 router.post('/login', authLimiter, login);
 router.post('/refresh', refresh);
 router.post('/verify-email', verifyEmail);
 router.post('/verify-otp', verifyOtp);
 router.post('/resend-verification', authLimiter, resendVerification);
 router.post('/logout', logout);
-router.post('/forgot-password', forgotPassword);
-router.post('/reset-password', resetPassword);
 
 router.get('/me', authenticate, getMe);
 router.put('/profile', authenticate, updateProfile);

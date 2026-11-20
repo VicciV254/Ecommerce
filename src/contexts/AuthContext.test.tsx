@@ -1,4 +1,5 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
+import { AxiosError, AxiosHeaders } from "axios";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider, useAuth } from "./AuthContext";
 import { fromAnotherTab } from "../test-support/otherTab";
@@ -127,5 +128,27 @@ describe("sessions across tabs", () => {
     await act(async () => { await auth.register({ email: verified.email, password: "password", firstName: "New", lastName: "Shopper" }); });
     expect(auth.user).toBeNull();
     expect(sessionStorage.getItem(STORAGE_KEYS.pendingGuestMerge)).toBeNull();
+  });
+
+  it("a refused sign-up says why: the server's words for a limit, the usual hint for a refused address, else try again", async () => {
+    render(<AuthProvider><Capture /></AuthProvider>);
+    const refused = (status: number, data: unknown) =>
+      new AxiosError("refused", "ERR_BAD_REQUEST", undefined, undefined, { status, data, statusText: "", headers: {}, config: { headers: new AxiosHeaders() } });
+    const limit = "Too many accounts were opened from this network. Try again in an hour.";
+    for (const [error, message] of [
+      [refused(429, { error: limit, code: "REGISTRATION_LIMIT" }), limit],
+      [refused(429, { error: "Too many unsuccessful attempts from this network. Try again later.", code: "AUTH_RATE_LIMIT" }),
+        "Too many unsuccessful attempts from this network. Try again later."],
+      [refused(400, { error: "Email already registered" }), "Registration failed. Email may already be in use."],
+      [refused(429, {}), "Could not create your account. Please try again later."],
+      [refused(500, { error: "Internal server error" }), "Could not create your account. Please try again later."],
+      [new AxiosError("Network Error", "ERR_NETWORK"), "Could not create your account. Please try again later."],
+    ] as const) {
+      api.register.mockRejectedValueOnce(error);
+      let outcome: unknown;
+      await act(async () => { outcome = await auth.register({ email: "new@example.test", password: "password", firstName: "New", lastName: "Shopper" }); });
+      expect(outcome, message).toEqual({ error: message });
+    }
+    expect(auth.user).toBeNull();
   });
 });

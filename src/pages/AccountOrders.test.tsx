@@ -16,7 +16,9 @@ const mocks = vi.hoisted(() => ({
     getMyOrders: vi.fn(), get: vi.fn(), cancel: vi.fn(), requestReturn: vi.fn(), cancelReturn: vi.fn(), track: vi.fn(), playDemonstration: vi.fn(),
   },
   payments: { getOverview: vi.fn(), requestPrompt: vi.fn(), checkAttempt: vi.fn() },
+  retentionDays: null as number | null,
 }));
+vi.mock("../store/CatalogContext", () => ({ useCatalog: () => ({ sampleOrderRetentionDays: mocks.retentionDays }) }));
 vi.mock("../contexts/AuthContext", () => ({ useAuth: () => ({ user: mocks.user }) }));
 vi.mock("../store/StorefrontContext", () => ({ useStorefront: () => ({ brandName: "Apex Cart", storefront: null, mediaById: new Map() }) }));
 vi.mock("../api/orders", async (importOriginal) => ({ ...await importOriginal<typeof import("../api/orders")>(), ordersAPI: mocks.orders }));
@@ -36,6 +38,7 @@ const refusal = (code: string, error: string) => {
 
 beforeEach(() => {
   mocks.user = customer;
+  mocks.retentionDays = null;
   for (const fn of [...Object.values(mocks.orders), ...Object.values(mocks.payments)]) fn.mockReset();
   mocks.orders.getMyOrders.mockResolvedValue(page([placed, legacy]));
 });
@@ -531,6 +534,35 @@ describe("demonstration orders", () => {
       `Order ${sample.orderNumber} is paid. If you cancel, a refund request for the full amount (${formatKES(sample.total)}, including delivery) will be recorded.`,
     )).toBeTruthy();
     expect(dialog.textContent).not.toMatch(/email/i);
+  });
+});
+
+describe("sample-order deletion", () => {
+  const NOTE = "Sample orders are scheduled for deletion 7 days after they're placed.";
+  const sample = (overrides: Partial<CustomerOrder>, number: string) =>
+    fixtureCustomerOrder(fixturePendingOrder(fixtureQuote({ id: number.toLowerCase() })), { isDemo: true, orderNumber: number, id: `order-${number}`, ...overrides });
+
+  it("says on a scheduled sample order's card and in its details when it is deleted, and nothing on kept orders", async () => {
+    mocks.retentionDays = 7;
+    const scheduled = sample({ scheduledForDeletion: true }, "APX-SCHEDULED");
+    const kept = sample({ scheduledForDeletion: false }, "APX-KEPT");
+    mocks.orders.getMyOrders.mockResolvedValue(page([scheduled, kept]));
+    mocks.payments.getOverview.mockResolvedValue({ data: fixturePaymentOverview(scheduled) });
+    render(<AccountOrders />);
+    const [scheduledItems, keptItems] = await screen.findAllByRole("list", { name: /^Items in order/ }, WAIT);
+    expect(within(scheduledItems.closest("li")!).getByText(NOTE)).toBeTruthy();
+    expect(within(keptItems.closest("li")!).queryByText(/scheduled for deletion/)).toBeNull();
+
+    fireEvent.click(within(scheduledItems.closest("li")!).getByRole("button", { name: "Details" }));
+    const summary = within(screen.getByRole("dialog")).getByRole("region", { name: "Order summary" });
+    expect(within(summary).getByText(NOTE)).toBeTruthy();
+  });
+
+  it("says nothing about deletion where the catalog states no period", async () => {
+    mocks.orders.getMyOrders.mockResolvedValue(page([sample({ scheduledForDeletion: true }, "APX-SCHEDULED")]));
+    render(<AccountOrders />);
+    await screen.findAllByRole("list", { name: /^Items in order/ }, WAIT);
+    expect(screen.queryByText(/scheduled for deletion/)).toBeNull();
   });
 });
 

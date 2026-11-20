@@ -17,7 +17,7 @@ describe("catalog images", () => {
     render(<MediaImage asset={uploaded} alt="Fallback name" />);
     const image = screen.getByRole("img", { name: "Linen shirt, front" });
     expect(widthsOf(image)).toEqual([240, 320, 480, 640, 960]);
-    expect(image.getAttribute("sizes")).toBe("(min-width: 1440px) 335px, (min-width: 1280px) calc((100vw - 100px) / 4), (min-width: 768px) calc((100vw - 72px) / 3), calc((100vw - 44px) / 2)");
+    expect(image.getAttribute("sizes")).toBe("(min-width: 90em) 335px, (min-width: 80em) calc((100vw - 100px) / 4), (min-width: 48em) calc((100vw - 72px) / 3), calc((100vw - 44px) / 2)");
     expect(image.getAttribute("src")).toContain("/upload/c_limit,w_480/q_auto/f_auto/v1763200000/");
     expect([image.getAttribute("width"), image.getAttribute("height")]).toEqual(["2400", "3000"]);
     expect(image.getAttribute("decoding")).toBe("async");
@@ -56,7 +56,7 @@ describe("catalog images", () => {
     );
     const cover = screen.getByRole("img", { name: "Cover" });
     expect([cover.getAttribute("loading"), cover.getAttribute("fetchpriority")]).toEqual(["eager", "high"]);
-    expect(cover.getAttribute("sizes")).toBe("(min-width: 1024px) 50vw, 100vw");
+    expect(cover.getAttribute("sizes")).toBe("(min-width: 64em) 50vw, 100vw");
     const second = screen.getByRole("img", { name: "Second view" });
     expect([second.getAttribute("loading"), second.hasAttribute("fetchpriority")]).toEqual(["lazy", false]);
   });

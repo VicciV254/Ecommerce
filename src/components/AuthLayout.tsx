@@ -18,11 +18,12 @@ export function AuthLayout({ title, intro, children }: { title: string; intro?: 
   const { brandName } = useStorefront();
   return (
     <div className="flex justify-center px-4 py-8 md:py-12">
-      <div className="w-full max-w-md overflow-hidden rounded-lg bg-surface shadow-overlay">
+      <div className="@container w-full max-w-md overflow-hidden rounded-lg bg-surface shadow-overlay">
         <div className="on-navy flex justify-center bg-navy-900 px-6 py-6 md:py-8">
           <BrandLogo name={brandName} surface="navy" layout="stacked" size="lg" />
         </div>
-        <div className="p-6 sm:p-8">
+        {/* A card this narrow for its text size (a phone with enlarged text) keeps the heading's words whole with slimmer sides. */}
+        <div className="p-6 sm:p-8 @max-[12rem]:px-3">
           <h1 className="type-h1 text-center text-navy-900">{title}</h1>
           {intro && <div className="mt-2 text-center text-muted">{intro}</div>}
           {children}

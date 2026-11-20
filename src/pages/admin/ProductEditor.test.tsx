@@ -90,16 +90,19 @@ const withImages = (count: number): CatalogProduct => ({
 const replacementPicker = () => document.querySelector<HTMLInputElement>('input[type="file"][hidden]')!;
 const orderOf = (images: MediaInput[]) => images.map(({ id, order, isMain }) => ({ id, order, isMain }));
 
-/** The widest slot a `sizes` list describes for viewports up to 1440px: each entry at the top of its range. */
+/** Pixels per em in media conditions at the browser's default text size. */
+const EM = 16;
+
+/** The widest slot a `sizes` list describes for viewports up to 1440px (default text size): each entry at the top of its range. */
 function widestSlot(sizes: string, widestViewport = 1440) {
   let top = widestViewport;
   let widest = 0;
   for (const entry of sizes.split(", ")) {
-    const [, min, value] = /^(?:\(min-width: (\d+)px\) )?(.+)$/.exec(entry)!;
+    const [, min, value] = /^(?:\(min-width: ([\d.]+)em\) )?(.+)$/.exec(entry)!;
     const fixed = /^([\d.]+)px$/.exec(value);
     const fluid = /^calc\(([\d.]+)vw - ([\d.]+)px\)$/.exec(value);
     widest = Math.max(widest, fixed ? Number(fixed[1]) : (Number(fluid![1]) / 100) * top - Number(fluid![2]));
-    top = Number(min ?? 0) - 1;
+    top = Number(min ?? 0) * EM - 1;
   }
   return widest;
 }
@@ -568,7 +571,7 @@ describe("catalog manager image filter", () => {
     render(<CatalogManager canWrite showToast={vi.fn()} />);
     const tile = screen.getByRole("button", { name: "Edit Linen Short-Sleeve Shirt" }).querySelector("img")!;
     expect(tile.getAttribute("sizes")).toBe(
-      "(min-width: 1280px) calc(20vw - 82.8px), (min-width: 1024px) calc(25vw - 40px), (min-width: 640px) calc(33.34vw - 43px), calc(50vw - 46px)");
+      "(min-width: 80em) calc(20vw - 82.8px), (min-width: 64em) calc(25vw - 40px), (min-width: 40em) calc(33.34vw - 43px), calc(50vw - 46px)");
     expect(tile.getAttribute("srcset")?.split(", ").map((entry) => entry.split(" ")[1])).toEqual(["240w", "320w", "480w", "640w", "960w"]);
     expect(tile.getAttribute("loading")).toBe("lazy");
   });

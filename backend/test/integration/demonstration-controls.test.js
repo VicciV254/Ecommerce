@@ -134,6 +134,8 @@ const refundAction = (refundId, action, expectedStatus, extra = {}) =>
 const stockOf = async (product) => (await prisma.stock.findUnique({ where: { variantId: product.variants[0].id } })).quantity;
 const itemFor = (order, product) => order.items.find((item) => item.productId === product.id);
 const codeOf = (result) => [result.status, result.data.code];
+/** The last email sent with this subject (mail is replaced, so nothing leaves the process). */
+const sentEmail = (subject) => mailer.send.mock.calls.map((entry) => entry.arguments[0]).findLast((message) => message.subject === subject);
 const lastEvent = async (orderId) => prisma.trackingEvent.findFirst({ where: { orderId }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] });
 
 /** Plays dispatch and delivery for a paid sample order with standard delivery. */
@@ -291,6 +293,10 @@ test('the visitor approves and receives their own return; the server derives rec
   assert.deepEqual([decision.description, decision.location, decision.actorType, decision.actorId],
     [`Return ${returnRequest.number} approved in the demonstration.`, 'Demonstration', 'DEMONSTRATION', person.id]);
   assert.equal(await prisma.notification.count({ where: { returnRequestId: returnRequest.id, type: 'RETURN_APPROVED' } }), 1);
+  // The development-only email says what the demonstration did, as the order page does.
+  const email = sentEmail(`Return request ${returnRequest.number} approved - order ${order.orderNumber}`);
+  assert.match(email.text, /has been approved in the demonstration\./);
+  assert.doesNotMatch(email.text, /Our staff/);
 });
 
 test('receipt follows the return reason: faulty or damaged items are not restocked, store faults refund the delivery fee', async () => {
@@ -381,6 +387,9 @@ test('completion runs only the remaining steps, keeps an approved lower amount, 
   const [refund] = cancelled.data.refunds;
   assert.deepEqual([refund.source, refund.method, refund.amount, refund.status], ['CANCELLATION', 'DEMONSTRATION', 1360, 'REQUESTED']);
   assert.deepEqual(cancelled.data.demonstrationActions, [{ action: 'COMPLETE_REFUND', refundId: refund.id, expectedStatus: 'REQUESTED' }]);
+  const cancellationEmail = sentEmail(`Order ${order.orderNumber} cancelled`);
+  assert.match(cancellationEmail.text, /Refunds of demonstration payments move no money\./);
+  assert.doesNotMatch(cancellationEmail.text, /M-Pesa/);
   assert.equal(await prisma.trackingEvent.count({ where: {
     orderId: order.id, description: `Demonstration refund ${refund.number} of KES 1,360 requested; no money will be sent.`,
   } }), 1);
@@ -426,6 +435,7 @@ test('completion runs only the remaining steps, keeps an approved lower amount, 
   const mpesaCancelled = await call(`/orders/${mpesa.id}/cancel`, { method: 'POST', token: person.token, body: {} });
   const [mpesaRefund] = mpesaCancelled.data.refunds;
   assert.equal(mpesaRefund.method, 'MPESA_MANUAL');
+  assert.match(sentEmail(`Order ${mpesa.orderNumber} cancelled`).text, /It will be sent to you via M-Pesa/);
   assert.equal(await prisma.trackingEvent.count({ where: {
     orderId: mpesa.id, description: `Refund ${mpesaRefund.number} of KES 1,360 requested; no money has been sent yet.`,
   } }), 1);

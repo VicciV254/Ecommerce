@@ -2,12 +2,14 @@ import { timingSafeEqual } from 'node:crypto';
 import inventoryService from './inventoryService.js';
 import notificationService from './notificationService.js';
 import paymentService from './paymentService.js';
+import sampleOrderRetentionService from './sampleOrderRetentionService.js';
 
 /** Bounded, idempotent steps shared by the protected scheduled endpoint and the optional local worker. */
 export const maintenanceTasks = {
   reservations: () => inventoryService.expireReservations(),
   payments: () => paymentService.reconcileDuePayments(),
   notifications: () => notificationService.processDueNotifications({ limit: 25 }),
+  sampleOrders: () => sampleOrderRetentionService.purgeSampleOrders(),
 };
 
 /** One failing step is reported without blocking the others; results contain counts only. */

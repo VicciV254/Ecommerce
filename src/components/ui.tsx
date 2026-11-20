@@ -23,7 +23,7 @@ export function Stars({ rating, size = 14 }: { rating: number; size?: number }) 
 /* ---------- Images ---------- */
 export function SampleImageLabel({ className = "" }: { className?: string }) {
   return (
-    <span className={`pointer-events-none absolute bottom-2 left-2 rounded-sm bg-black/65 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white ${className}`}>
+    <span className={`pointer-events-none absolute bottom-2 left-2 rounded-sm bg-black/65 px-1.5 py-0.5 text-[0.5625rem] font-bold uppercase tracking-wider text-white ${className}`}>
       Sample image
     </span>
   );
@@ -40,7 +40,7 @@ export function MissingImage({ label = "Image not yet available", iconOnly = fal
       <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-7 w-7">
         <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0 0 22.5 18.75V5.25A2.25 2.25 0 0 0 20.25 3H3.75A2.25 2.25 0 0 0 1.5 5.25v13.5A2.25 2.25 0 0 0 3.75 21Z" />
       </svg>
-      {!iconOnly && <span className="text-[10px] font-semibold uppercase tracking-wider">{label}</span>}
+      {!iconOnly && <span className="text-[0.625rem] font-semibold uppercase tracking-wider">{label}</span>}
     </div>
   );
 }
@@ -119,7 +119,7 @@ const STOCK_BADGES: Record<StockLevel, { cls: string; label: string }> = {
 export function StockBadge({ level }: { level: StockLevel }) {
   const badge = STOCK_BADGES[level];
   return (
-    <span className={`inline-block rounded-sm px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${badge.cls}`}>
+    <span className={`inline-block rounded-sm px-2.5 py-0.5 text-[0.6875rem] font-semibold uppercase tracking-wider ${badge.cls}`}>
       {badge.label}
     </span>
   );
@@ -127,7 +127,7 @@ export function StockBadge({ level }: { level: StockLevel }) {
 
 export function DemoBadge({ className = "" }: { className?: string }) {
   return (
-    <span title="Sample listing for review; not real inventory" className={`inline-block rounded-sm bg-ocean-blue px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white ${className}`}>
+    <span title="Sample listing for review; not real inventory" className={`inline-block rounded-sm bg-ocean-blue px-2 py-0.5 text-[0.625rem] font-bold uppercase tracking-wider text-white ${className}`}>
       Demo
     </span>
   );

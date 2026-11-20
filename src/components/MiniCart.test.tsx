@@ -16,7 +16,7 @@ function catalogWith(products: CatalogProduct[], status: CatalogValue["status"] 
   return {
     status, error: status === "error" ? "The catalog could not be loaded." : null, mode: "live", products,
     productsById: new Map(products.map((product) => [product.id, product])), categories: buildCategoryTree(fixtureCategories),
-    designers: [], discounts: [], returnPolicy: fixtureReturnPolicy, delivery: fixtureDelivery, demonstrationOrders: false, reload: vi.fn(),
+    designers: [], discounts: [], returnPolicy: fixtureReturnPolicy, delivery: fixtureDelivery, demonstrationOrders: false, sampleOrderRetentionDays: null, reload: vi.fn(),
   };
 }
 

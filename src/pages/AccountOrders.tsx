@@ -23,9 +23,11 @@ import {
   returnRuleText,
   returnStatusText,
   returnWindowText,
+  sampleRetentionText,
 } from "../store/orderCopy";
 import { withPaymentSummary } from "../store/paymentModel";
 import { printReceipt } from "../utils/printReceipt";
+import { useCatalog } from "../store/CatalogContext";
 import { useStorefront } from "../store/StorefrontContext";
 import CancelOrderModal from "../components/CancelOrderModal";
 import DemonstrationControls from "../components/DemonstrationControls";
@@ -81,19 +83,24 @@ function reservationNote(order: CustomerOrder) {
   }
 }
 
-/** Short status lines: refunds and returns first, then the return window or the stock hold. */
-function orderNotes(order: CustomerOrder): string[] {
+/**
+ * Short status lines: refunds and returns first, then the return window or the stock hold, then when a sample order is
+ * deleted (`retentionDays`, the catalog's period).
+ */
+function orderNotes(order: CustomerOrder, retentionDays: number | null): string[] {
   const notes: string[] = [];
   const refund = order.refunds.find((item) => item.status !== "CANCELLED");
   if (refund) notes.push(`Refund of ${formatKES(refund.amount)}: ${refundStatusText(refund)}.`);
   const open = order.returns.find((item) => item.status === "REQUESTED" || item.status === "APPROVED");
   if (open) notes.push(`Return ${open.number}: ${returnStatusText(open.status, order)}.`);
   if (order.status === "DELIVERED") {
-    const windowNote = returnWindowText(order.returnEligibility);
+    const windowNote = returnWindowText(order.returnEligibility, order.deliveryMethod);
     if (windowNote) notes.push(windowNote);
   }
   const hold = reservationNote(order);
   if (hold) notes.push(hold);
+  const deletion = sampleRetentionText(order, retentionDays);
+  if (deletion) notes.push(deletion);
   return notes;
 }
 
@@ -127,8 +134,9 @@ function OrderActions({ order, onCancel, onReturn }: { order: CustomerOrder; onC
   );
 }
 
-function OrderCard({ order, onDetails, onReceipt, onCancel, onReturn }: {
+function OrderCard({ order, retentionDays, onDetails, onReceipt, onCancel, onReturn }: {
   order: CustomerOrder;
+  retentionDays: number | null;
   onDetails: () => void;
   onReceipt: () => void;
   onCancel: () => void;
@@ -151,7 +159,7 @@ function OrderCard({ order, onDetails, onReceipt, onCancel, onReturn }: {
           <p className="type-price-card text-navy-900">{formatKES(order.total)}</p>
           <p className="text-sm text-navy-800">Payment: {paymentLabel(order)}</p>
         </div>
-        {orderNotes(order).map((note) => <p key={note} className="text-sm text-navy-800">{note}</p>)}
+        {orderNotes(order, retentionDays).map((note) => <p key={note} className="text-sm text-navy-800">{note}</p>)}
         {/* The next action comes first and stands out; the rest follow, with cancelling last. */}
         <div className="flex flex-wrap gap-2">
           {next === "pay" && <button type="button" onClick={onDetails} className={primaryButton}>Pay now<span className="sr-only"> for order {order.orderNumber}</span></button>}
@@ -250,8 +258,9 @@ function CustomerRefunds({ order }: { order: CustomerOrder }) {
 }
 
 /** Receipt with summary, payment and the next permitted action first; history, returns and refunds are disclosed. */
-function OrderDetails({ order, user, notice, closeRef, onClose, onCancel, onReturn, onWithdraw, onPaymentSummary, onOrderChange, onRefresh, onPrint }: {
+function OrderDetails({ order, retentionDays, user, notice, closeRef, onClose, onCancel, onReturn, onWithdraw, onPaymentSummary, onOrderChange, onRefresh, onPrint }: {
   order: CustomerOrder;
+  retentionDays: number | null;
   user: User | null;
   notice: Notice | null;
   closeRef: RefObject<HTMLButtonElement | null>;
@@ -268,8 +277,8 @@ function OrderDetails({ order, user, notice, closeRef, onClose, onCancel, onRetu
 }) {
   const { policy } = order.returnEligibility;
   const rules = new Map(order.returnEligibility.lines.map((line) => [line.orderItemId, line.returnRule]));
-  const windowNote = order.status === "CANCELLED" ? null : returnWindowText(order.returnEligibility);
-  const notes = orderNotes(order).filter((note) => note !== windowNote);
+  const windowNote = order.status === "CANCELLED" ? null : returnWindowText(order.returnEligibility, order.deliveryMethod);
+  const notes = orderNotes(order, retentionDays).filter((note) => note !== windowNote);
   return (
     <ModalDialog open label="Receipt details" onClose={onClose}>
       <div className="focus-scroll-room relative max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-2xl bg-surface p-5 text-navy-800 shadow-overlay [overflow-wrap:anywhere] sm:p-6 md:max-w-4xl">
@@ -310,8 +319,10 @@ function OrderDetails({ order, user, notice, closeRef, onClose, onCancel, onRetu
         </div>
 
         <div className="mt-5 grid gap-5 md:grid-cols-2 md:items-start">
-          <section aria-label="Order details" className="space-y-4">
-            <dl className="grid grid-cols-[fit-content(50%)_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
+          <section aria-label="Order details" className="@container space-y-4">
+            {/* Label beside value while the column has 17rem at the current text size; otherwise label above value, so
+                labels never break mid-word ("Custom/er"). */}
+            <dl className="grid grid-cols-1 text-sm [&>dd]:mb-2 @[17rem]:grid-cols-[fit-content(50%)_minmax(0,1fr)] @[17rem]:gap-x-4 @[17rem]:gap-y-1 @[17rem]:[&>dd]:mb-0">
               <dt className="text-muted">Customer</dt><dd>{customerName(user)}</dd>
               <dt className="text-muted">Email</dt><dd>{user?.email ?? ""}</dd>
               <dt className="text-muted">Delivery</dt><dd>{DELIVERY_LABELS[order.deliveryMethod]} · {deliveryAddress(order)}</dd>
@@ -325,7 +336,7 @@ function OrderDetails({ order, user, notice, closeRef, onClose, onCancel, onRetu
                       <span className="min-w-0">{item.quantity} × {item.productName}</span>
                       <span className="font-semibold tabular-nums">{formatKES(item.subtotal)}</span>
                     </div>
-                    {rules.has(item.id) && <p className="text-sm text-muted">{returnRuleText(rules.get(item.id) ?? "STANDARD", policy.windowDays)}</p>}
+                    {rules.has(item.id) && <p className="text-sm text-muted">{returnRuleText(rules.get(item.id) ?? "STANDARD", policy.windowDays, order.deliveryMethod)}</p>}
                   </li>
                 ))}
               </ul>
@@ -377,6 +388,7 @@ function rescueFocus(target: HTMLElement | null) {
 
 function AccountOrdersContent({ user, requestedId }: { user: User | null; requestedId: string | null }) {
   const { brandName } = useStorefront();
+  const { sampleOrderRetentionDays } = useCatalog();
   const [orders, setOrders] = useState<OrdersState>({ status: "loading" });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -540,6 +552,7 @@ function AccountOrdersContent({ user, requestedId }: { user: User | null; reques
           <OrderCard
             key={order.id}
             order={order}
+            retentionDays={sampleOrderRetentionDays}
             onDetails={() => openModal(setSelectedId, order)}
             onReceipt={() => printReceipt(order, user, brandName)}
             onCancel={() => openModal(setCancelId, order)}
@@ -572,6 +585,7 @@ function AccountOrdersContent({ user, requestedId }: { user: User | null; reques
       {selected && (
         <OrderDetails
           order={selected}
+          retentionDays={sampleOrderRetentionDays}
           user={user}
           notice={notice}
           closeRef={detailsClose}

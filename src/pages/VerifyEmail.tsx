@@ -5,12 +5,6 @@ import { Link, navigate, parseRoute, useRoute } from "../router";
 import { AuthLayout, authStyles } from "../components/AuthLayout";
 import { loginRoute, safeReturnTo, verifiedSignInRoute } from "../store/returnTo";
 
-/** The verification API's messages say "OTP" ("Invalid OTP. 4 attempt(s) remaining."); shoppers read "code". */
-function plainCodeWording(text: string) {
-  return text.replace(/\bOTP(?: code)?\b/g, (_match, offset: number) =>
-    (offset === 0 || /[.!?]\s+$/.test(text.slice(0, offset)) ? "Code" : "code"));
-}
-
 export default function VerifyEmail() {
   const route = useRoute();
   const { params } = parseRoute(route);
@@ -64,7 +58,7 @@ export default function VerifyEmail() {
       // Sign-in confirms the verification and returns to where the shopper was going; Back skips this page.
       navigate(verifiedSignInRoute(email, returnTo), { replace: true });
     } catch (err) {
-      setError(plainCodeWording(describeApiError(err, "Could not verify that code.")));
+      setError(describeApiError(err, "Could not verify that code."));
     } finally {
       setLoading(false);
     }
@@ -78,13 +72,12 @@ export default function VerifyEmail() {
     setResending(true);
     setError("");
     try {
-      const { data } = await authAPI.resendVerification(email);
-      if (data?.verificationEmailSent === false) throw new Error("Email not sent");
+      await authAPI.resendVerification(email);
       setDigits(["", "", "", "", "", ""]);
       setMessage("A new code has been sent. The previous code no longer works.");
       inputs.current[0]?.focus();
     } catch (err) {
-      setError(plainCodeWording(describeApiError(err, "Could not send a new code.")));
+      setError(describeApiError(err, "Could not send a new code."));
     } finally {
       setResending(false);
     }

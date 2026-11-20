@@ -37,7 +37,12 @@ export async function orderTransaction(operation) {
   }
 }
 
-const STOCK_LOG_ACTIONS = { 'cancel-restock': 'order-cancel', 'return-restock': 'return-restock' };
+/** What a deleted sample order's stock entries are logged as, held or committed. */
+export const SAMPLE_ORDER_PURGE_LOG = 'sample-order-purge';
+const STOCK_LOG_ACTIONS = {
+  'cancel-restock': 'order-cancel', 'return-restock': 'return-restock',
+  'purge-release': SAMPLE_ORDER_PURGE_LOG, 'purge-restock': SAMPLE_ORDER_PURGE_LOG,
+};
 
 async function adjustItems(db, items, action) {
   for (const item of [...items].sort((a, b) => a.variantId?.localeCompare(b.variantId ?? '') ?? 0)) {
@@ -55,7 +60,7 @@ async function adjustItems(db, items, action) {
     if (action === 'reserve') {
       if (availableStock(stock) < item.quantity) throw httpError(409, 'Insufficient stock for an order variant', 'OUT_OF_STOCK');
       reserved += item.quantity;
-    } else if (action === 'cancel-restock' || action === 'return-restock') {
+    } else if (action === 'cancel-restock' || action === 'return-restock' || action === 'purge-restock') {
       quantity += item.quantity;
     } else {
       if (reserved < item.quantity) throw httpError(409, 'Reservation quantities are inconsistent; review is required', 'INVENTORY_REVIEW');
@@ -79,6 +84,13 @@ export const reserveOrderItems = (db, items) => adjustItems(db, items, 'reserve'
 
 /** Returns inspected, resellable units to physical stock. The caller records the return state in the same transaction. */
 export const restockReturnedItems = (db, items) => adjustItems(db, items.filter((item) => item.quantity > 0), 'return-restock');
+
+/**
+ * Gives back the stock a sample order still holds, before the order is deleted: `entries` are one per variant
+ * (`{ variantId, productId, quantity }`), released from the reservation when `held`, otherwise returned to physical
+ * stock. Logged as `sample-order-purge`; an inconsistent allocation is refused for review, never clamped.
+ */
+export const restoreSampleOrderStock = (db, entries, { held }) => adjustItems(db, entries, held ? 'purge-release' : 'purge-restock');
 
 // Called only inside the verified-payment transaction, never on STK acceptance.
 export async function commitOrderReservation(db, orderId, now = new Date()) {

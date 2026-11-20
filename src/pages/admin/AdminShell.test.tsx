@@ -171,6 +171,27 @@ describe("shell states", () => {
   });
 });
 
+describe("dashboard on a store that takes sample orders", () => {
+  const NOTE = "Sample orders are left out of these figures. You'll find them in Orders.";
+
+  it("says that sample orders are left out and where they are, only while the store takes them", async () => {
+    signIn("ADMIN");
+    api.catalogAdmin.getSnapshot.mockResolvedValue({ data: { ...fixtureAdminSnapshot(), discounts, demonstrationOrders: true } });
+    const first = renderAdmin("/admin/overview/dashboard");
+    await screen.findByRole("heading", { level: 1, name: "Dashboard" });
+    const note = await screen.findByText((_, element) => element?.tagName === "P" && element.textContent === NOTE);
+    expect(within(note).getByRole("link", { name: "Orders" }).getAttribute("href")).toBe("#/admin/orders/orders");
+    first.unmount();
+
+    api.catalogAdmin.getSnapshot.mockResolvedValue({ data: { ...fixtureAdminSnapshot(), discounts, demonstrationOrders: false } });
+    renderAdmin("/admin/overview/dashboard");
+    await screen.findByRole("heading", { level: 1, name: "Dashboard" });
+    await waitFor(() => expect(api.catalogAdmin.getSnapshot).toHaveBeenCalledTimes(2));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByText(/Sample orders are left out/)).toBeNull();
+  });
+});
+
 describe("navigation", () => {
   it("lists only permitted modules under group labels, marks the current one and names the discount count", async () => {
     signIn("VIEWER");

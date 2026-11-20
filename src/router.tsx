@@ -62,7 +62,8 @@ function markEntry(index: number) {
   window.history.replaceState({ ...(typeof stored === "object" && stored !== null ? stored : {}), [INDEX_KEY]: index }, "");
 }
 
-/** Adopts the current entry's mark, or marks it, when the store starts watching the address. */
+/** Adopts the current entry's mark, or marks it: whenever the address is read while nothing watches it, and when the
+ *  store starts watching. */
 function syncEntryIndex() {
   const index = entryIndex();
   if (index === null) markEntry(currentIndex);
@@ -155,12 +156,17 @@ function onLocationChange() {
 }
 
 function subscribe(notify: () => void) {
-  if (!subscribers.size) {
-    syncEntryIndex();
+  const first = !subscribers.size;
+  subscribers.add(notify);
+  if (first) {
     window.addEventListener("hashchange", onLocationChange);
     window.addEventListener("popstate", onLocationChange);
+    // The first render read (and marked) the address before anything listened. A change since then (a link followed
+    // or Back pressed at that moment) fired its events unheard, so it is taken up now, as it would have been then, and
+    // measured from the marked entry.
+    if (state && readRoute() !== state.route) onLocationChange();
+    else syncEntryIndex();
   }
-  subscribers.add(notify);
   return () => {
     subscribers.delete(notify);
     if (subscribers.size) return;
@@ -170,10 +176,12 @@ function subscribe(notify: () => void) {
 }
 
 function getState(): RouteState {
-  // Unwatched, the address may have changed unseen (before the first reader mounts, or between tests).
+  // Unwatched, the address may have changed unseen (before the first reader mounts, or between tests). Its entry is
+  // marked now, while it is the current one (idempotent, as `getSnapshot` may run more than once).
   if (!subscribers.size) {
     const route = currentRoute();
     if (state?.route !== route) state = { route, kind: "load", previous: null };
+    syncEntryIndex();
   }
   return state!;
 }
