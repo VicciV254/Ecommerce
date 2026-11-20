@@ -534,6 +534,22 @@ test("the phone purchase bar shows only while the page's action is off screen, a
   await expect(bar).toBeHidden();
 });
 
+test("back to top floats above the phone purchase bar, never over it", async ({ page, isMobile }) => {
+  test.skip(!isMobile, "The purchase bar serves widths below 1024px.");
+  await page.goto(productRoute(campShirt.id));
+  const bar = page.locator("[data-purchase-bar]");
+  const back = page.getByRole("button", { name: "Back to top" });
+  await expect(pageAction(page)).toBeVisible();
+  await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" }));
+  await expect(bar).toBeVisible();
+  await page.evaluate(() => window.scrollBy({ top: -150, behavior: "instant" }));
+  expect(await page.evaluate(() => window.scrollY > window.innerHeight), "still more than a screen down").toBe(true);
+  await expect(back).toBeVisible();
+  await expect(bar, "the page's own action is still off screen").toBeVisible();
+  const gap = async () => (await bar.boundingBox())!.y - (await back.boundingBox().then((box) => box!.y + box!.height));
+  await expect.poll(gap, "space between the button and the bar").toBeGreaterThanOrEqual(8);
+});
+
 test("keyboard focus moved behind the purchase bar ends above it (WCAG 2.4.11)", async ({ page, isMobile }) => {
   test.skip(!isMobile, "The purchase bar serves widths below 1024px.");
   await page.goto(productRoute(campShirt.id));

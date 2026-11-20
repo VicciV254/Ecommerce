@@ -11,6 +11,7 @@ import { DeploymentNotice } from "./components/DeploymentNotice";
 import { GuestCartMerge } from "./components/GuestCartMerge";
 import { MiniCartProvider } from "./components/MiniCart";
 import { Footer } from "./components/Footer";
+import { BackToTop } from "./components/BackToTop";
 import Home from "./pages/Home";
 import Shop from "./pages/Shop";
 import Departments from "./pages/Departments";
@@ -145,6 +146,7 @@ function Router() {
         {page}
       </main>
       {!isAdmin && <Footer />}
+      <BackToTop />
     </div>
   );
 }

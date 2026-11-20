@@ -131,6 +131,19 @@ describe("routes", () => {
   });
 });
 
+describe("back to top", () => {
+  it("is offered on shopper pages, not in the staff area or the draft preview's frame", () => {
+    for (const [hash, offered] of [
+      ["#/", true], ["#/privacy", true], ["#/admin/overview/dashboard", false], [`#${ADMIN_PREVIEW_FRAME_ROUTE}`, false],
+    ] as const) {
+      window.location.hash = hash;
+      const { unmount } = render(<App />);
+      expect(screen.queryByRole("button", { name: "Back to top" }) !== null, hash).toBe(offered);
+      unmount();
+    }
+  });
+});
+
 describe("deployment notice", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
@@ -175,7 +188,8 @@ describe("link inventory", () => {
     }
   };
 
-  it("resolves every link and navigate() target of the header, footer and public pages to a page", async () => {
+  // It loads and renders eight real pages on first use: in a full parallel run that takes more than the default 5 s.
+  it("resolves every link and navigate() target of the header, footer and public pages to a page", { timeout: 15_000 }, async () => {
     window.location.hash = "#/about";
     for (const signedIn of [false, true]) {
       state.user = signedIn ? customer : null;

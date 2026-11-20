@@ -233,6 +233,11 @@ html:has([data-purchase-bar] :focus) {
   scroll-padding-bottom: 0;
 }
 
+/* While the phone purchase bar shows, "Back to top" floats above it instead of over it. */
+html:has([data-purchase-bar][data-shown]) [data-back-to-top] {
+  bottom: calc(var(--purchase-bar-height, 0px) + 1rem);
+}
+
 /*
  * One focus indicator, unlayered so it also replaces `outline-none`: a 3px ring outside a 2px gap. It also marks
  * headings and regions that receive focus on route entry or a level change (`tabindex="-1"`).

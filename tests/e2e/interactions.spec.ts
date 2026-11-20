@@ -1,4 +1,4 @@
-import type { Request, Route } from "@playwright/test";
+import type { Page, Request, Route } from "@playwright/test";
 import {
   ORIGIN,
   adminSnapshot,
@@ -8,6 +8,7 @@ import {
   linenCartLine,
   order,
   orderPage,
+  pageOverflow,
   publishedStorefront,
   shopperState,
   signInCustomer,
@@ -368,4 +369,174 @@ test("password visibility can be reached and changed using the keyboard", async 
   await expect(toggle).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("button", { name: "Hide password" })).toHaveAttribute("aria-pressed", "true");
+});
+
+/** Scrolls the window by `delta` at once, then lets two frames pass so the page can react. */
+async function scrollPageBy(page: Page, delta: number) {
+  await page.evaluate((top) => window.scrollBy({ top, behavior: "instant" }), delta);
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
+/** Goes `screens` screens down the page, then a little back up: the gesture that offers "Back to top". */
+async function scrollDownThenUp(page: Page, screens: number) {
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+  const height = await page.evaluate(() => window.innerHeight);
+  for (let step = 0; step < screens * 2; step += 1) await scrollPageBy(page, height / 2);
+  await scrollPageBy(page, -200);
+}
+
+test("back to top appears only while scrolling up a long page, and returns the page and keyboard focus to the top", async ({ page }) => {
+  await page.goto("/#/privacy");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  const back = page.getByRole("button", { name: "Back to top" });
+  const height = await page.evaluate(() => window.innerHeight);
+  expect(await page.evaluate(() => document.documentElement.scrollHeight), "a page several screens long").toBeGreaterThan(height * 3);
+  /** Whether a script can give it focus: never while it is hidden. */
+  const focusable = () => page.locator("[data-back-to-top]").evaluate((element: HTMLElement) => {
+    element.focus();
+    const focused = document.activeElement === element;
+    element.blur();
+    return focused;
+  });
+
+  for (let step = 0; step < 6; step += 1) await scrollPageBy(page, height / 2);
+  await expect(back, "scrolling down").toBeHidden();
+  await scrollPageBy(page, -200);
+  await expect(back, "scrolling up").toBeVisible();
+  const box = (await back.boundingBox())!;
+  const width = await page.evaluate(() => document.documentElement.clientWidth);
+  expect(Math.min(box.width, box.height), "a whole touch target").toBeGreaterThanOrEqual(44);
+  expect(width - (box.x + box.width), "clear of the right edge").toBeGreaterThanOrEqual(12);
+  expect(height - (box.y + box.height), "clear of the bottom edge").toBeGreaterThanOrEqual(12);
+  await scrollPageBy(page, 150);
+  await expect(back, "down again").toBeHidden();
+  await expect(back, "out of the accessibility tree while hidden").toHaveCount(0);
+  expect(await focusable(), "and out of reach of focus").toBe(false);
+
+  // Enter takes the page to the top and focus to its first control, the store's home link.
+  await scrollPageBy(page, -200);
+  await expect(back).toBeVisible();
+  await back.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("banner").getByRole("link", { name: "Apex Cart", exact: true })).toBeFocused();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  await expect(back).toBeHidden();
+  // A short scroll from the top never offers it.
+  await scrollPageBy(page, height / 2);
+  await scrollPageBy(page, -100);
+  await expect(back).toBeHidden();
+});
+
+test("back to top glides to the top, or jumps there for shoppers who prefer reduced motion", async ({ page }) => {
+  await page.goto("/#/privacy");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  const back = page.getByRole("button", { name: "Back to top" });
+  for (const motion of ["no-preference", "reduce"] as const) {
+    await page.emulateMedia({ reducedMotion: motion });
+    await scrollDownThenUp(page, 3);
+    await expect(back).toBeVisible();
+    await back.click();
+    const soon = await page.evaluate(() => new Promise<number>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve(window.scrollY)));
+    }));
+    if (motion === "reduce") expect(soon, "reduced motion: at once").toBe(0);
+    else expect(soon, "on its way up").toBeGreaterThan(0);
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  }
+});
+
+test("back to top names itself on hover and keyboard focus, whole even at 360px with doubled text", async ({ page, isMobile }) => {
+  if (isMobile) await page.setViewportSize({ width: 360, height: 780 });
+  await page.goto("/#/privacy");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  const back = page.getByRole("button", { name: "Back to top" });
+  const label = back.getByText("Back to top", { exact: true });
+  const widthOf = async () => (await back.boundingBox())!.width;
+  const whole = async (state: string) => {
+    await expect.poll(widthOf, `${state}: opened`).toBeGreaterThan(100);
+    await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 300)));
+    const [button, text] = [(await back.boundingBox())!, (await label.boundingBox())!];
+    const width = await page.evaluate(() => document.documentElement.clientWidth);
+    expect(text.x, `${state}: the label starts inside the button`).toBeGreaterThanOrEqual(button.x - 0.5);
+    expect(text.x + text.width, `${state}: and ends inside it`).toBeLessThanOrEqual(button.x + button.width + 0.5);
+    expect(button.x, `${state}: on screen`).toBeGreaterThanOrEqual(0);
+    expect(button.x + button.width, `${state}: on screen`).toBeLessThanOrEqual(width);
+    expect(await pageOverflow(page), `${state}: page overflow`).toBeLessThanOrEqual(0);
+  };
+  for (const size of ["", "200%"]) {
+    const text = size || "100%";
+    await page.evaluate((value) => { document.documentElement.style.fontSize = value; }, size);
+    await scrollDownThenUp(page, 3);
+    await expect(back).toBeVisible();
+    await expect.poll(widthOf, `${text}: just the arrow`).toBeLessThan(60);
+    if (!isMobile) {
+      await back.hover();
+      await whole(`hover at ${text}`);
+      await page.mouse.move(5, 5);
+      await expect.poll(widthOf).toBeLessThan(60);
+    }
+    await page.keyboard.press("Shift");
+    await back.focus();
+    await whole(`keyboard focus at ${text}`);
+    await back.blur();
+  }
+  await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
+});
+
+test("back to top stays distinct over the navy footer, also with keyboard focus (WCAG 1.4.11)", async ({ page }) => {
+  await page.goto("/#/privacy");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  const back = page.getByRole("button", { name: "Back to top" });
+  await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" }));
+  await scrollPageBy(page, 0);
+  await scrollPageBy(page, -60);
+  await expect(back).toBeVisible();
+  await page.waitForTimeout(400);
+  /** The best contrast of the button's edge or fill against what lies behind its middle, and what that is. */
+  const distinct = () => back.evaluate((button: HTMLElement) => {
+    const channels = (value: string) => (value.match(/[\d.]+/g) ?? []).map(Number);
+    const luminance = (value: string) => {
+      const [r, g, b] = channels(value).slice(0, 3).map((channel) => {
+        const c = channel / 255;
+        return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const ratio = (a: string, b: string) => {
+      const [high, low] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+      return (high + 0.05) / (low + 0.05);
+    };
+    const opaque = (value: string) => (channels(value)[3] ?? 1) > 0.5;
+    const box = button.getBoundingClientRect();
+    let behind = document.elementsFromPoint(box.left + box.width / 2, box.top + box.height / 2).find((element) => !button.contains(element)) ?? null;
+    while (behind && !opaque(getComputedStyle(behind).backgroundColor)) behind = behind.parentElement;
+    const backdrop = behind ? getComputedStyle(behind).backgroundColor : "rgb(255, 255, 255)";
+    const style = getComputedStyle(button);
+    const edges = [style.borderTopColor, style.backgroundColor].filter(opaque);
+    return {
+      overFooter: Boolean(behind?.closest("footer")),
+      contrast: Math.max(0, ...edges.map((edge) => ratio(edge, backdrop))),
+      fill: style.backgroundColor,
+    };
+  });
+  const resting = await distinct();
+  expect(resting.overFooter, "the button sits over the footer").toBe(true);
+  expect(resting.contrast, "its edge or fill against the footer").toBeGreaterThanOrEqual(3);
+  await page.keyboard.press("Shift");
+  await back.focus();
+  await page.waitForTimeout(400);
+  expect((await distinct()).contrast, "with keyboard focus").toBeGreaterThanOrEqual(3);
+  // Keyboard focus changes the fill itself, so it shows even where the ring is faint against the navy.
+  const focusChange = await back.evaluate((button: HTMLElement, resting: string) => {
+    const luminance = (value: string) => {
+      const [r, g, b] = (value.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number).map((channel) => {
+        const c = channel / 255;
+        return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const [high, low] = [luminance(getComputedStyle(button).backgroundColor), luminance(resting)].sort((x, y) => y - x);
+    return (high + 0.05) / (low + 0.05);
+  }, resting.fill);
+  expect(focusChange, "focused fill against the resting fill").toBeGreaterThanOrEqual(3);
 });
