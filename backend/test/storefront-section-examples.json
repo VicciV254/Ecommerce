@@ -1,0 +1,138 @@
+{
+  "about": "Section lists for the storefront rules (P8.7), checked against the API's schema (backend/test/unit/storefrontSections.test.js) and the editor's mirror (src/pages/admin/storefrontDraftRules.test.ts). Each list replaces the sections of the default storefront; `campaigns` is added when given.",
+  "allowed": [
+    {
+      "name": "the four kinds stored before P8.7, with no layout",
+      "sections": [
+        { "id": "departments", "type": "departments", "title": "Shop by department", "enabled": true, "productIds": [], "categoryIds": ["cat-fashion"], "campaignId": null },
+        { "id": "featured", "type": "featured", "title": "Featured products", "enabled": true, "productIds": [], "categoryIds": [], "campaignId": null },
+        { "id": "picks", "type": "products", "title": "Staff picks", "enabled": false, "productIds": ["prod-1", "prod-2"], "categoryIds": [], "campaignId": null },
+        { "id": "hero", "type": "campaign", "title": "Hero", "enabled": true, "productIds": [], "categoryIds": [], "campaignId": "launch" }
+      ],
+      "campaigns": [
+        {
+          "id": "launch", "title": "Launch week", "body": "", "conditions": "", "cta": { "label": "Shop now", "target": "shop", "targetId": null },
+          "desktopMediaId": null, "mobileMediaId": null, "desktopFocal": { "x": 50, "y": 50 }, "mobileFocal": { "x": 50, "y": 50 }, "layout": "split"
+        }
+      ]
+    },
+    {
+      "name": "each new kind once",
+      "sections": [
+        { "id": "phones", "type": "category", "title": "Phones", "enabled": true, "productIds": [], "categoryIds": ["cat-phones"], "campaignId": null },
+        { "id": "promises", "type": "promises", "title": "How shopping works", "enabled": true, "productIds": [], "categoryIds": [], "campaignId": null },
+        { "id": "best-sellers", "type": "bestSellers", "title": "Best sellers", "enabled": false, "productIds": [], "categoryIds": [], "campaignId": null }
+      ]
+    },
+    {
+      "name": "a layout on each kind that takes one",
+      "sections": [
+        { "id": "departments", "type": "departments", "title": "Shop by department", "enabled": true, "productIds": [], "categoryIds": [], "campaignId": null, "layout": "grid" },
+        { "id": "featured", "type": "featured", "title": "Staff picks", "enabled": true, "productIds": [], "categoryIds": [], "campaignId": null, "layout": "rail" },
+        { "id": "picks", "type": "products", "title": "Selected products", "enabled": true, "productIds": ["prod-1"], "categoryIds": [], "campaignId": null, "layout": "rail" },
+        { "id": "fashion", "type": "category", "title": "Fashion", "enabled": true, "productIds": [], "categoryIds": ["cat-fashion"], "campaignId": null, "layout": "grid" },
+        { "id": "phones", "type": "category", "title": "Phones", "enabled": true, "productIds": [], "categoryIds": ["cat-phones"], "campaignId": null, "layout": "rail" }
+      ]
+    },
+    {
+      "name": "the best sellers heading with spaces around it, which the API trims",
+      "sections": [
+        { "id": "best-sellers", "type": "bestSellers", "title": "  Best sellers ", "enabled": true, "productIds": [], "categoryIds": [], "campaignId": null }
+      ]
+    }
+  ],
+  "refused": [
+    {
+      "name": "a layout on a campaign",
+      "sections": [
+        { "id": "hero", "type": "campaign", "title": "Hero", "enabled": true, "productIds": [], "categoryIds": [], "campaignId": "launch", "layout": "grid" }
+      ],
+      "campaigns": [
+        {
+          "id": "launch", "title": "Launch week", "body": "", "conditions": "", "cta": { "label": "Shop now", "target": "shop", "targetId": null },
+          "desktopMediaId": null, "mobileMediaId": null, "desktopFocal": { "x": 50, "y": 50 }, "mobileFocal": { "x": 50, "y": 50 }, "layout": "split"
+        }
+      ]
+    },
+    {
+      "name": "a layout on shopping facts",
+      "sections": [
+        { "id": "promises", "type": "promises", "title": "How shopping works", "enabled": true, "productIds": [], "categoryIds": [], "campaignId": null, "layout": "rail" }
+      ]
+    },
+    {
+      "name": "a layout on best sellers",
+      "sections": [
+        { "id": "best-sellers", "type": "bestSellers", "title": "Best sellers", "enabled": true, "productIds": [], "categoryIds": [], "campaignId": null, "layout": "rail" }
+      ]
+    },
+    {
+      "name": "an unknown layout",
+      "sections": [
+        { "id": "featured", "type": "featured", "title": "Featured products", "enabled": true, "productIds": [], "categoryIds": [], "campaignId": null, "layout": "carousel" }
+      ]
+    },
+    {
+      "name": "a department row without a department",
+      "sections": [
+        { "id": "row", "type": "category", "title": "Department row", "enabled": false, "productIds": [], "categoryIds": [], "campaignId": null }
+      ]
+    },
+    {
+      "name": "a department row with two departments",
+      "sections": [
+        { "id": "row", "type": "category", "title": "Fashion and phones", "enabled": true, "productIds": [], "categoryIds": ["cat-fashion", "cat-phones"], "campaignId": null }
+      ]
+    },
+    {
+      "name": "a department row with chosen products",
+      "sections": [
+        { "id": "row", "type": "category", "title": "Fashion", "enabled": true, "productIds": ["prod-1"], "categoryIds": ["cat-fashion"], "campaignId": null }
+      ]
+    },
+    {
+      "name": "shopping facts with products",
+      "sections": [
+        { "id": "promises", "type": "promises", "title": "How shopping works", "enabled": true, "productIds": ["prod-1"], "categoryIds": [], "campaignId": null }
+      ]
+    },
+    {
+      "name": "shopping facts with a category",
+      "sections": [
+        { "id": "promises", "type": "promises", "title": "How shopping works", "enabled": true, "productIds": [], "categoryIds": ["cat-fashion"], "campaignId": null }
+      ]
+    },
+    {
+      "name": "best sellers with products",
+      "sections": [
+        { "id": "best-sellers", "type": "bestSellers", "title": "Best sellers", "enabled": true, "productIds": ["prod-1"], "categoryIds": [], "campaignId": null }
+      ]
+    },
+    {
+      "name": "two shopping facts sections",
+      "sections": [
+        { "id": "promises", "type": "promises", "title": "How shopping works", "enabled": true, "productIds": [], "categoryIds": [], "campaignId": null },
+        { "id": "promises-2", "type": "promises", "title": "Shopping here", "enabled": false, "productIds": [], "categoryIds": [], "campaignId": null }
+      ]
+    },
+    {
+      "name": "two best sellers sections",
+      "sections": [
+        { "id": "best-sellers", "type": "bestSellers", "title": "Best sellers", "enabled": true, "productIds": [], "categoryIds": [], "campaignId": null },
+        { "id": "best-sellers-2", "type": "bestSellers", "title": "Best sellers", "enabled": false, "productIds": [], "categoryIds": [], "campaignId": null }
+      ]
+    },
+    {
+      "name": "best sellers under another heading",
+      "sections": [
+        { "id": "best-sellers", "type": "bestSellers", "title": "Top picks", "enabled": true, "productIds": [], "categoryIds": [], "campaignId": null }
+      ]
+    },
+    {
+      "name": "best sellers with the heading's case changed",
+      "sections": [
+        { "id": "best-sellers", "type": "bestSellers", "title": "Best Sellers", "enabled": true, "productIds": [], "categoryIds": [], "campaignId": null }
+      ]
+    }
+  ]
+}

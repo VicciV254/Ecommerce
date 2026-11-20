@@ -141,6 +141,8 @@ async function respond(route: Route, url: URL) {
 
   if (url.pathname === "/api/catalog") return route.fulfill({ json: publicSnapshot });
   if (url.pathname === "/api/settings/storefront") return route.fulfill({ json: publishedStorefront });
+  // No store here has qualifying sales unless a test serves a ranking of its own.
+  if (url.pathname === "/api/settings/storefront/best-sellers") return route.fulfill({ json: { windowDays: 30, productIds: [] } });
   if (url.pathname === "/api/settings/storefront/draft") return route.fulfill({ json: storefrontDraft });
   if (url.pathname === "/api/admin/catalog") return route.fulfill({ json: adminSnapshot });
   if (url.pathname === "/api/admin/stock") return route.fulfill({ json: { stocks: adminStocks } });

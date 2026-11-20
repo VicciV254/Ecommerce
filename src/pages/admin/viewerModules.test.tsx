@@ -124,6 +124,32 @@ describe("view-only presentation for roles without writes", () => {
     noWrites();
   });
 
+  it("storefront editor: names each section kind, its department and layout, and explains the measured best sellers", async () => {
+    const section = (id: string, type: string, title: string, extra: Record<string, unknown> = {}) =>
+      ({ id, type, title, enabled: true, productIds: [], categoryIds: [], campaignId: null, ...extra }) as StorefrontDraft["settings"]["sections"][number];
+    api.catalog.getStorefrontDraft.mockResolvedValue({ data: { ...draft, settings: fixtureStorefrontSettings({ sections: [
+      section("departments", "departments", "Shop by department", { layout: "grid" }),
+      section("featured", "featured", "Staff picks", { layout: "rail" }),
+      section("picks", "products", "Selected", { productIds: ["prod-polo-shirt"] }),
+      section("shirts", "category", "Shirts", { categoryIds: ["cat-shirts"] }),
+      section("facts", "promises", "How shopping works"),
+      section("best", "bestSellers", "Best sellers", { enabled: false }),
+    ] }) } });
+    render(<StorefrontDraftProvider canWrite={false} showToast={vi.fn()}><StorefrontManager canWrite={false} /></StorefrontDraftProvider>);
+    const heading = await screen.findByRole("heading", { name: "Sections (6)" });
+    const items = within(heading.closest("section") ?? document.body).getAllByRole("listitem").map((item) => [...item.querySelectorAll("p")].map((line) => line.textContent));
+    expect(items).toEqual([
+      ["1. Departments · Shown", "Shop by department", "Categories: every top-level department", "Layout: Grid"],
+      ["2. Featured products · Shown", "Staff picks", "Products: products marked Featured", "Layout: Row you scroll"],
+      ["3. Selected products · Shown", "Selected", "Products: Cotton Polo Shirt", "Layout: Grid"],
+      ["4. Department row · Shown", "Shirts", "Department: Fashion › Men › Shirts", "Layout: Row you scroll"],
+      ["5. Shopping facts · Shown", "How shopping works", "Shows four facts from the store's settings, each linking to its page: prices and VAT, delivery, payment and returns."],
+      ["6. Best sellers · Hidden", "Best sellers", "Measured: up to 12 products, ranked by paid orders in the last 30 days, each bought by at least 2 different accounts. Shoppers don't see the row until at least 4 products qualify."],
+    ]);
+    expectReadOnly();
+    noWrites();
+  });
+
   it("products: read-only rows and product details; adding is not available", async () => {
     window.history.replaceState(null, "", "#/admin/catalog/products?product=new");
     render(<CatalogManager canWrite={false} showToast={vi.fn()} />);

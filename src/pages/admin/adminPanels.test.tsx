@@ -375,3 +375,134 @@ describe("admin catalog panels", () => {
     expect(screen.getByRole("button", { name: "Save draft" }).hasAttribute("disabled")).toBe(true);
   });
 });
+
+describe("P8.7 storefront section kinds in the editor", () => {
+  const cards = () => screen.getAllByRole("article");
+  const kindOf = (card: HTMLElement) => card.querySelector("p")?.textContent;
+  const heading = (card: HTMLElement) => within(card).getByRole<HTMLInputElement>("textbox", { name: "Heading" });
+  const layout = (card: HTMLElement) => within(card).queryByRole<HTMLSelectElement>("combobox", { name: "Layout" });
+  const search = (card: HTMLElement) => within(card).getByPlaceholderText<HTMLInputElement>("Search to add…");
+  async function openEditor(settings = draft.settings) {
+    admin.api.getStorefrontDraft.mockResolvedValue({ data: { ...draft, settings } });
+    admin.api.saveStorefrontDraft.mockImplementation((version: number, saved: StorefrontDraft["settings"]) =>
+      Promise.resolve({ data: { ...draft, version: version + 1, settings: saved } }));
+    renderStorefront();
+    await screen.findByLabelText("Store name");
+  }
+  const add = (label: string) => fireEvent.click(screen.getByRole("button", { name: `+ ${label}` }));
+
+  it("adds a department row, shopping facts and best sellers; one shopping facts and one best sellers section at most", async () => {
+    await openEditor();
+    add("Department row");
+    add("Shopping facts");
+    add("Best sellers");
+    expect(cards().map(kindOf)).toEqual(["1. Departments", "2. Featured products", "3. Department row", "4. Shopping facts", "5. Best sellers"]);
+    for (const label of ["Shopping facts", "Best sellers"]) {
+      expect(screen.getByRole("button", { name: `+ ${label}` }).hasAttribute("disabled"), label).toBe(true);
+    }
+    expect(screen.getByRole("button", { name: "+ Department row" }).hasAttribute("disabled")).toBe(false);
+    // Removing the strip offers it again.
+    fireEvent.click(within(cards()[3]).getByRole("button", { name: "Remove section 4" }));
+    expect(screen.getByRole("button", { name: "+ Shopping facts" }).hasAttribute("disabled")).toBe(false);
+  });
+
+  it("a department row needs one department, and its heading follows the department until staff write their own", async () => {
+    await openEditor();
+    add("Department row");
+    const row = cards()[2];
+    expect(heading(row).value).toBe("Department row");
+    expect(screen.getByText('"Department row" needs exactly one department.')).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Save draft" }).hasAttribute("disabled")).toBe(true);
+
+    fireEvent.change(search(row), { target: { value: "shirts" } });
+    fireEvent.click(within(row).getByRole("button", { name: "Fashion › Men › Shirts" }));
+    expect(heading(row).value).toBe("Shirts");
+    expect(screen.queryByText(/needs exactly one department/)).toBeNull();
+    // One department at most: the search stays closed until it is removed.
+    expect(search(row).disabled).toBe(true);
+    fireEvent.click(within(row).getByRole("button", { name: "Remove Fashion › Men › Shirts" }));
+    expect(heading(row).value).toBe("Department row");
+    fireEvent.change(search(row), { target: { value: "phones" } });
+    fireEvent.click(within(row).getByRole("button", { name: "Phones & Tablets" }));
+    expect(heading(row).value).toBe("Phones & Tablets");
+
+    fireEvent.change(heading(row), { target: { value: "Phones for every budget" } });
+    fireEvent.click(within(row).getByRole("button", { name: "Remove Phones & Tablets" }));
+    fireEvent.change(search(row), { target: { value: "fashion" } });
+    fireEvent.click(within(row).getByRole("button", { name: "Fashion" }));
+    expect(heading(row).value).toBe("Phones for every budget");
+
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(admin.api.saveStorefrontDraft).toHaveBeenCalledTimes(1));
+    expect(admin.api.saveStorefrontDraft.mock.calls[0][1].sections[2]).toEqual({
+      id: "department-row", type: "category", title: "Phones for every budget", enabled: false,
+      productIds: [], categoryIds: ["cat-fashion"], campaignId: null,
+    });
+  });
+
+  it("offers a layout only for departments, featured, selected products and department rows, saving the choice", async () => {
+    await openEditor();
+    add("Department row");
+    add("Shopping facts");
+    add("Best sellers");
+    add("campaign");
+    const [departments, featured, row, facts, best, campaign] = cards();
+    expect([layout(departments)?.value, layout(featured)?.value, layout(row)?.value]).toEqual(["rail", "grid", "rail"]);
+    expect(within(layout(departments)!).getAllByRole("option").map((option) => option.textContent)).toEqual(["Row you scroll", "Grid"]);
+    expect([layout(facts), layout(best), layout(campaign)]).toEqual([null, null, null]);
+
+    fireEvent.change(layout(departments)!, { target: { value: "grid" } });
+    fireEvent.change(layout(featured)!, { target: { value: "rail" } });
+    expect([layout(departments)!.value, layout(featured)!.value]).toEqual(["grid", "rail"]);
+    // Only the changed sections carry a layout; the others keep their kind's default.
+    fireEvent.click(within(row).getByRole("button", { name: "Remove section 3" }));
+    fireEvent.click(within(cards()[4]).getByRole("button", { name: "Remove section 5" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(admin.api.saveStorefrontDraft).toHaveBeenCalledTimes(1));
+    const sent = admin.api.saveStorefrontDraft.mock.calls[0][1].sections;
+    expect(sent.map((item: { id: string; layout?: string }) => [item.id, item.layout])).toEqual([
+      ["departments", "grid"], ["featured", "rail"], ["shopping-facts", undefined], ["best-sellers", undefined],
+    ]);
+  });
+
+  it("keeps the best sellers heading fixed and explains when the row shows; the shopping facts heading stays editable", async () => {
+    await openEditor();
+    add("Best sellers");
+    add("Shopping facts");
+    const [best, facts] = cards().slice(2);
+    expect(within(best).queryAllByRole("textbox")).toEqual([]);
+    expect(within(best).getByText("Best sellers", { selector: "p" })).toBeTruthy();
+    expect(within(best).getByText(
+      "This heading is fixed because the row is measured: up to 12 products, ranked by paid orders in the last 30 days, each bought by at least 2 different accounts. Sample orders and sandbox payments never count. Shoppers don't see the row until at least 4 products qualify.",
+    )).toBeTruthy();
+    expect(within(best).queryByText(/can't claim a ranking/)).toBeNull();
+
+    expect(heading(facts).value).toBe("How shopping works");
+    expect(within(facts).getByText(
+      "Shows four facts from the store's settings, each linking to its page: prices and VAT, delivery, payment and returns. The heading is read out by screen readers; it isn't shown.",
+    )).toBeTruthy();
+    fireEvent.change(heading(facts), { target: { value: "Shopping here" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(admin.api.saveStorefrontDraft).toHaveBeenCalledTimes(1));
+    expect(admin.api.saveStorefrontDraft.mock.calls[0][1].sections.slice(2)).toEqual([
+      { id: "best-sellers", type: "bestSellers", title: "Best sellers", enabled: false, productIds: [], categoryIds: [], campaignId: null },
+      { id: "shopping-facts", type: "promises", title: "Shopping here", enabled: false, productIds: [], categoryIds: [], campaignId: null },
+    ]);
+  });
+
+  it("still refuses a ranking claim in any other heading", async () => {
+    await openEditor();
+    fireEvent.change(heading(cards()[1]), { target: { value: "Best sellers" } });
+    expect(within(cards()[1]).getByText(/headings can't claim a ranking/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Save draft" }).hasAttribute("disabled")).toBe(true);
+  });
+
+  it("does not open a draft holding a section kind this version doesn't know, rather than dropping it", async () => {
+    const later = { id: "stores", type: "stores", title: "Our sellers", enabled: true, productIds: [], categoryIds: [], campaignId: null };
+    admin.api.getStorefrontDraft.mockResolvedValue({ data: { ...draft, settings: { ...draft.settings, sections: [...draft.settings.sections, later] } } });
+    renderStorefront();
+    expect(await screen.findByText("The storefront draft was not in the expected format.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Save draft" })).toBeNull();
+  });
+});

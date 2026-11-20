@@ -1,4 +1,5 @@
 import type {
+  BestSellers,
   Campaign,
   CatalogCategory,
   CatalogProduct,
@@ -9,13 +10,22 @@ import type {
   StorefrontSettings,
 } from "../api/catalog";
 import { isRecord } from "../utils/storage";
-import { hasValidLaterMediaFields, withMediaDefaults, type CategoryTree } from "./catalogModel";
+import { hasValidLaterMediaFields, inCategory, withMediaDefaults, type CategoryTree } from "./catalogModel";
 import { isPagination } from "./orderModel";
 import { COLOR_SLOTS } from "./storefrontTheme";
 
 export const DEFAULT_BRAND_NAME = "Apex Cart";
-/** Products rendered per merchandising section on the storefront. */
+/** Products a merchandising section shows as a grid (4, 6 then 8 by breakpoint). */
 export const SECTION_PRODUCT_LIMIT = 8;
+/** Products a section shows as a row shoppers scroll. */
+export const RAIL_PRODUCT_LIMIT = 12;
+/** The measured best sellers' heading, fixed by the API. */
+export const BEST_SELLERS_TITLE = "Best sellers";
+/**
+ * The API's best sellers rules (`backend/src/services/bestSellersService.js`), mirrored for the staff explanations; the
+ * shopper's page shows the section only when at least `minProducts` ranked products are in its catalog.
+ */
+export const BEST_SELLERS_RULES = { windowDays: 30, minBuyers: 2, minProducts: 4 } as const;
 
 export class StorefrontFormatError extends Error {
   constructor(detail: string) {
@@ -25,7 +35,12 @@ export class StorefrontFormatError extends Error {
 }
 
 type Section = StorefrontSettings["sections"][number];
-const SECTION_TYPES: readonly Section["type"][] = ["departments", "featured", "products", "campaign"];
+export type SectionLayout = NonNullable<Section["layout"]>;
+const SECTION_TYPES: readonly Section["type"][] = ["departments", "featured", "products", "campaign", "category", "promises", "bestSellers"];
+/** The kinds with a grid or row layout, and the layout each shows when none is set (as before layouts existed). */
+const DEFAULT_LAYOUTS = { departments: "rail", featured: "grid", products: "grid", category: "rail" } as const satisfies Partial<Record<Section["type"], SectionLayout>>;
+export type LayoutKind = keyof typeof DEFAULT_LAYOUTS;
+const SECTION_LAYOUTS: readonly SectionLayout[] = ["grid", "rail"];
 const CTA_TARGETS: readonly Campaign["cta"]["target"][] = ["shop", "category", "product"];
 const LAYOUTS: readonly Campaign["layout"][] = ["split", "overlay", "banner"];
 
@@ -37,8 +52,18 @@ const isFocal = (value: unknown) => isRecord(value) && isPercent(value.x) && isP
 const oneOf = <T extends string>(options: readonly T[], value: unknown): value is T =>
   options.some((option) => option === value);
 
+const LAYOUT_KINDS: ReadonlySet<string> = new Set(Object.keys(DEFAULT_LAYOUTS));
+export const takesLayout = (type: Section["type"]): type is LayoutKind => LAYOUT_KINDS.has(type);
+
+/** How a section shows: its own layout, or its kind's default (departments and department rows as rows, products as grids). */
+export function sectionLayout(section: Pick<Section, "layout"> & { type: LayoutKind }): SectionLayout {
+  return section.layout ?? DEFAULT_LAYOUTS[section.type];
+}
+
 function isSection(value: unknown): value is Section {
-  return isRecord(value) && isString(value.id) && oneOf(SECTION_TYPES, value.type) && isString(value.title) &&
+  if (!isRecord(value) || !oneOf(SECTION_TYPES, value.type)) return false;
+  const layout = value.layout === undefined || (takesLayout(value.type) && oneOf(SECTION_LAYOUTS, value.layout));
+  return isString(value.id) && isString(value.title) && layout &&
     typeof value.enabled === "boolean" && isStringArray(value.productIds) && isStringArray(value.categoryIds) &&
     isNullableString(value.campaignId);
 }
@@ -66,12 +91,24 @@ export function isStorefrontSettings(value: unknown): value is StorefrontSetting
     Array.isArray(value.campaigns) && value.campaigns.every(isCampaign);
 }
 
+/**
+ * Settings without the sections of a kind this version doesn't know, so a kind added later (or kept after a rollback)
+ * is not shown instead of failing the whole page. Only shoppers' storefront reads this way; staff drafts stay strict,
+ * so an editor never drops a section it doesn't understand.
+ */
+function withKnownSections(settings: unknown): unknown {
+  if (!isRecord(settings) || !Array.isArray(settings.sections)) return settings;
+  const unknownKind = (section: unknown) => isRecord(section) && isString(section.type) && !oneOf(SECTION_TYPES, section.type);
+  return { ...settings, sections: settings.sections.filter((section) => !unknownKind(section)) };
+}
+
 export function parsePublishedStorefront(data: unknown): PublishedStorefront {
   if (!isRecord(data) || typeof data.version !== "number") throw new StorefrontFormatError("version");
   if (!isNullableString(data.publishedAt)) throw new StorefrontFormatError("publication time");
-  if (!isStorefrontSettings(data.settings)) throw new StorefrontFormatError("settings");
+  const settings = withKnownSections(data.settings);
+  if (!isStorefrontSettings(settings)) throw new StorefrontFormatError("settings");
   if (!Array.isArray(data.media) || !data.media.every(isMedia)) throw new StorefrontFormatError("media");
-  return { version: data.version, publishedAt: data.publishedAt, settings: data.settings, media: data.media.map(withMediaDefaults) };
+  return { version: data.version, publishedAt: data.publishedAt, settings, media: data.media.map(withMediaDefaults) };
 }
 
 function isRevision(value: unknown): value is StorefrontRevision {
@@ -84,6 +121,12 @@ function isRevision(value: unknown): value is StorefrontRevision {
 export function parseRevisionPage(data: unknown): StorefrontRevisionPage | null {
   if (!isRecord(data) || !Array.isArray(data.revisions) || !data.revisions.every(isRevision) || !isPagination(data.pagination)) return null;
   return { revisions: data.revisions, pagination: data.pagination };
+}
+
+/** The best sellers answer, or null when it is not exactly in the API's shape (the section then stays hidden). */
+export function parseBestSellers(data: unknown): BestSellers | null {
+  if (!isRecord(data) || !Number.isInteger(data.windowDays) || Number(data.windowDays) <= 0 || !isStringArray(data.productIds)) return null;
+  return { windowDays: Number(data.windowDays), productIds: data.productIds };
 }
 
 /* ------------------------------------------------------------------ */
@@ -110,9 +153,10 @@ export function sectionCategories(section: Section, catalog: CatalogLookup): Res
   return { items, missing };
 }
 
-export function sectionProducts(section: Section, catalog: CatalogLookup): Resolved<CatalogProduct> {
+/** Up to `limit` products for a featured or selected-products section; featured without choices shows Featured products. */
+export function sectionProducts(section: Section, catalog: CatalogLookup, limit = SECTION_PRODUCT_LIMIT): Resolved<CatalogProduct> {
   if (section.type === "featured" && !section.productIds.length) {
-    return { items: catalog.products.filter((product) => product.isFeatured).slice(0, SECTION_PRODUCT_LIMIT), missing: [] };
+    return { items: catalog.products.filter((product) => product.isFeatured).slice(0, limit), missing: [] };
   }
   const items: CatalogProduct[] = [];
   const missing: string[] = [];
@@ -121,7 +165,21 @@ export function sectionProducts(section: Section, catalog: CatalogLookup): Resol
     if (product) items.push(product);
     else missing.push(id);
   }
-  return { items: items.slice(0, SECTION_PRODUCT_LIMIT), missing };
+  return { items: items.slice(0, limit), missing };
+}
+
+/**
+ * A department row: its category and every product in it or below it, in catalog order (the order of page 1 of the
+ * category's listing); the category is null when the catalog doesn't show it.
+ */
+export function departmentRow(section: Section, catalog: CatalogLookup): { category: CatalogCategory | null; products: CatalogProduct[] } {
+  const category = catalog.categories.byId.get(section.categoryIds[0] ?? "") ?? null;
+  return { category, products: category ? catalog.products.filter((product) => inCategory(product, category.id)) : [] };
+}
+
+/** The ranked products the catalog shows, in the API's order, at most a row's worth. */
+export function bestSellerProducts(productIds: readonly string[], catalog: CatalogLookup): CatalogProduct[] {
+  return productIds.flatMap((id) => catalog.productsById.get(id) ?? []).slice(0, RAIL_PRODUCT_LIMIT);
 }
 
 export type ResolvedCampaign = {

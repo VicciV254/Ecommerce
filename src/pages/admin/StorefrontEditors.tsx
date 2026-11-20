@@ -1,7 +1,8 @@
 import { useId, useState } from "react";
 import { catalogAdminAPI, type Campaign, type MediaAsset, type StorefrontSettings } from "../../api/catalog";
 import { describeApiError } from "../../api/errors";
-import { headingClaimProblem } from "../../store/storefrontClaims";
+import { sectionClaimProblem } from "../../store/storefrontClaims";
+import { BEST_SELLERS_RULES, BEST_SELLERS_TITLE, RAIL_PRODUCT_LIMIT, sectionLayout, takesLayout, type SectionLayout } from "../../store/storefrontModel";
 import { Feedback, Field, WrappingSelect, dangerButtonClass, inputClass, isAcceptedImageUrl, smallButtonClass } from "./shared";
 
 /** Limits enforced by the storefront API, mirrored so the editor stays within them. */
@@ -10,7 +11,24 @@ export const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const PICKER_RESULTS = 40;
 
 type Section = StorefrontSettings["sections"][number];
-export type PickerItem = { id: string; label: string; note?: string };
+/** `name` is the record's own name where `label` is a longer path (a category under its parents). */
+export type PickerItem = { id: string; label: string; note?: string; name?: string };
+
+/** What staff call each section kind. */
+export const SECTION_KIND_LABELS: Record<Section["type"], string> = {
+  departments: "Departments", featured: "Featured products", products: "Selected products", campaign: "Campaign",
+  category: "Department row", promises: "Shopping facts", bestSellers: BEST_SELLERS_TITLE,
+};
+/** A new section's heading. A department row's follows the department chosen, until staff write their own. */
+export const NEW_SECTION_TITLES: Record<Section["type"], string> = {
+  departments: "Shop by department", featured: "Featured products", products: "Selected products", campaign: "Campaign",
+  category: "Department row", promises: "How shopping works", bestSellers: BEST_SELLERS_TITLE,
+};
+export const SECTION_LAYOUT_LABELS: Record<SectionLayout, string> = { rail: "Row you scroll", grid: "Grid" };
+/** How the measured best sellers are chosen and when shoppers see them (the API's rules). */
+export const BEST_SELLERS_RULE = `up to ${RAIL_PRODUCT_LIMIT} products, ranked by paid orders in the last ${BEST_SELLERS_RULES.windowDays} days, each bought by at least ${BEST_SELLERS_RULES.minBuyers} different accounts`;
+export const BEST_SELLERS_SHOWN = `Shoppers don't see the row until at least ${BEST_SELLERS_RULES.minProducts} products qualify.`;
+export const SHOPPING_FACTS_NOTE = "Shows four facts from the store's settings, each linking to its page: prices and VAT, delivery, payment and returns.";
 
 /** Ordered selection of canonical IDs; unknown IDs stay visible so they can be removed. */
 export function IdPicker({
@@ -101,9 +119,20 @@ export function SectionEditor({
   onMove: (offset: number) => void;
   onRemove: () => void;
 }) {
-  const typeLabel = { departments: "Departments", featured: "Featured products", products: "Selected products", campaign: "Campaign" }[section.type];
+  const typeLabel = SECTION_KIND_LABELS[section.type];
   const claimId = useId();
-  const claim = headingClaimProblem(section.title);
+  const claim = sectionClaimProblem(section);
+  const layout = takesLayout(section.type) ? sectionLayout({ ...section, type: section.type }) : null;
+  const departmentName = (id: string | undefined) => {
+    const item = categories.find((category) => category.id === id);
+    return item && (item.name ?? item.label);
+  };
+  // The heading follows the department while it is the default or the current department's name.
+  const chooseDepartment = (categoryIds: string[]) => {
+    const automatic = section.title === NEW_SECTION_TITLES.category || section.title === departmentName(section.categoryIds[0]);
+    const title = automatic ? departmentName(categoryIds[0]) ?? NEW_SECTION_TITLES.category : section.title;
+    onChange({ ...section, categoryIds, title });
+  };
   return (
     <article className={editorCardClass}>
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -118,19 +147,46 @@ export function SectionEditor({
           <button type="button" aria-label={`Remove section ${index + 1}`} onClick={onRemove} className={dangerButtonClass}>Remove</button>
         </div>
       </div>
-      <Field label="Heading">
-        {(id) => (
-          <>
-            <input id={id} value={section.title} onChange={(event) => onChange({ ...section, title: event.target.value })}
-              aria-invalid={claim ? true : undefined} aria-describedby={claim ? claimId : undefined}
-              className={`${inputClass} aria-[invalid=true]:border-error`} />
-            {claim && <p id={claimId} className="mt-1 text-xs font-semibold text-error [overflow-wrap:break-word]">{claim}</p>}
-          </>
-        )}
-      </Field>
+      {section.type === "bestSellers" ? (
+        <div>
+          <p className="mb-1 text-[0.625rem] font-bold uppercase tracking-wider text-gray-600">Heading</p>
+          <p className="text-sm font-semibold text-navy-900">{section.title}</p>
+          <p className="mt-1 text-[0.6875rem] text-gray-600">
+            {`This heading is fixed because the row is measured: ${BEST_SELLERS_RULE}. Sample orders and sandbox payments never count. ${BEST_SELLERS_SHOWN}`}
+          </p>
+        </div>
+      ) : (
+        <Field label="Heading">
+          {(id) => (
+            <>
+              <input id={id} value={section.title} onChange={(event) => onChange({ ...section, title: event.target.value })}
+                aria-invalid={claim ? true : undefined} aria-describedby={claim ? claimId : undefined}
+                className={`${inputClass} aria-[invalid=true]:border-error`} />
+              {claim && <p id={claimId} className="mt-1 text-xs font-semibold text-error [overflow-wrap:break-word]">{claim}</p>}
+            </>
+          )}
+        </Field>
+      )}
+      {section.type === "promises" && (
+        <p className="text-[0.6875rem] text-gray-600">{SHOPPING_FACTS_NOTE} The heading is read out by screen readers; it isn't shown.</p>
+      )}
+      {layout && (
+        <Field label="Layout">
+          {(id) => (
+            <WrappingSelect id={id} value={layout} onChange={(event) => onChange({ ...section, layout: event.target.value === "grid" ? "grid" : "rail" })} className={inputClass}>
+              <option value="rail">{SECTION_LAYOUT_LABELS.rail}</option>
+              <option value="grid">{SECTION_LAYOUT_LABELS.grid}</option>
+            </WrappingSelect>
+          )}
+        </Field>
+      )}
       {section.type === "departments" && (
         <IdPicker label="Categories" items={categories} selected={section.categoryIds} max={STOREFRONT_LIMITS.categoryIds}
           onChange={(categoryIds) => onChange({ ...section, categoryIds })} emptyHint="Empty shows every top-level department." />
+      )}
+      {section.type === "category" && (
+        <IdPicker label="Department" items={categories} selected={section.categoryIds} max={1}
+          onChange={chooseDepartment} emptyHint="Choose the department whose products this row shows, in the shop's order." />
       )}
       {(section.type === "featured" || section.type === "products") && (
         <IdPicker label="Products" items={products} selected={section.productIds} max={STOREFRONT_LIMITS.productIds}

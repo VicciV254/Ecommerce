@@ -192,14 +192,21 @@ const campaignSchema = z.object({
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Mobile artwork requires desktop artwork as the supported fallback' });
   }
 });
+/** Section kinds; a department row (`category`) shows one category's products, `promises` the shopping facts strip. */
+const SECTION_TYPES = ['departments', 'featured', 'products', 'campaign', 'category', 'promises', 'bestSellers'];
+/** The kinds that may set `layout`; without one, each shows in its established default (decided when rendering). */
+const LAYOUT_TYPES = new Set(['departments', 'featured', 'products', 'category']);
+/** The measured best sellers' heading, fixed by the app: the ranking is measured, so its heading is not a staff claim. */
+const BEST_SELLERS_TITLE = 'Best sellers';
 const sectionSchema = z.object({
   id: slugSchema,
-  type: z.enum(['departments', 'featured', 'products', 'campaign']),
+  type: z.enum(SECTION_TYPES),
   title: text(180).min(1),
   enabled: z.boolean(),
   productIds: z.array(idSchema).max(24).refine(unique),
   categoryIds: z.array(idSchema).max(30).refine(unique),
   campaignId: reference,
+  layout: z.enum(['grid', 'rail']).optional(),
 }).strict();
 
 export const storefrontSchema = z.object({
@@ -228,6 +235,22 @@ export const storefrontSchema = z.object({
     if (section.type !== 'campaign' && section.campaignId !== null) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Only campaign sections may reference a campaign' });
     }
+    if (section.layout !== undefined && !LAYOUT_TYPES.has(section.type)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Only departments, featured products, selected products and department row sections have a layout' });
+    }
+    if (section.type === 'category' && (section.categoryIds.length !== 1 || section.productIds.length)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'A department row shows exactly one category and no chosen products' });
+    }
+    if ((section.type === 'promises' || section.type === 'bestSellers') && (section.productIds.length || section.categoryIds.length)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Shopping facts and best sellers sections take no products or categories' });
+    }
+    if (section.type === 'bestSellers' && section.title !== BEST_SELLERS_TITLE) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `The best sellers section is titled "${BEST_SELLERS_TITLE}"` });
+    }
+  }
+  const count = (type) => value.sections.filter((section) => section.type === type).length;
+  if (count('promises') > 1 || count('bestSellers') > 1) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'A storefront has at most one shopping facts section and one best sellers section' });
   }
 });
 
@@ -238,9 +261,11 @@ export const storefrontDraftSchema = z.object({
 export const versionSchema = z.object({ version: z.number().int().positive() }).strict();
 
 /**
- * Section headings may not claim a ranking or popularity the store doesn't measure: it has no sales-rank, rating or
- * popularity data, and staff choose what product sections show. The editor mirrors these (`src/store/storefrontClaims.ts`).
- * Checked on writes only (save, publish, restore), never in `storefrontSchema`, so documents stored earlier still load.
+ * Section headings may not claim a ranking or popularity the store doesn't measure: it has no rating or popularity data,
+ * and staff choose what product sections show. The one exception is the best sellers section, whose heading the app
+ * fixes and whose products the store measures from paid orders (`bestSellersService.js`). The editor mirrors these
+ * (`src/store/storefrontClaims.ts`). Checked on writes only (save, publish, restore), never in `storefrontSchema`, so
+ * documents stored earlier still load.
  */
 const RANKING_CLAIMS = [
   /\b(?:best|top|hot|fast)[\s-]*sell(?:er|ers|ing)\b/,
@@ -261,7 +286,7 @@ export const rankingClaimMessage = (title) => `Section "${title}": headings can'
 
 /** One issue per section heading that claims an unmeasured ranking, at its path in the settings (`sections.<i>.title`). */
 export function storefrontClaimIssues(settings) {
-  return settings.sections.flatMap((section, index) => (claimsUnmeasuredRanking(section.title)
+  return settings.sections.flatMap((section, index) => (section.type !== 'bestSellers' && claimsUnmeasuredRanking(section.title)
     ? [{ code: z.ZodIssueCode.custom, path: ['sections', index, 'title'], message: rankingClaimMessage(section.title) }]
     : []));
 }

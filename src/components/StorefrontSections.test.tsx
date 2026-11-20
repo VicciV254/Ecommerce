@@ -1,11 +1,13 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Campaign, CatalogProduct, StorefrontSettings } from "../api/catalog";
 import { buildCategoryTree } from "../store/catalogModel";
 import type { CatalogValue } from "../store/CatalogContext";
 import {
   campaignMedia,
+  demoPhone,
   fixtureCategories,
+  fixtureCategory,
   fixtureImage,
   fixtureDelivery, fixtureReturnPolicy,
   fixtureStorefrontSettings,
@@ -15,9 +17,14 @@ import {
 import { StorefrontSections } from "./StorefrontSections";
 
 const state = vi.hoisted(() => ({ catalog: null as CatalogValue | null }));
+const api = vi.hoisted(() => ({ getBestSellers: vi.fn() }));
 vi.mock("../store/CatalogContext", () => ({ useCatalog: () => state.catalog }));
 vi.mock("../store/StoreContext", () => ({ useStore: () => ({ state: { wishlist: [] }, addToCart: vi.fn(), toggleWish: vi.fn() }) }));
 vi.mock("../contexts/AuthContext", () => ({ useAuth: () => ({ user: null }) }));
+vi.mock("../api/catalog", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../api/catalog")>();
+  return { ...actual, catalogAPI: { ...actual.catalogAPI, getBestSellers: api.getBestSellers } };
+});
 
 function catalogWith(products: CatalogProduct[], status: CatalogValue["status"] = "ready"): CatalogValue {
   return {
@@ -56,6 +63,8 @@ function settingsWith(item: Campaign) {
 
 beforeEach(() => {
   state.catalog = catalogWith([linenShirt, poloShirt]);
+  api.getBestSellers.mockReset();
+  window.matchMedia = vi.fn().mockReturnValue({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() });
 });
 
 describe("StorefrontSections", () => {
@@ -296,5 +305,276 @@ describe("campaign loading priority", () => {
     render(<StorefrontSections settings={settings} mediaById={mediaById} />);
     expect(artworkOf("Workspace week").getAttribute("fetchpriority")).toBe("high");
     expect(highPriority()).toHaveLength(1);
+  });
+});
+
+describe("P8.7 section kinds", () => {
+  type Section = StorefrontSettings["sections"][number];
+  const kind = (id: string, type: string, title: string, extra: Record<string, unknown> = {}) =>
+    ({ id, type, title, enabled: true, productIds: [], categoryIds: [], campaignId: null, ...extra }) as Section;
+  const show = (sections: Section[], props: { showProblems?: boolean } = {}) =>
+    render(<StorefrontSections settings={fixtureStorefrontSettings({ sections })} mediaById={mediaById} {...props} />);
+  /** jsdom does no layout: give the rail a size and scroll position, then let it measure as a scroll would. */
+  async function layOut(rail: HTMLElement, { scrollLeft, clientWidth = 400, scrollWidth = 1400 }: { scrollLeft: number; clientWidth?: number; scrollWidth?: number }) {
+    Object.defineProperties(rail, {
+      scrollLeft: { configurable: true, value: scrollLeft },
+      clientWidth: { configurable: true, value: clientWidth },
+      scrollWidth: { configurable: true, value: scrollWidth },
+    });
+    fireEvent.scroll(rail);
+    await act(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+  }
+  const cardNames = (list: HTMLElement) => within(list).getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent);
+  const visibility = (list: HTMLElement) => within(list).getAllByRole("listitem")
+    .map((item) => item.className.split(/\s+/).filter((name) => /^((md|xl):)?(hidden|block)$/.test(name)).join(" "));
+  /** Fourteen products in the Shirts category (Fashion › Men › Shirts). */
+  const shirts = Array.from({ length: 14 }, (_, index) => ({ ...poloShirt, id: `shirt-${index}`, name: `Shirt ${index}` }));
+
+  describe("product rails", () => {
+    it("shows selected products as a row of up to twelve, with View all and controls named for the section", async () => {
+      state.catalog = catalogWith(shirts);
+      show([kind("picks", "products", "Staff picks", { productIds: shirts.map((product) => product.id), layout: "rail" })]);
+      const rail = screen.getByRole("list", { name: "Staff picks" });
+      expect(cardNames(rail)).toEqual(shirts.slice(0, 12).map((product) => product.name));
+      expect(visibility(rail).every((classes) => classes === "")).toBe(true);
+      expect(screen.getByRole("link", { name: /View all\s*Staff picks/ }).getAttribute("href")).toBe("#/shop");
+      const controls = () => screen.queryAllByRole("button", { name: /products in Staff picks$/ }).map((button) => button.getAttribute("aria-label"));
+      await layOut(rail, { scrollLeft: 0 });
+      expect(controls()).toEqual(["Next products in Staff picks"]);
+      await layOut(rail, { scrollLeft: 500 });
+      expect(controls()).toEqual(["Previous products in Staff picks", "Next products in Staff picks"]);
+      await layOut(rail, { scrollLeft: 1000 });
+      expect(controls()).toEqual(["Previous products in Staff picks"]);
+    });
+
+    it("moves a product rail by most of its width, at once under reduced motion", async () => {
+      state.catalog = catalogWith(shirts);
+      show([kind("featured", "featured", "Staff picks", { layout: "rail", productIds: shirts.map((product) => product.id) })]);
+      const rail = screen.getByRole("list", { name: "Staff picks" });
+      const scrollBy = vi.fn();
+      rail.scrollBy = scrollBy;
+      await layOut(rail, { scrollLeft: 500 });
+      fireEvent.click(screen.getByRole("button", { name: "Next products in Staff picks" }));
+      expect(scrollBy).toHaveBeenLastCalledWith({ left: 340, behavior: "smooth" });
+      window.matchMedia = vi.fn().mockReturnValue({ matches: true });
+      fireEvent.click(screen.getByRole("button", { name: "Previous products in Staff picks" }));
+      expect(scrollBy).toHaveBeenLastCalledWith({ left: -340, behavior: "auto" });
+    });
+
+    it("shows products marked Featured as a row when the featured section chooses none, leading View all to them", () => {
+      const featured = shirts.map((product, index) => ({ ...product, isFeatured: index % 2 === 0 }));
+      state.catalog = catalogWith(featured);
+      show([kind("featured", "featured", "Staff picks", { layout: "rail" })]);
+      expect(cardNames(screen.getByRole("list", { name: "Staff picks" }))).toEqual(featured.filter((product) => product.isFeatured).map((product) => product.name));
+      expect(screen.getByRole("link", { name: /View all\s*Staff picks/ }).getAttribute("href")).toBe("#/shop?featured=1");
+    });
+
+    it("sizes rail card images to the rail and loads them lazily", () => {
+      const pictured = shirts.map((product) => ({
+        ...product, images: [fixtureImage({ id: `${product.id}-image`, url: `https://res.cloudinary.com/apex-test/image/upload/v1/apex-cart/${product.id}.jpg`, isMain: true })],
+      }));
+      state.catalog = catalogWith(pictured);
+      show([kind("picks", "products", "Staff picks", { productIds: pictured.map((product) => product.id), layout: "rail" })]);
+      const images = [...screen.getByRole("list", { name: "Staff picks" }).querySelectorAll("img")];
+      expect(images).toHaveLength(12);
+      expect(new Set(images.map((image) => image.getAttribute("sizes")))).toEqual(new Set([
+        "(min-width: 90em) 241px, (min-width: 80em) calc((100vw - 64px) * 0.175), (min-width: 64em) calc((100vw - 64px) * 0.23), (min-width: 48em) calc((100vw - 48px) * 0.3), (min-width: 40em) calc((100vw - 48px) * 0.42), calc((100vw - 32px) * 0.42)",
+      ]));
+      expect(images.every((image) => image.getAttribute("loading") === "lazy")).toBe(true);
+    });
+  });
+
+  describe("department rows", () => {
+    it("lists the department's products in catalog order, sub-categories included, and See all leads to its listing", () => {
+      state.catalog = catalogWith([demoPhone, ...shirts]);
+      show([kind("fashion", "category", "Fashion", { categoryIds: ["cat-fashion"] })]);
+      const row = screen.getByRole("list", { name: "Fashion" });
+      expect(cardNames(row)).toEqual(shirts.slice(0, 12).map((product) => product.name));
+      expect(screen.getByRole("link", { name: /See all\s*Fashion/ }).getAttribute("href")).toBe("#/shop?cat=fashion");
+      expect(screen.queryAllByRole("button", { name: /products in Fashion$/ })).toEqual([]);
+    });
+
+    it("as a grid shows 4, 6 then 8 of them by breakpoint, like a product grid", () => {
+      state.catalog = catalogWith(shirts);
+      show([kind("shirts", "category", "Shirts for warm days", { categoryIds: ["cat-shirts"], layout: "grid" })]);
+      const grid = screen.getByRole("list", { name: "Shirts for warm days" });
+      expect(grid.className).toContain("product-grid");
+      expect(visibility(grid)).toEqual(["", "", "", "", "hidden md:block", "hidden md:block", "hidden xl:block", "hidden xl:block"]);
+      expect(screen.getByRole("link", { name: /See all\s*Shirts for warm days/ }).getAttribute("href")).toBe("#/shop?cat=shirts");
+    });
+
+    it("is hidden from shoppers when its department is gone or has no products; the staff preview says why", () => {
+      state.catalog = catalogWith([linenShirt]);
+      const sections = [
+        kind("gone", "category", "Gone", { categoryIds: ["retired-category"] }),
+        kind("phones", "category", "Phones", { categoryIds: ["cat-phones-tablets"] }),
+      ];
+      const { container, unmount } = show(sections);
+      expect(container.textContent).toBe("");
+      unmount();
+      show(sections, { showProblems: true });
+      expect(screen.getByText("Category retired-category is unavailable")).toBeTruthy();
+      expect(screen.getByText("No products in Phones & Tablets; shoppers will not see this section")).toBeTruthy();
+    });
+  });
+
+  describe("departments grid", () => {
+    const departments = Array.from({ length: 14 }, (_, index) => fixtureCategory({
+      id: `dept-${index}`, name: `Department ${index}`, order: index, productCount: 2,
+      image: index === 0 ? "https://res.cloudinary.com/apex-test/image/upload/v3/apex-cart/storefront/dept.jpg" : null,
+    }));
+
+    it("shows 8 departments on phones, 12 from 768px and all from 1280px, with All departments for the rest", () => {
+      state.catalog = { ...catalogWith([]), categories: buildCategoryTree(departments) };
+      show([kind("departments", "departments", "Shop by department", { layout: "grid" })]);
+      const grid = screen.getByRole("list", { name: "Shop by department" });
+      // 2, 4 then 7 columns, each at least 9rem wide, so enlarged text drops a column instead of squeezing names.
+      expect(grid.className.split(/\s+/)).toContain("department-grid");
+      expect(visibility(grid)).toEqual([...Array(8).fill(""), ...Array(4).fill("hidden md:block"), ...Array(2).fill("hidden xl:block")]);
+      expect(within(grid).getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual(departments.map((item) => `#/shop?cat=${item.slug}`));
+      expect(screen.getByRole("link", { name: "All departments" }).getAttribute("href")).toBe("#/departments");
+      expect(screen.queryAllByRole("button")).toEqual([]);
+      const image = within(grid).getAllByRole("link")[0].querySelector("img")!;
+      expect(image.getAttribute("sizes")).toBe(
+        "(min-width: 90em) 187px, (min-width: 80em) calc((100vw - 136px) / 7), (min-width: 64em) calc((100vw - 100px) / 4), (min-width: 48em) calc((100vw - 84px) / 4), (min-width: 40em) calc((100vw - 60px) / 2), calc((100vw - 44px) / 2)",
+      );
+      expect(image.getAttribute("loading")).toBe("lazy");
+    });
+  });
+
+  describe("shopping facts strip", () => {
+    const facts = kind("facts", "promises", "How shopping works");
+    const strip = () => screen.getByRole("list", { name: "How shopping works" });
+    const factLinks = () => within(strip()).getAllByRole("link").map((link) => [link.textContent, link.getAttribute("href")]);
+
+    it("states four facts from the catalog's settings, each leading to its page, under the section's heading", () => {
+      show([facts]);
+      expect(screen.getByRole("heading", { level: 2, name: "How shopping works" })).toBeTruthy();
+      expect(factLinks()).toEqual([
+        ["Prices and VAT Shown excluding VAT; 16% VAT is added at checkout.", "#/faq?section=how-the-store-is-set-up"],
+        ["Delivery Anywhere in Kenya; same-day in Nairobi only.", "#/delivery"],
+        ["Payment By M-Pesa: approve the prompt on your phone.", "#/faq?section=how-the-store-is-set-up"],
+        ["Returns Return items within 7 days of delivery. Refunds by M-Pesa.", "#/returns"],
+      ]);
+    });
+
+    it("words payment and refunds for demonstration payments where sample orders take them", () => {
+      state.catalog = { ...catalogWith([linenShirt]), demonstrationOrders: true };
+      show([facts]);
+      expect(factLinks().map(([text]) => text)).toEqual([
+        "Prices and VAT Shown excluding VAT; 16% VAT is added at checkout.",
+        "Delivery Anywhere in Kenya; same-day in Nairobi only.",
+        "Payment Sample orders use a demonstration payment; no money is taken.",
+        "Returns Return items within 7 days of delivery. Refunds of demonstration payments move no money.",
+      ]);
+    });
+
+    it("names only the return limits that exist", () => {
+      const restricted = fixtureCategories.map((category) => (category.id === "cat-smartphones" ? { ...category, returnRule: "FAULT_ONLY" as const } : category));
+      state.catalog = { ...catalogWith([linenShirt]), categories: buildCategoryTree(restricted) };
+      show([facts]);
+      expect(factLinks()[3][0]).toBe("Returns Return most items within 7 days of delivery. Refunds by M-Pesa.");
+    });
+
+    it.each(["loading", "error"] as const)("claims no payment method while the catalog is %s", (status) => {
+      state.catalog = catalogWith([], status);
+      show([facts]);
+      expect(factLinks()).toEqual([
+        ["Prices and VAT Shown excluding VAT; 16% VAT is added at checkout.", "#/faq?section=how-the-store-is-set-up"],
+        ["Delivery The fee shows in your total before you reserve.", "#/delivery"],
+        ["Payment See how payment works.", "#/faq?section=how-the-store-is-set-up"],
+        ["Returns Each product page shows its rule.", "#/returns"],
+      ]);
+      expect(strip().textContent).not.toMatch(/M-Pesa|emonstration/);
+    });
+  });
+
+  describe("best sellers", () => {
+    const best = kind("best", "bestSellers", "Best sellers");
+    const ranked = Array.from({ length: 14 }, (_, index) => ({ ...poloShirt, id: `best-${index}`, name: `Best ${index}` }));
+    const answer = (productIds: string[]) => ({ data: { windowDays: 30, productIds } });
+    const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    beforeEach(() => { state.catalog = catalogWith(ranked); });
+
+    it("asks for the ranking only when an enabled best sellers section is shown", async () => {
+      show(fixtureStorefrontSettings().sections);
+      show([{ ...best, enabled: false }]);
+      await settle();
+      expect(api.getBestSellers).not.toHaveBeenCalled();
+    });
+
+    it("shows the ranked products in the API's order and says how they are ranked", async () => {
+      api.getBestSellers.mockResolvedValue(answer(["best-3", "retired", "best-1", "best-0", "best-2"]));
+      show([best]);
+      const rail = await screen.findByRole("list", { name: "Best sellers" });
+      expect(cardNames(rail)).toEqual(["Best 3", "Best 1", "Best 0", "Best 2"]);
+      expect(screen.getByText("Ranked by paid orders in the last 30 days")).toBeTruthy();
+      expect(screen.getByRole("link", { name: /View all\s*Best sellers/ }).getAttribute("href")).toBe("#/shop");
+      expect(api.getBestSellers).toHaveBeenCalledTimes(1);
+    });
+
+    it("lists twelve at most", async () => {
+      api.getBestSellers.mockResolvedValue(answer(ranked.map((product) => product.id)));
+      show([best]);
+      expect(within(await screen.findByRole("list", { name: "Best sellers" })).getAllByRole("listitem")).toHaveLength(12);
+    });
+
+    const hidden: [string, () => void, string][] = [
+      ["fewer than four of its products are in the catalog", () => api.getBestSellers.mockResolvedValue(answer(["best-0", "best-1", "best-2", "retired"])), "fewer than 4 products qualify"],
+      ["the API lists none", () => api.getBestSellers.mockResolvedValue(answer([])), "fewer than 4 products qualify"],
+      ["the request fails", () => api.getBestSellers.mockRejectedValue(new Error("Network Error")), "the ranking could not be loaded"],
+      ["the answer is malformed", () => api.getBestSellers.mockResolvedValue({ data: { windowDays: 30, productIds: "best-0" } }), "the ranking could not be loaded"],
+      ["the ranking is still loading", () => api.getBestSellers.mockReturnValue(new Promise(() => undefined)), "the ranking is still loading"],
+    ];
+    it.each(hidden)("renders nothing for shoppers when %s, and the staff preview explains it", async (_case, arrange, reason) => {
+      arrange();
+      const { container, unmount } = show([best]);
+      await settle();
+      expect(container.textContent).toBe("");
+      unmount();
+      arrange();
+      show([best], { showProblems: true });
+      await settle();
+      expect(screen.queryByRole("list", { name: "Best sellers" })).toBeNull();
+      expect(screen.getByRole("note").textContent).toBe(
+        `“Best sellers” is hidden from shoppers: ${reason}. It shows once at least 4 products in the catalog were each bought by at least 2 different accounts in paid orders in the last 30 days.`,
+      );
+    });
+
+    it("waits for the catalog: nothing shows while it loads, even with the ranking in", async () => {
+      api.getBestSellers.mockResolvedValue(answer(ranked.slice(0, 5).map((product) => product.id)));
+      state.catalog = catalogWith([], "loading");
+      const { container } = show([best]);
+      await settle();
+      expect(api.getBestSellers).toHaveBeenCalledTimes(1);
+      expect(container.textContent).toBe("");
+    });
+  });
+
+  it("keeps each new section's place while the catalog loads; the shopping facts show at once", () => {
+    state.catalog = catalogWith([], "loading");
+    api.getBestSellers.mockReturnValue(new Promise(() => undefined));
+    show([
+      kind("fashion", "category", "Fashion", { categoryIds: ["cat-fashion"] }),
+      kind("departments", "departments", "Shop by department", { layout: "grid" }),
+      kind("picks", "products", "Staff picks", { productIds: ["prod-polo-shirt"], layout: "rail" }),
+      kind("facts", "promises", "How shopping works"),
+      kind("best", "bestSellers", "Best sellers"),
+    ]);
+    expect(screen.getAllByRole("status").map((status) => status.textContent)).toEqual(["Loading fashion…", "Loading shop by department…", "Loading staff picks…"]);
+    expect(screen.getByRole("list", { name: "How shopping works" })).toBeTruthy();
+  });
+
+  it("shows one catalog error for product sections and keeps the shopping facts", () => {
+    state.catalog = catalogWith([], "error");
+    show([kind("facts", "promises", "How shopping works"), kind("fashion", "category", "Fashion", { categoryIds: ["cat-fashion"] })]);
+    expect(screen.getAllByRole("heading", { name: "Products are unavailable" })).toHaveLength(1);
+    expect(screen.getByRole("list", { name: "How shopping works" })).toBeTruthy();
+  });
+
+  it("shows no catalog error when only the shopping facts and campaigns depend on it", () => {
+    state.catalog = catalogWith([], "error");
+    show([kind("facts", "promises", "How shopping works")]);
+    expect(screen.queryByRole("heading", { name: "Products are unavailable" })).toBeNull();
   });
 });

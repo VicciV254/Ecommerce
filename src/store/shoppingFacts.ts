@@ -1,4 +1,5 @@
 import type { CatalogCategory, CatalogDelivery } from "../api/catalog";
+import type { DeliveryMethod } from "../api/orders";
 import { DELIVERY_LABELS } from "./checkoutModel";
 import { returnRuleGroups, type RestrictedReturnRule } from "./returnRules";
 import { joinNames } from "./storeFacts";
@@ -57,4 +58,40 @@ export function returnsFact(windowDays: number | null, demonstrationOrders: bool
   return windowDays === null
     ? `Each product page shows its return rule and window. ${refunds}`
     : `${returnsWindow(windowDays, restrictions)} ${refunds}`;
+}
+
+/*
+ * Short forms for the home page's shopping facts strip: a title and one line each, worded from the same inputs as the
+ * long forms above. While the catalog is unknown (loading or failed), payment and refunds name no method at all.
+ */
+type ShortFact = { title: string; text: string };
+
+export const VAT_SHORT_FACT: ShortFact = { title: "Prices and VAT", text: "Shown excluding VAT; 16% VAT is added at checkout." };
+
+/** How the short delivery fact names a method; standard delivery is the plain case. */
+const SHORT_METHODS: Record<DeliveryMethod, string> = { STANDARD: "", SAME_DAY: "same-day ", STORE_PICKUP: "store pickup " };
+
+/** Where each method checkout offers delivers; until the catalog has loaded them, that the fee is shown first. */
+export function deliveryShortFact(delivery: readonly CatalogDelivery[] | null): ShortFact {
+  if (!delivery?.length) return { title: "Delivery", text: "The fee shows in your total before you reserve." };
+  const places = delivery.map(({ method, counties }) =>
+    `${SHORT_METHODS[method]}${counties.length ? `in ${joinNames(counties)} only` : "anywhere in Kenya"}`).join("; ");
+  return { title: "Delivery", text: `${places.charAt(0).toUpperCase()}${places.slice(1)}.` };
+}
+
+export function paymentShortFact(demonstrationOrders: boolean | null): ShortFact {
+  if (demonstrationOrders === null) return { title: "Payment", text: "See how payment works." };
+  return {
+    title: "Payment",
+    text: demonstrationOrders ? "Sample orders use a demonstration payment; no money is taken." : "By M-Pesa: approve the prompt on your phone.",
+  };
+}
+
+export function returnsShortFact(windowDays: number | null, demonstrationOrders: boolean | null, restrictions: readonly RestrictedReturnRule[]): ShortFact {
+  const window = windowDays === null
+    ? "Each product page shows its rule."
+    : `Return ${restrictions.length ? "most items" : "items"} within ${windowDays} days of delivery.`;
+  const refunds = demonstrationOrders === null ? ""
+    : demonstrationOrders ? " Refunds of demonstration payments move no money." : " Refunds by M-Pesa.";
+  return { title: "Returns", text: `${window}${refunds}` };
 }

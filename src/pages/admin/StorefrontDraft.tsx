@@ -1,14 +1,14 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { catalogAdminAPI, type MediaAsset, type StorefrontDraft, type StorefrontSettings } from "../../api/catalog";
 import { apiErrorCode, apiStatus, describeApiError } from "../../api/errors";
-import { headingClaimProblem } from "../../store/storefrontClaims";
+import { sectionClaimProblem } from "../../store/storefrontClaims";
 import { useStorefront } from "../../store/StorefrontContext";
-import { isMedia, isStorefrontSettings } from "../../store/storefrontModel";
+import { BEST_SELLERS_TITLE, isMedia, isStorefrontSettings, takesLayout } from "../../store/storefrontModel";
 import { withMediaDefaults } from "../../store/catalogModel";
 import { isRecord } from "../../utils/storage";
 import { useAdminCatalog } from "./AdminCatalogContext";
 import { ADMIN_PREVIEW_ROUTE, adminModuleRoute, routePath } from "./adminRoutes";
-import { SLUG } from "./StorefrontEditors";
+import { SECTION_KIND_LABELS, SLUG } from "./StorefrontEditors";
 import { useUnsavedChanges } from "./unsavedChanges";
 
 type DraftLoad = { status: "loading" } | { status: "error"; message: string } | { status: "ready"; draft: StorefrontDraft };
@@ -51,12 +51,25 @@ export function draftProblems(settings: StorefrontSettings): string[] {
   if (!settings.brand.name.trim()) problems.push("Enter a store name.");
   const campaignIds = new Set(settings.campaigns.map((campaign) => campaign.id));
   for (const section of settings.sections) {
+    const name = section.title || SECTION_KIND_LABELS[section.type];
     if (!section.title.trim()) problems.push("Every section needs a heading.");
-    const claim = headingClaimProblem(section.title);
+    const claim = sectionClaimProblem(section);
     if (claim) problems.push(claim);
     if (section.type === "products" && !section.productIds.length) problems.push(`"${section.title || "Selected products"}" needs at least one product.`);
     if (section.type === "campaign" && (!section.campaignId || !campaignIds.has(section.campaignId))) problems.push(`"${section.title || "Campaign"}" needs a campaign.`);
+    if (section.layout !== undefined && !takesLayout(section.type)) problems.push(`"${name}" has no layout to choose.`);
+    if (section.type === "category") {
+      if (section.categoryIds.length !== 1) problems.push(`"${name}" needs exactly one department.`);
+      if (section.productIds.length) problems.push(`"${name}" shows its department's products, not chosen ones.`);
+    }
+    if ((section.type === "promises" || section.type === "bestSellers") && (section.productIds.length || section.categoryIds.length)) {
+      problems.push(`"${name}" takes no products or categories.`);
+    }
+    if (section.type === "bestSellers" && section.title.trim() !== BEST_SELLERS_TITLE) problems.push(`The best sellers heading is always "${BEST_SELLERS_TITLE}".`);
   }
+  const count = (type: StorefrontSettings["sections"][number]["type"]) => settings.sections.filter((section) => section.type === type).length;
+  if (count("promises") > 1) problems.push("Only one shopping facts section is allowed.");
+  if (count("bestSellers") > 1) problems.push("Only one best sellers section is allowed.");
   for (const campaign of settings.campaigns) {
     if (!SLUG.test(campaign.id)) problems.push(`Campaign ID "${campaign.id}" must use lowercase letters, numbers and hyphens.`);
     if (!campaign.title.trim()) problems.push("Every campaign needs a headline.");

@@ -320,6 +320,7 @@ initialization".
 | `POST /api/settings/storefront/publish` | Validate references and section headings, then atomically publish the current version, recording it as a revision with its publisher and time |
 | `GET /api/settings/storefront/revisions` | Publication history for any signed-in staff member: newest first, 20 a page (`?page=`), each with its version, time, publisher (null when not recorded) and whether it is live; never the documents |
 | `POST /api/settings/storefront/revisions/:version/restore` | SUPER_ADMIN and ADMIN copy a published version into the draft, sending the draft version they hold (`{ "version": n }`); 409 `STOREFRONT_CHANGED`, 404 `REVISION_NOT_FOUND`, 409 `REVISION_INVALID` (breaks current rules) or 409 `REVISION_UNAVAILABLE` (uses a deleted product, category or image) change nothing; shoppers see the version only after the next publish |
+| `GET /api/settings/storefront/best-sellers` | Public: `{ windowDays: 30, productIds }` and nothing else, cached briefly (`public, max-age=60, s-maxage=300`). Ranks products the public catalog shows by distinct orders, then units kept (ordered less received returns), then id, at most 12, over the last 30 days of real sales: orders that are not samples, paid or partly refunded, not cancelled, and settled through `settledPaymentId` by a production M-Pesa payment. A product is listed only when at least two different accounts bought it, so the list never rests on one account's purchases alone; that is its only privacy guarantee, and it does not stop someone who knows other purchases from inferring more. Fewer than 4 such products answer an empty list, and a demonstration store always answers one without reading any order |
 | `GET /api/admin/activity` | Staff activity for SUPER_ADMIN and ADMIN: sign-ins and staff changes that have no history of their own, newest first, 25 a page (`?type=all\|signins\|storefront\|catalog\|discounts\|customers\|promotions&page=`); never IP addresses, user agents or emails |
 | `POST /api/media` | Staff URL/provenance registration; external uploads remain separate |
 | `POST /api/orders/quotes` | Authenticated, versioned, expiring server quote from IDs and customer choices |
@@ -343,6 +344,19 @@ Section headings may not claim a ranking or popularity the store does not
 measure (for example "best sellers", "top rated" or "trending"): saves and
 publishes refuse them with 400, and restores refuse versions that use them.
 A stored document that contains such a heading still loads, so staff can fix it.
+The one exception is the best sellers section (`bestSellers`), whose heading is
+always "Best sellers" and whose products come from the endpoint above.
+
+Storefront sections are `departments`, `featured`, `products` and `campaign`,
+plus a department row (`category`: exactly one category), the shopping facts
+strip (`promises`) and the best sellers (`bestSellers`), each of the last two
+at most once. `departments`, `featured`, `products` and `category` may set
+`layout` to `grid` or `rail`; without it, departments and department rows show
+as rails and product sections as grids. Before rolling a deployment back to a
+version without these kinds or `layout`, publish a storefront without them and
+save it as the draft as well: older versions refuse such documents when they
+read them (the public storefront answers 503 and the editor cannot open the
+draft).
 
 ## Pricing and reservation contract
 

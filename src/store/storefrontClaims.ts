@@ -1,6 +1,6 @@
 /**
- * Section headings may not claim a ranking or popularity the store doesn't measure: it has no sales-rank, rating or
- * popularity data, and staff choose what product sections show. The API applies the same patterns and message
+ * Section headings may not claim a ranking or popularity the store doesn't measure: it has no rating or popularity data,
+ * and staff choose what product sections show. The API applies the same patterns and message
  * (`backend/src/utils/catalogValidation.js`); both are checked against one table of examples.
  */
 const RANKING_CLAIMS: readonly RegExp[] = [
@@ -26,4 +26,12 @@ export function headingClaimProblem(title: string): string | null {
   const heading = title.trim();
   if (!claimsUnmeasuredRanking(heading)) return null;
   return `Section "${heading}": headings can't claim a ranking or popularity the store doesn't measure, such as "best sellers", "top rated" or "trending". Use a heading such as "Featured" or "Staff picks".`;
+}
+
+/**
+ * `headingClaimProblem` for a section, as the API checks sections: every heading except the best sellers', which the app
+ * fixes and whose products the store measures from paid orders.
+ */
+export function sectionClaimProblem(section: { type: string; title: string }): string | null {
+  return section.type === "bestSellers" ? null : headingClaimProblem(section.title);
 }

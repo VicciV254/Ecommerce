@@ -1,20 +1,34 @@
-import type { CSSProperties, ReactNode } from "react";
-import type { MediaAsset, StorefrontSettings } from "../api/catalog";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { catalogAPI, type BestSellers, type CatalogProduct, type MediaAsset, type StorefrontSettings } from "../api/catalog";
 import { Link } from "../router";
 import { useCatalog, type CatalogValue } from "../store/CatalogContext";
 import { imageRendition, srcSetOf } from "../store/mediaModel";
 import { listingRoute } from "../store/listingQuery";
 import {
+  BEST_SELLERS_RULES,
+  RAIL_PRODUCT_LIMIT,
+  SECTION_PRODUCT_LIMIT,
+  bestSellerProducts,
+  departmentRow,
+  parseBestSellers,
   resolveCampaign,
   sectionCategories,
+  sectionLayout,
   sectionProducts,
+  takesLayout,
+  type LayoutKind,
   type ResolvedCampaign,
 } from "../store/storefrontModel";
-import { DepartmentRail, DepartmentRailSkeleton } from "./DepartmentRail";
+import { DepartmentGrid, DepartmentGridSkeleton, DepartmentRail, DepartmentRailSkeleton } from "./DepartmentRail";
 import { ProductCard } from "./ProductCard";
+import { ProductRail, ProductRailSkeleton, sectionLinkClass, type SectionLink } from "./ProductRail";
+import { ShoppingFacts } from "./ShoppingFacts";
 import { Container, ErrorPanel, SampleImageLabel, SectionTitle } from "./ui";
 
 type Section = StorefrontSettings["sections"][number];
+/** A section with a grid or row layout: departments, featured, selected products or a department row. */
+type LaidOutSection = Section & { type: LayoutKind };
+const isLaidOut = (section: Section): section is LaidOutSection => takesLayout(section.type);
 
 /** Viewport where campaign artwork switches to its mobile composition (Tailwind `md`). */
 const MOBILE_ARTWORK_QUERY = "(width < 48rem)";
@@ -24,6 +38,8 @@ const SPLIT_HERO_SIZES = "(min-width: 48em) 50vw, 100vw";
 const BAND_SIZES = "(min-width: 90em) 459px, (min-width: 48em) 33vw, 100vw";
 /** Product cards a section shows: 4 on phones, 6 from 768px and 8 from 1280px; "View all" leads to the rest. */
 const VISIBLE_FROM: readonly string[] = ["", "", "", "", "hidden md:block", "hidden md:block", "hidden xl:block", "hidden xl:block"];
+/** A product row's section: its own padding below leaves the row room for card shadows, so the section adds less. */
+const RAIL_SECTION = "pt-8 md:pb-2 md:pt-10";
 
 type SectionsProps = {
   settings: StorefrontSettings;
@@ -34,10 +50,42 @@ type SectionsProps = {
   productPreviewRoute?: (productId: string) => string;
 };
 
+/** The measured best sellers, while loading, once read, or after a failed or malformed answer. */
+type Ranking = { status: "loading" } | { status: "ready"; ranking: BestSellers } | { status: "failed" };
+
+/** Asks for the best sellers only while a best sellers section is shown; any failure leaves the section hidden. */
+function useBestSellers(wanted: boolean): Ranking {
+  const [state, setState] = useState<Ranking>({ status: "loading" });
+  useEffect(() => {
+    if (!wanted) return;
+    let current = true;
+    catalogAPI.getBestSellers()
+      .then(({ data }) => {
+        const ranking = parseBestSellers(data);
+        if (current) setState(ranking ? { status: "ready", ranking } : { status: "failed" });
+      })
+      .catch(() => {
+        if (current) setState({ status: "failed" });
+      });
+    return () => { current = false; };
+  }, [wanted]);
+  return state;
+}
+
+/** The ranked products shoppers see: none until the ranking and catalog are in, and none below the minimum. */
+function rankedProducts(ranking: Ranking, catalog: CatalogValue): CatalogProduct[] {
+  if (ranking.status !== "ready" || catalog.status !== "ready") return [];
+  const products = bestSellerProducts(ranking.ranking.productIds, catalog);
+  return products.length >= BEST_SELLERS_RULES.minProducts ? products : [];
+}
+
 /** Whether a section shows shoppers anything in the current catalog state; staff-only problem notes do not count. */
-function showsShoppersContent(section: Section, settings: StorefrontSettings, catalog: CatalogValue) {
+function showsShoppersContent(section: Section, settings: StorefrontSettings, catalog: CatalogValue, ranking: Ranking) {
   if (section.type === "campaign") return settings.campaigns.some((campaign) => campaign.id === section.campaignId);
+  if (section.type === "promises") return true;
+  if (section.type === "bestSellers") return rankedProducts(ranking, catalog).length > 0;
   if (catalog.status !== "ready") return catalog.status === "loading";
+  if (section.type === "category") return departmentRow(section, catalog).products.length > 0;
   const { items } = section.type === "departments" ? sectionCategories(section, catalog) : sectionProducts(section, catalog);
   return items.length > 0;
 }
@@ -49,10 +97,12 @@ function showsShoppersContent(section: Section, settings: StorefrontSettings, ca
 export function StorefrontSections({ settings, mediaById, showProblems = false, productPreviewRoute }: SectionsProps) {
   const catalog = useCatalog();
   const sections = settings.sections.filter((section) => section.enabled);
-  const usesCatalog = sections.some((section) => section.type !== "campaign");
+  const ranking = useBestSellers(sections.some((section) => section.type === "bestSellers"));
+  const usesCatalog = sections.some((section) => section.type !== "campaign" && section.type !== "promises");
+  const shows = (section: Section) => showsShoppersContent(section, settings, catalog, ranking);
   // The first section shoppers see is the likely largest paint, so only a campaign there loads its artwork eagerly.
-  const lead = sections.find((section) => showsShoppersContent(section, settings, catalog));
-  const hero = sections.find((section) => section.type === "campaign" && showsShoppersContent(section, settings, catalog));
+  const lead = sections.find(shows);
+  const hero = sections.find((section) => section.type === "campaign" && shows(section));
 
   if (!sections.length) {
     return (
@@ -92,18 +142,17 @@ export function StorefrontSections({ settings, mediaById, showProblems = false, 
             />
           );
         }
+        if (section.type === "promises") return <ShoppingFacts key={section.id} title={section.title} />;
         if (catalog.status === "error") return null;
-        if (catalog.status === "loading") {
-          return (
-            <Container key={section.id} className="py-8 md:py-10">
-              <p role="status" className="sr-only">Loading {section.title.toLowerCase()}…</p>
-              {section.type === "departments" ? <DepartmentRailSkeleton /> : <ProductsSkeleton />}
-            </Container>
-          );
+        if (section.type === "bestSellers") {
+          return <BestSellersSection key={section.id} title={section.title} ranking={ranking} showProblems={showProblems} productPreviewRoute={productPreviewRoute} />;
         }
-        return section.type === "departments"
-          ? <DepartmentsSection key={section.id} section={section} showProblems={showProblems} />
-          : <ProductsSection key={section.id} section={section} showProblems={showProblems} productPreviewRoute={productPreviewRoute} />;
+        // Every kind left has a layout; a kind this version can't show renders nothing.
+        if (!isLaidOut(section)) return null;
+        if (catalog.status === "loading") return <SectionSkeleton key={section.id} section={section} />;
+        if (section.type === "departments") return <DepartmentsSection key={section.id} section={section} showProblems={showProblems} />;
+        if (section.type === "category") return <DepartmentRowSection key={section.id} section={section} showProblems={showProblems} productPreviewRoute={productPreviewRoute} />;
+        return <ProductsSection key={section.id} section={section} showProblems={showProblems} productPreviewRoute={productPreviewRoute} />;
       })}
     </>
   );
@@ -123,7 +172,21 @@ function ProblemList({ title, problems }: { title: string; problems: string[] })
   );
 }
 
-function DepartmentsSection({ section, showProblems }: { section: Section; showProblems: boolean }) {
+/** A section's place while the catalog loads: its kind's and layout's shape, without motion. */
+function SectionSkeleton({ section }: { section: LaidOutSection }) {
+  const rail = sectionLayout(section) === "rail";
+  let shape: ReactNode;
+  if (section.type === "departments") shape = rail ? <DepartmentRailSkeleton /> : <DepartmentGridSkeleton />;
+  else shape = rail ? <ProductRailSkeleton /> : <ProductsSkeleton />;
+  return (
+    <Container className={rail && section.type !== "departments" ? RAIL_SECTION : "py-8 md:py-10"}>
+      <p role="status" className="sr-only">Loading {section.title.toLowerCase()}…</p>
+      {shape}
+    </Container>
+  );
+}
+
+function DepartmentsSection({ section, showProblems }: { section: LaidOutSection; showProblems: boolean }) {
   const catalog = useCatalog();
   const { items, missing } = sectionCategories(section, catalog);
   const problems = missing.map((id) => `Category ${id} is unavailable`);
@@ -132,7 +195,7 @@ function DepartmentsSection({ section, showProblems }: { section: Section; showP
     <>
       {showProblems && <ProblemList title={section.title} problems={problems} />}
       <Container className="py-8 md:py-10">
-        <DepartmentRail title={section.title} items={items} />
+        {sectionLayout(section) === "grid" ? <DepartmentGrid title={section.title} items={items} /> : <DepartmentRail title={section.title} items={items} />}
       </Container>
     </>
   );
@@ -143,13 +206,50 @@ function viewAllRoute(section: Section) {
   return section.type === "featured" && !section.productIds.length ? listingRoute({ featured: true }) : listingRoute();
 }
 
+/** Products as a row (up to 12) or a grid (4, 6 then 8 by breakpoint), with the section's link to the rest. */
+function ProductList({ section, products, link, productPreviewRoute }: {
+  section: LaidOutSection;
+  products: readonly CatalogProduct[];
+  link: SectionLink;
+  productPreviewRoute: SectionsProps["productPreviewRoute"];
+}) {
+  if (sectionLayout(section) === "rail") {
+    return (
+      <Container className={RAIL_SECTION}>
+        <ProductRail title={section.title} products={products.slice(0, RAIL_PRODUCT_LIMIT)} link={link} productPreviewRoute={productPreviewRoute} />
+      </Container>
+    );
+  }
+  return (
+    <Container className="py-8 md:py-10">
+      <SectionTitle
+        action={
+          <Link to={link.to} className={sectionLinkClass}>
+            {link.label}<span className="sr-only"> {section.title}</span>
+          </Link>
+        }
+      >
+        {section.title}
+      </SectionTitle>
+      <ul aria-label={section.title} className="product-grid">
+        {products.slice(0, SECTION_PRODUCT_LIMIT).map((product, index) => (
+          <li key={product.id} className={`min-w-0 ${VISIBLE_FROM[index] ?? "hidden"}`}>
+            <ProductCard product={product} previewRoute={productPreviewRoute?.(product.id)} />
+          </li>
+        ))}
+      </ul>
+    </Container>
+  );
+}
+
 function ProductsSection({ section, showProblems, productPreviewRoute }: {
-  section: Section;
+  section: LaidOutSection;
   showProblems: boolean;
   productPreviewRoute: SectionsProps["productPreviewRoute"];
 }) {
   const catalog = useCatalog();
-  const { items, missing } = sectionProducts(section, catalog);
+  const limit = sectionLayout(section) === "rail" ? RAIL_PRODUCT_LIMIT : SECTION_PRODUCT_LIMIT;
+  const { items, missing } = sectionProducts(section, catalog, limit);
   const problems = missing.map((id) => `Product ${id} is unavailable`);
   if (!items.length) {
     return showProblems ? <ProblemList title={section.title} problems={[...problems, "No products to show; shoppers will not see this section"]} /> : null;
@@ -157,25 +257,68 @@ function ProductsSection({ section, showProblems, productPreviewRoute }: {
   return (
     <>
       {showProblems && <ProblemList title={section.title} problems={problems} />}
-      <Container className="py-8 md:py-10">
-        <SectionTitle
-          action={
-            <Link to={viewAllRoute(section)} className="inline-flex min-h-[44px] items-center px-1 font-semibold text-link underline underline-offset-4 hover:text-link-hover">
-              View all<span className="sr-only"> {section.title}</span>
-            </Link>
-          }
-        >
-          {section.title}
-        </SectionTitle>
-        <ul aria-label={section.title} className="product-grid">
-          {items.map((product, index) => (
-            <li key={product.id} className={`min-w-0 ${VISIBLE_FROM[index] ?? "hidden"}`}>
-              <ProductCard product={product} previewRoute={productPreviewRoute?.(product.id)} />
-            </li>
-          ))}
-        </ul>
-      </Container>
+      <ProductList section={section} products={items} link={{ to: viewAllRoute(section), label: "View all" }} productPreviewRoute={productPreviewRoute} />
     </>
+  );
+}
+
+/** One department's products in catalog order, the first page of its listing, which "See all" opens. */
+function DepartmentRowSection({ section, showProblems, productPreviewRoute }: {
+  section: LaidOutSection;
+  showProblems: boolean;
+  productPreviewRoute: SectionsProps["productPreviewRoute"];
+}) {
+  const catalog = useCatalog();
+  const { category, products } = departmentRow(section, catalog);
+  if (!category || !products.length) {
+    const problem = category
+      ? `No products in ${category.name}; shoppers will not see this section`
+      : `Category ${section.categoryIds[0] ?? "(none)"} is unavailable`;
+    return showProblems ? <ProblemList title={section.title} problems={[problem]} /> : null;
+  }
+  return <ProductList section={section} products={products} link={{ to: listingRoute({ cat: category.slug }), label: "See all" }} productPreviewRoute={productPreviewRoute} />;
+}
+
+/**
+ * The measured best sellers as a product row, shown only once at least 4 ranked products are in the catalog; until then
+ * (loading, failed, or too few), shoppers see nothing and the staff preview says why and when it would show.
+ */
+function BestSellersSection({ title, ranking, showProblems, productPreviewRoute }: {
+  title: string;
+  ranking: Ranking;
+  showProblems: boolean;
+  productPreviewRoute: SectionsProps["productPreviewRoute"];
+}) {
+  const catalog = useCatalog();
+  const products = rankedProducts(ranking, catalog);
+  if (ranking.status === "ready" && products.length) {
+    return (
+      <Container className={RAIL_SECTION}>
+        <ProductRail
+          title={title}
+          products={products}
+          link={{ to: listingRoute(), label: "View all" }}
+          note={`Ranked by paid orders in the last ${ranking.ranking.windowDays} days`}
+          productPreviewRoute={productPreviewRoute}
+        />
+      </Container>
+    );
+  }
+  if (!showProblems || catalog.status !== "ready") return null;
+  const reason = ranking.status === "loading" ? "the ranking is still loading"
+    : ranking.status === "failed" ? "the ranking could not be loaded"
+      : `fewer than ${BEST_SELLERS_RULES.minProducts} products qualify`;
+  const windowDays = ranking.status === "ready" ? ranking.ranking.windowDays : BEST_SELLERS_RULES.windowDays;
+  return (
+    <Container className="pt-6">
+      <div role="note" className="rounded-md border border-warning/40 bg-warning-tint p-3 text-sm text-navy-800">
+        <p>
+          “{title}” is hidden from shoppers: {reason}. It shows once at least {BEST_SELLERS_RULES.minProducts} products in the
+          catalog were each bought by at least {BEST_SELLERS_RULES.minBuyers} different accounts in paid orders in the last{" "}
+          {windowDays} days.
+        </p>
+      </div>
+    </Container>
   );
 }
 

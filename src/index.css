@@ -135,6 +135,38 @@
   @media (width >= 80rem) { --grid-columns: 4; }
 }
 
+/*
+ * Department tiles: 2 columns on phones, 4 from 768px and 7 from 1280px, never narrower than 9rem a tile, so enlarged
+ * text drops a column instead of squeezing department names.
+ */
+@utility department-grid {
+  --grid-columns: 2;
+  --grid-gap: 0.75rem;
+  --grid-min: 9rem;
+  display: grid;
+  gap: var(--grid-gap);
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(min(100%, max(var(--grid-min), (100% - (var(--grid-columns) - 1) * var(--grid-gap)) / var(--grid-columns))), 1fr)
+  );
+  @media (width >= 48rem) { --grid-columns: 4; }
+  @media (width >= 80rem) { --grid-columns: 7; }
+}
+
+/* The shopping facts: 2 by 2 on phones and one row of 4 from 768px, by the same rule. */
+@utility facts-grid {
+  --grid-columns: 2;
+  --grid-gap: 0.75rem;
+  --grid-min: 9rem;
+  display: grid;
+  gap: var(--grid-gap);
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(min(100%, max(var(--grid-min), (100% - (var(--grid-columns) - 1) * var(--grid-gap)) / var(--grid-columns))), 1fr)
+  );
+  @media (width >= 48rem) { --grid-columns: 4; }
+}
+
 /* Focus ring colour for a subtree: gold on navy surfaces, info blue on light panels nested inside them. */
 @utility on-navy {
   --focus-ring: var(--color-gold-400);

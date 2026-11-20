@@ -282,12 +282,15 @@ export type StorefrontSettings = {
   theme: { fontId: string; colors: ThemeColors };
   sections: {
     id: string;
-    type: "departments" | "featured" | "products" | "campaign";
+    /** `category` is a department row (one category's products); `promises` the shopping facts strip. */
+    type: "departments" | "featured" | "products" | "campaign" | "category" | "promises" | "bestSellers";
     title: string;
     enabled: boolean;
     productIds: string[];
     categoryIds: string[];
     campaignId: string | null;
+    /** Departments, featured, selected products and department rows only; absent shows the kind's default (`sectionLayout`). */
+    layout?: "grid" | "rail";
   }[];
   campaigns: Campaign[];
 };
@@ -320,6 +323,9 @@ export type StorefrontRevision = {
 };
 /** `GET /settings/storefront/revisions?page=`: newest first, 20 a page; validated by `parseRevisionPage`. */
 export type StorefrontRevisionPage = { revisions: StorefrontRevision[]; pagination: Pagination };
+
+/** `GET /settings/storefront/best-sellers`: product ids, best first, measured over `windowDays`; see `parseBestSellers`. */
+export type BestSellers = { windowDays: number; productIds: string[] };
 
 /** A real review record; only returned by the product detail endpoint. */
 export type CatalogReview = {
@@ -357,6 +363,8 @@ export const catalogAPI = {
   getSnapshot: () => api.get<CatalogSnapshot>("/catalog"),
   getProduct: (id: string) => api.get<CatalogProductDetail>(path("/products", id)),
   getStorefront: () => api.get<PublishedStorefront>("/settings/storefront"),
+  /** The answer is checked by `parseBestSellers`; anything else counts as unavailable. */
+  getBestSellers: () => api.get<unknown>("/settings/storefront/best-sellers"),
 };
 
 /** Staff catalog operations; each request carries explicit staff credentials. */

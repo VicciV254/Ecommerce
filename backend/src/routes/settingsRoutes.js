@@ -1,5 +1,5 @@
 import express from 'express';
-import { getStorefront, getStorefrontDraft, saveStorefrontDraft, publishStorefront, listStorefrontRevisions, restoreStorefrontRevision, retiredSettings } from '../controllers/settingsController.js';
+import { getStorefront, getStorefrontDraft, getBestSellers, saveStorefrontDraft, publishStorefront, listStorefrontRevisions, restoreStorefrontRevision, retiredSettings } from '../controllers/settingsController.js';
 import { authenticateAdmin, authorize } from '../middleware/adminAuth.js';
 
 const router = express.Router();
@@ -9,6 +9,7 @@ router.put('/storefront/draft', authenticateAdmin, authorize('SUPER_ADMIN', 'ADM
 router.post('/storefront/publish', authenticateAdmin, authorize('SUPER_ADMIN', 'ADMIN'), publishStorefront);
 router.get('/storefront/revisions', authenticateAdmin, listStorefrontRevisions);
 router.post('/storefront/revisions/:version/restore', authenticateAdmin, authorize('SUPER_ADMIN', 'ADMIN'), restoreStorefrontRevision);
+router.get('/storefront/best-sellers', getBestSellers);
 router.get('/admin-data', retiredSettings);
 router.put('/admin-data', authenticateAdmin, authorize('SUPER_ADMIN', 'ADMIN'), retiredSettings);
 router.get('/theme', retiredSettings);

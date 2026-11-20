@@ -62,4 +62,25 @@ describe("department rail", () => {
     await layOut(rail, { scrollLeft: 0 });
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "Next departments" }));
   });
+
+  it.each(["Next", "Previous"])("hands focus to All departments when the rail stops overflowing while %s is focused", async (control) => {
+    render(<DepartmentRail title="Shop by department" items={departments} />);
+    const rail = screen.getByRole("list", { name: "Shop by department" });
+    await layOut(rail, { scrollLeft: 500 });
+    screen.getByRole("button", { name: `${control} departments` }).focus();
+    // The window grew: every tile fits, so neither control is shown.
+    await layOut(rail, { scrollLeft: 0, clientWidth: 1400 });
+    expect(controls()).toEqual([]);
+    expect(document.activeElement).toBe(screen.getByRole("link", { name: "All departments" }));
+  });
+
+  it("leaves focus alone when the rail changes while focus is elsewhere", async () => {
+    render(<><button type="button">Elsewhere</button><DepartmentRail title="Shop by department" items={departments} /></>);
+    const rail = screen.getByRole("list", { name: "Shop by department" });
+    await layOut(rail, { scrollLeft: 500 });
+    const elsewhere = screen.getByRole("button", { name: "Elsewhere" });
+    elsewhere.focus();
+    await layOut(rail, { scrollLeft: 0, clientWidth: 1400 });
+    expect(document.activeElement).toBe(elsewhere);
+  });
 });

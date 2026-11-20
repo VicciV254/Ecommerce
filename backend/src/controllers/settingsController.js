@@ -1,8 +1,10 @@
 import prisma from '../config/database.js';
+import { demonstrationStore } from '../config/checkoutPolicy.js';
 import {
   assertNoRankingClaims, revisionListQuerySchema, revisionParamsSchema, storefrontClaimIssues, storefrontDraftSchema,
   storefrontSchema, versionSchema,
 } from '../utils/catalogValidation.js';
+import { BEST_SELLERS, bestSellerIds } from '../services/bestSellersService.js';
 import { httpError, mediaDto, serializable, settingReferences, STOREFRONT_KEY, validateSettingReferences } from '../services/catalogService.js';
 import { ACTIVITY, recordActivity } from '../services/activityService.js';
 
@@ -10,6 +12,8 @@ import { ACTIVITY, recordActivity } from '../services/activityService.js';
 const STOREFRONT_CHANGED = 'STOREFRONT_CHANGED';
 /** Publication history entries per page; the editor appends the next page on "Show more". */
 const REVISIONS_PER_PAGE = 20;
+/** The best sellers change slowly: browsers keep the answer a minute, shared caches five. Failures are never cached. */
+const BEST_SELLERS_CACHE = 'public, max-age=60, s-maxage=300';
 
 async function setting(db) {
   const record = await db.siteSetting.findUnique({ where: { key: STOREFRONT_KEY } });
@@ -63,6 +67,18 @@ export const getStorefront = async (_req, res, next) => {
 export const getStorefrontDraft = async (_req, res, next) => {
   try { res.json(await prisma.$transaction(async (db) => draft(db, await setting(db)), { isolationLevel: 'RepeatableRead' })); }
   catch (error) { next(error); }
+};
+/**
+ * The measured best sellers for shoppers: `{ windowDays, productIds }` and nothing else (no counts, buyers or amounts).
+ * A demonstration store has no real sales, and payments recorded before a mode change must not show, so it reads nothing.
+ */
+export const getBestSellers = async (_req, res, next) => {
+  try {
+    const productIds = demonstrationStore()
+      ? []
+      : await prisma.$transaction((db) => bestSellerIds(db), { isolationLevel: 'RepeatableRead' });
+    res.set('Cache-Control', BEST_SELLERS_CACHE).json({ windowDays: BEST_SELLERS.windowDays, productIds });
+  } catch (error) { next(error); }
 };
 export const saveStorefrontDraft = async (req, res, next) => {
   try {

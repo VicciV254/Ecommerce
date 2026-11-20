@@ -1,13 +1,11 @@
 import type { Campaign, MediaAsset, StorefrontSettings } from "../../api/catalog";
 import { COLOR_SLOTS, FONT_OPTIONS } from "../../store/storefrontTheme";
-import type { PickerItem } from "./StorefrontEditors";
+import { sectionLayout, takesLayout } from "../../store/storefrontModel";
+import {
+  BEST_SELLERS_RULE, BEST_SELLERS_SHOWN, SECTION_KIND_LABELS, SECTION_LAYOUT_LABELS, SHOPPING_FACTS_NOTE, type PickerItem,
+} from "./StorefrontEditors";
 import { Panel } from "./shared";
 
-type Section = StorefrontSettings["sections"][number];
-
-const SECTION_TYPES: Record<Section["type"], string> = {
-  departments: "Departments", featured: "Featured products", products: "Selected products", campaign: "Campaign",
-};
 const LAYOUTS: Record<Campaign["layout"], string> = {
   split: "Split (text beside image)", overlay: "Overlay (text on image)", banner: "Banner (compact)",
 };
@@ -83,7 +81,7 @@ export function StorefrontSummary({ settings, media, products, categories }: {
           <ol className="space-y-3">
             {settings.sections.map((section, index) => (
               <li key={section.id} className="rounded-md border border-divider p-[16px]">
-                <p className="text-xs font-semibold text-gold-text">{index + 1}. {SECTION_TYPES[section.type]} · {section.enabled ? "Shown" : "Hidden"}</p>
+                <p className="text-xs font-semibold text-gold-text">{index + 1}. {SECTION_KIND_LABELS[section.type]} · {section.enabled ? "Shown" : "Hidden"}</p>
                 <p className="mt-1 font-semibold text-navy-900 [overflow-wrap:anywhere]">{section.title || "Untitled section"}</p>
                 {section.type === "departments" && (
                   <p className="mt-1 text-sm text-navy-800 [overflow-wrap:anywhere]">Categories: {names(section.categoryIds, categories, "every top-level department")}</p>
@@ -93,10 +91,18 @@ export function StorefrontSummary({ settings, media, products, categories }: {
                     Products: {names(section.productIds, products, section.type === "featured" ? "products marked Featured" : "none chosen")}
                   </p>
                 )}
+                {section.type === "category" && (
+                  <p className="mt-1 text-sm text-navy-800 [overflow-wrap:anywhere]">Department: {names(section.categoryIds, categories, "not chosen")}</p>
+                )}
+                {section.type === "promises" && <p className="mt-1 text-sm text-navy-800">{SHOPPING_FACTS_NOTE}</p>}
+                {section.type === "bestSellers" && <p className="mt-1 text-sm text-navy-800">{`Measured: ${BEST_SELLERS_RULE}. ${BEST_SELLERS_SHOWN}`}</p>}
                 {section.type === "campaign" && (
                   <p className="mt-1 text-sm text-navy-800 [overflow-wrap:anywhere]">
                     Campaign: {settings.campaigns.find((campaign) => campaign.id === section.campaignId)?.title ?? "not chosen"}
                   </p>
+                )}
+                {takesLayout(section.type) && (
+                  <p className="mt-1 text-sm text-navy-800">Layout: {SECTION_LAYOUT_LABELS[sectionLayout({ ...section, type: section.type })]}</p>
                 )}
               </li>
             ))}

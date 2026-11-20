@@ -5,7 +5,7 @@ import { Link } from "../../router";
 import { formatNairobiDateTime } from "../../utils/nairobiDate";
 import { useAdminCatalog } from "./AdminCatalogContext";
 import { ADMIN_PREVIEW_ROUTE } from "./adminRoutes";
-import { CampaignEditor, STOREFRONT_LIMITS, SectionEditor, type PickerItem } from "./StorefrontEditors";
+import { CampaignEditor, NEW_SECTION_TITLES, SECTION_KIND_LABELS, STOREFRONT_LIMITS, SectionEditor, type PickerItem } from "./StorefrontEditors";
 import { draftProblems, useStorefrontDraft } from "./StorefrontDraft";
 import { StorefrontHistory } from "./StorefrontHistory";
 import { StorefrontSummary } from "./StorefrontSummary";
@@ -14,6 +14,10 @@ import { Feedback, Field, Panel, WrappingSelect, categoryOptions, inputClass, pr
 type Section = StorefrontSettings["sections"][number];
 
 const CENTRED_FOCAL = { x: 50, y: 50 };
+/** Section IDs are slugs: kinds whose names are not one get a slug of their own. */
+const SECTION_ID_BASES: Partial<Record<Section["type"], string>> = { category: "department-row", promises: "shopping-facts", bestSellers: "best-sellers" };
+/** Kinds a storefront holds at most once. */
+const ONCE_ONLY: ReadonlySet<Section["type"]> = new Set(["promises", "bestSellers"]);
 
 /** "Last published 17 Nov 2026, 14:05 by alice (version 6).", in Nairobi time, or that nothing is published. */
 function publicationLine(draft: StorefrontDraft) {
@@ -50,6 +54,7 @@ export function StorefrontManager({ canWrite }: { canWrite: boolean }) {
     id: option.id,
     label: option.label,
     note: option.category.isActive ? undefined : "hidden",
+    name: option.category.name,
   })), [categories]);
 
   if (load.status === "loading" || (load.status === "ready" && !settings)) {
@@ -75,9 +80,8 @@ export function StorefrontManager({ canWrite }: { canWrite: boolean }) {
     update({ ...settings, sections });
   };
   const addSection = (type: Section["type"]) => {
-    const id = uniqueId(type, settings.sections.map((section) => section.id));
-    const title = { departments: "Shop by department", featured: "Featured products", products: "Selected products", campaign: "Campaign" }[type];
-    update({ ...settings, sections: [...settings.sections, { id, type, title, enabled: false, productIds: [], categoryIds: [], campaignId: null }] });
+    const id = uniqueId(SECTION_ID_BASES[type] ?? type, settings.sections.map((section) => section.id));
+    update({ ...settings, sections: [...settings.sections, { id, type, title: NEW_SECTION_TITLES[type], enabled: false, productIds: [], categoryIds: [], campaignId: null }] });
   };
   const addCampaign = () => {
     const id = uniqueId("campaign", settings.campaigns.map((campaign) => campaign.id));
@@ -199,6 +203,17 @@ export function StorefrontManager({ canWrite }: { canWrite: boolean }) {
                 {(["departments", "featured", "products", "campaign"] as const).map((type) => (
                   <button key={type} type="button" disabled={settings.sections.length >= STOREFRONT_LIMITS.sections} onClick={() => addSection(type)} className={smallButtonClass}>
                     + {type}
+                  </button>
+                ))}
+                {(["category", "promises", "bestSellers"] as const).map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    disabled={settings.sections.length >= STOREFRONT_LIMITS.sections || (ONCE_ONLY.has(type) && settings.sections.some((section) => section.type === type))}
+                    onClick={() => addSection(type)}
+                    className={smallButtonClass}
+                  >
+                    + {SECTION_KIND_LABELS[type]}
                   </button>
                 ))}
               </div>
