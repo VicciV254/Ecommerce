@@ -15,6 +15,8 @@ export const STORAGE_KEYS = {
   pendingGuestMerge: `${STORAGE_NAMESPACE}:shopper:pending-merge`,
   /** Session storage: an address typed at checkout but not saved yet, for this tab and one account. */
   checkoutAddressDraft: `${STORAGE_NAMESPACE}:checkout:address-draft`,
+  /** That this browser has been shown the welcome dialog, so it appears once; kept until the site's storage is cleared. */
+  welcomeShown: `${STORAGE_NAMESPACE}:shopper:welcome-shown`,
 } as const;
 
 export const CUSTOMER_SESSION_KEYS = [

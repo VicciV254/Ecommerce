@@ -282,8 +282,8 @@ export type StorefrontSettings = {
   theme: { fontId: string; colors: ThemeColors };
   sections: {
     id: string;
-    /** `category` is a department row (one category's products); `promises` the shopping facts strip. */
-    type: "departments" | "featured" | "products" | "campaign" | "category" | "promises" | "bestSellers";
+    /** `category` is a department row (one category's products); `promises` the shopping facts strip; `carousel` the hero carousel. */
+    type: "departments" | "featured" | "products" | "campaign" | "category" | "promises" | "bestSellers" | "carousel";
     title: string;
     enabled: boolean;
     productIds: string[];
@@ -291,6 +291,8 @@ export type StorefrontSettings = {
     campaignId: string | null;
     /** Departments, featured, selected products and department rows only; absent shows the kind's default (`sectionLayout`). */
     layout?: "grid" | "rail";
+    /** A hero carousel's campaigns, in slide order (1 to 5); absent on every other kind. */
+    campaignIds?: string[];
   }[];
   campaigns: Campaign[];
 };

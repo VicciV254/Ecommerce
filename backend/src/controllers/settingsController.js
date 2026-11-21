@@ -24,7 +24,11 @@ async function published(db, record) {
   const parsed = storefrontSchema.safeParse(record.publishedValue);
   if (!parsed.success) throw httpError(503, 'Published storefront data is invalid');
   const sections = parsed.data.sections.filter((section) => section.enabled);
-  const campaignIds = new Set(sections.filter((section) => section.type === 'campaign').map((section) => section.campaignId));
+  // Shoppers get only the campaigns an enabled campaign section or hero carousel shows.
+  const campaignIds = new Set(sections.flatMap((section) => {
+    if (section.type === 'campaign') return [section.campaignId];
+    return section.type === 'carousel' ? section.campaignIds : [];
+  }));
   const settings = { ...parsed.data, sections, campaigns: parsed.data.campaigns.filter((campaign) => campaignIds.has(campaign.id)) };
   let media;
   try {

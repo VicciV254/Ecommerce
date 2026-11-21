@@ -6,6 +6,7 @@ import { navigate } from "./router";
 import { buildCategoryTree } from "./store/catalogModel";
 import type { CatalogValue } from "./store/CatalogContext";
 import { fixtureSnapshot } from "./test-support/catalogFixtures";
+import { STORAGE_KEYS } from "./utils/storage";
 import { ADMIN_PREVIEW_FRAME_ROUTE } from "./pages/admin/adminRoutes";
 import App from "./App";
 import { Header } from "./components/Header";
@@ -19,7 +20,6 @@ const page = vi.hoisted(() => (name: string) => async () => {
 });
 const passThrough = vi.hoisted(() => ({ children }: { children: ReactNode }) => children);
 
-vi.mock("aos", () => ({ default: { init: () => undefined } }));
 vi.mock("./store/StorefrontContext", () => ({
   StorefrontProvider: passThrough, useStorefront: () => ({ brandName: "Apex Cart" }), usePageTitle: () => undefined,
 }));
@@ -141,6 +141,12 @@ describe("back to top", () => {
       expect(screen.queryByRole("button", { name: "Back to top" }) !== null, hash).toBe(offered);
       unmount();
     }
+  });
+});
+
+describe("welcome dialog in unit tests", () => {
+  it("stays closed unless a test asks for it: the shared setup marks it seen before every test, in any order", () => {
+    expect(localStorage.getItem(STORAGE_KEYS.welcomeShown)).not.toBeNull();
   });
 });
 

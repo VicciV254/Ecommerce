@@ -1,6 +1,7 @@
 import { InfoPage, infoParagraph } from "../components/InfoPage";
 import { ErrorPanel, LoadingPanel } from "../components/ui";
 import type { CatalogDelivery } from "../api/catalog";
+import { usePageReady } from "../components/pageReady";
 import { useCatalog } from "../store/CatalogContext";
 import { DELIVERY_LABELS } from "../store/checkoutModel";
 import { DELIVERY_PROMISES, STORE_FACTS, deliveryCoverage } from "../store/storeFacts";
@@ -43,6 +44,7 @@ function DeliveryOption({ option }: { option: CatalogDelivery }) {
 /** The delivery options new orders can use, from the catalog's delivery facts (the same ones checkout offers). */
 export default function Delivery() {
   const { status, error, delivery, reload } = useCatalog();
+  usePageReady(status !== "loading");
   let options;
   if (delivery) {
     options = <ul className="grid gap-4 sm:grid-cols-2">{delivery.map((option) => <DeliveryOption key={option.method} option={option} />)}</ul>;

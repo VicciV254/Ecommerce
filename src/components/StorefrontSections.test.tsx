@@ -292,7 +292,9 @@ describe("campaign loading priority", () => {
 
   it.each(["ready", "loading"] as const)("keeps a campaign lazy below products while the catalog is %s", (status) => {
     state.catalog = catalogWith([linenShirt, poloShirt], status);
-    render(<StorefrontSections settings={fixtureStorefrontSettings({ sections: [featured, campaignAt("hero", "launch")], campaigns: [campaign()] })} mediaById={mediaById} />);
+    // Chosen products: content the storefront guarantees, so the campaign below shows while the catalog loads.
+    const picks: Section = { ...featured, id: "picks", type: "products", productIds: [poloShirt.id] };
+    render(<StorefrontSections settings={fixtureStorefrontSettings({ sections: [picks, campaignAt("hero", "launch")], campaigns: [campaign()] })} mediaById={mediaById} />);
     expect(artworkOf("Workspace week").getAttribute("loading")).toBe("lazy");
     expect(highPriority()).toHaveLength(0);
   });
@@ -555,14 +557,54 @@ describe("P8.7 section kinds", () => {
     state.catalog = catalogWith([], "loading");
     api.getBestSellers.mockReturnValue(new Promise(() => undefined));
     show([
-      kind("fashion", "category", "Fashion", { categoryIds: ["cat-fashion"] }),
       kind("departments", "departments", "Shop by department", { layout: "grid" }),
       kind("picks", "products", "Staff picks", { productIds: ["prod-polo-shirt"], layout: "rail" }),
       kind("facts", "promises", "How shopping works"),
+      kind("fashion", "category", "Fashion", { categoryIds: ["cat-fashion"] }),
       kind("best", "bestSellers", "Best sellers"),
     ]);
-    expect(screen.getAllByRole("status").map((status) => status.textContent)).toEqual(["Loading fashion…", "Loading shop by department…", "Loading staff picks…"]);
+    expect(screen.getAllByRole("status").map((status) => status.textContent)).toEqual(["Loading shop by department…", "Loading staff picks…", "Loading fashion…"]);
     expect(screen.getByRole("list", { name: "How shopping works" })).toBeTruthy();
+  });
+
+  describe("while the page arrives, nothing shoppers see moves", () => {
+    const facts = kind("facts", "promises", "How shopping works");
+    const departments = kind("departments", "departments", "Shop by department", { layout: "grid" });
+    const placeholder = (container: HTMLElement) => container.querySelector(":scope > .min-h-svh");
+
+    it.each([
+      ["a department row", kind("fashion", "category", "Fashion", { categoryIds: ["cat-fashion"] }), "Loading fashion…"],
+      ["Featured without chosen products", kind("featured", "featured", "Featured products"), "Loading featured products…"],
+    ])("waits with what follows %s until the catalog says whether it has products, keeping a screen below it", (_case, uncertain, status) => {
+      state.catalog = catalogWith([], "loading");
+      const { container, rerender } = show([uncertain, facts, departments]);
+      expect(screen.getAllByRole("status").map((item) => item.textContent)).toEqual([status]);
+      expect(screen.queryByRole("list", { name: "How shopping works" })).toBeNull();
+      expect(placeholder(container)?.getAttribute("aria-hidden")).toBe("true");
+      state.catalog = catalogWith([]);
+      rerender(<StorefrontSections settings={fixtureStorefrontSettings({ sections: [uncertain, facts, departments] })} mediaById={mediaById} />);
+      expect(screen.getByRole("list", { name: "How shopping works" })).toBeTruthy();
+      expect(screen.getByRole("list", { name: "Shop by department" })).toBeTruthy();
+      expect(placeholder(container)).toBeNull();
+    });
+
+    it("waits with what follows the best sellers until the ranking is in", async () => {
+      let answer!: (value: { data: unknown }) => void;
+      api.getBestSellers.mockReturnValue(new Promise((resolve) => { answer = resolve; }));
+      show([kind("best", "bestSellers", "Best sellers"), facts]);
+      expect(screen.queryByRole("list", { name: "How shopping works" })).toBeNull();
+      await act(async () => answer({ data: { windowDays: 30, productIds: [] } }));
+      expect(screen.getByRole("list", { name: "How shopping works" })).toBeTruthy();
+    });
+
+    it("puts a catalog error where the first section needing the catalog was, below what already shows", () => {
+      state.catalog = catalogWith([], "error");
+      const sections = [kind("hero", "campaign", "Hero", { campaignId: "launch" }), facts, departments, kind("picks", "products", "Staff picks", { productIds: ["prod-polo-shirt"] })];
+      render(<StorefrontSections settings={fixtureStorefrontSettings({ sections, campaigns: [campaign()] })} mediaById={mediaById} />);
+      const order = [screen.getByRole("heading", { name: "Workspace week" }), screen.getByRole("list", { name: "How shopping works" }), screen.getByRole("heading", { name: "Products are unavailable" })];
+      expect(order.every((element, index) => index === 0 || Boolean(order[index - 1].compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
+      expect(screen.getAllByRole("heading", { name: "Products are unavailable" })).toHaveLength(1);
+    });
   });
 
   it("shows one catalog error for product sections and keeps the shopping facts", () => {

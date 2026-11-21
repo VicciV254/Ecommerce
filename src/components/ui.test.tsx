@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { fixtureImage } from "../test-support/catalogFixtures";
 import { MediaImage, ProductImage, ResponsiveImage } from "./ui";
@@ -59,5 +59,63 @@ describe("catalog images", () => {
     expect(cover.getAttribute("sizes")).toBe("(min-width: 64em) 50vw, 100vw");
     const second = screen.getByRole("img", { name: "Second view" });
     expect([second.getAttribute("loading"), second.hasAttribute("fetchpriority")]).toEqual(["lazy", false]);
+  });
+});
+
+describe("images fading in as they load", () => {
+  const animate = vi.fn();
+  /** Lays the image out at `top` and says whether it has already loaded, as the browser would at mount. */
+  function setUp({ top, complete = false, reduce = false }: { top: number; complete?: boolean; reduce?: boolean }) {
+    vi.spyOn(HTMLImageElement.prototype, "getBoundingClientRect").mockReturnValue({
+      top, bottom: top + 200, left: 0, right: 200, width: 200, height: 200, x: 0, y: top, toJSON: () => ({}),
+    } as DOMRect);
+    Object.defineProperty(HTMLImageElement.prototype, "complete", { configurable: true, get: () => complete });
+    Object.defineProperty(Element.prototype, "animate", { configurable: true, value: animate });
+    window.matchMedia = vi.fn((query: string) => ({ matches: query.includes("reduce") ? reduce : false, media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() })) as unknown as typeof window.matchMedia;
+    animate.mockClear();
+  }
+  const image = () => screen.getByRole("img", { name: "Linen shirt, front" });
+  const tearDown = () => {
+    Reflect.deleteProperty(HTMLImageElement.prototype, "complete");
+    Reflect.deleteProperty(Element.prototype, "animate");
+  };
+
+  it("fades in an image that was outside the window and not yet loaded when it mounted", () => {
+    setUp({ top: window.innerHeight + 300 });
+    try {
+      render(<MediaImage asset={uploaded} alt="Fallback name" fade />);
+      expect(image().style.opacity).toBe("0");
+      fireEvent.load(image());
+      expect(image().style.opacity).toBe("");
+      expect(animate).toHaveBeenCalledTimes(1);
+      expect(animate.mock.calls[0][0]).toEqual([{ opacity: 0 }, { opacity: 1 }]);
+    } finally { tearDown(); }
+  });
+
+  it.each([
+    ["on the first screen", { top: 120 }],
+    ["already loaded (cached) when it mounted", { top: window.innerHeight + 300, complete: true }],
+    ["under reduced motion", { top: window.innerHeight + 300, reduce: true }],
+  ])("never fades an image %s", (_case, layout) => {
+    setUp(layout);
+    try {
+      render(<MediaImage asset={uploaded} alt="Fallback name" fade />);
+      expect(image().style.opacity).toBe("");
+      fireEvent.load(image());
+      expect(animate).not.toHaveBeenCalled();
+    } finally { tearDown(); }
+  });
+
+  it("never fades the priority image, or one that failed: its fallback shows at once", () => {
+    setUp({ top: window.innerHeight + 300 });
+    try {
+      const { unmount } = render(<ResponsiveImage url={STORED} preset="card" alt="Linen shirt, front" priority fade />);
+      expect(image().style.opacity).toBe("");
+      unmount();
+      render(<MediaImage asset={uploaded} alt="Fallback name" fade />);
+      fireEvent.error(image());
+      expect(image().style.opacity).toBe("");
+      expect(animate).not.toHaveBeenCalled();
+    } finally { tearDown(); }
   });
 });

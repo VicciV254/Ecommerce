@@ -3,6 +3,7 @@ import { inlineLinkClass } from "../components/checkout";
 import { InfoPage, infoList } from "../components/InfoPage";
 import { ErrorPanel, LoadingPanel } from "../components/ui";
 import { Link } from "../router";
+import { usePageReady } from "../components/pageReady";
 import { useCatalog } from "../store/CatalogContext";
 import { DELIVERY_FEE_TERMS } from "../store/orderCopy";
 import { returnRuleGroups, type ReturnRuleGroup } from "../store/returnRules";
@@ -29,6 +30,7 @@ function RuleLine({ rule, groups }: { rule: string; groups: ReturnRuleGroup[] })
 /** The return rules and refund terms new orders get, from the catalog's return policy and category rules. */
 export default function Returns() {
   const { status, error, categories, returnPolicy, demonstrationOrders, reload } = useCatalog();
+  usePageReady(status !== "loading");
   const groups = useMemo(() => returnRuleGroups([...categories.byId.values()]), [categories]);
 
   let terms;

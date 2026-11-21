@@ -1,5 +1,6 @@
 import { cleanup } from "@testing-library/react";
-import { afterEach } from "vitest";
+import { afterEach, beforeEach } from "vitest";
+import { STORAGE_KEYS } from "../src/utils/storage";
 
 // jsdom models <dialog> state but not its methods; native modality is verified in browser tests.
 if (typeof HTMLDialogElement.prototype.showModal !== "function") {
@@ -26,6 +27,11 @@ if (typeof globalThis.ResizeObserver !== "function") {
 if (typeof Element.prototype.scrollTo !== "function") {
   Element.prototype.scrollTo = function scrollTo() {};
 }
+
+// Every test starts as a returning visitor, so the welcome dialog never opens unless a test removes this mark.
+beforeEach(() => {
+  localStorage.setItem(STORAGE_KEYS.welcomeShown, "true");
+});
 
 afterEach(() => {
   cleanup();

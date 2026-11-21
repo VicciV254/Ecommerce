@@ -124,6 +124,27 @@ describe("view-only presentation for roles without writes", () => {
     noWrites();
   });
 
+  it("storefront editor: lists a hero carousel's campaigns in order, naming any that don't exist", async () => {
+    const campaign = (id: string, title: string) => ({
+      id, title, body: "", conditions: "", cta: { label: "Shop now", target: "shop" as const, targetId: null },
+      desktopMediaId: null, mobileMediaId: null, desktopFocal: { x: 50, y: 50 }, mobileFocal: { x: 50, y: 50 }, layout: "overlay" as const,
+    });
+    const carousel = (campaignIds: string[]) => ({
+      id: "hero-carousel", type: "carousel" as const, title: "Highlights", enabled: true, productIds: [], categoryIds: [], campaignId: null, campaignIds,
+    });
+    api.catalog.getStorefrontDraft.mockResolvedValue({ data: { ...draft, settings: fixtureStorefrontSettings({
+      sections: [carousel(["season", "retired", "week"])], campaigns: [campaign("week", "Fashion week"), campaign("season", "New season")],
+    }) } });
+    render(<StorefrontDraftProvider canWrite={false} showToast={vi.fn()}><StorefrontManager canWrite={false} /></StorefrontDraftProvider>);
+    const heading = await screen.findByRole("heading", { name: "Sections (1)" });
+    const items = within(heading.closest("section") ?? document.body).getAllByRole("listitem").map((item) => [...item.querySelectorAll("p")].map((line) => line.textContent));
+    expect(items).toEqual([
+      ["1. Hero carousel · Shown", "Highlights", "Campaigns: New season, Unavailable reference retired, Fashion week"],
+    ]);
+    expectReadOnly();
+    noWrites();
+  });
+
   it("storefront editor: names each section kind, its department and layout, and explains the measured best sellers", async () => {
     const section = (id: string, type: string, title: string, extra: Record<string, unknown> = {}) =>
       ({ id, type, title, enabled: true, productIds: [], categoryIds: [], campaignId: null, ...extra }) as StorefrontDraft["settings"]["sections"][number];

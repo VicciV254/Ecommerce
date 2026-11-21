@@ -1,4 +1,5 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useRevealRow } from "./reveal";
 
 /** Each Previous/Next press moves about this share of the visible rail, so the next items keep some context. */
 const PAGE_SHARE = 0.85;
@@ -74,7 +75,17 @@ export function useRail(items: unknown) {
     onBlur: () => { focusedControl.current = null; },
   });
 
-  return { rail, previous, next, link, edges, move, track };
+  // The row is also watched for its scroll reveal (its cards show together as it scrolls into view).
+  const revealRow = useRevealRow<HTMLUListElement>();
+  const list = useCallback((element: HTMLUListElement | null) => {
+    rail.current = element;
+    const stop = revealRow(element);
+    return () => {
+      rail.current = null;
+      stop?.();
+    };
+  }, [revealRow]);
+  return { rail, list, previous, next, link, edges, move, track };
 }
 
 type Rail = ReturnType<typeof useRail>;

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { CatalogProduct } from "../api/catalog";
 import { Link } from "../router";
@@ -7,11 +7,12 @@ import { useStore } from "../store/StoreContext";
 import { addedMessage, useAddToCart } from "../store/useProductSelection";
 import { formatKES } from "../utils/format";
 import { useMiniCart } from "./MiniCart";
+import { pop, useAddedFeedback } from "./motion";
 import { QuickView } from "./QuickView";
-import { DemoBadge, ProductImage, Stars, StockBadge } from "./ui";
+import { AddedLabel, DemoBadge, ProductImage, Stars, StockBadge } from "./ui";
 
 const cardAction =
-  "mt-3 flex min-h-[44px] w-full items-center justify-center rounded-sm px-2 text-center font-body text-xs font-bold uppercase tracking-[0.1em] transition-colors duration-200";
+  "mt-3 flex min-h-[44px] w-full items-center justify-center rounded-sm px-2 text-center font-body text-xs font-bold uppercase tracking-[0.1em] transition-[color,background-color,transform] duration-200";
 
 /**
  * Display prices are the server's per-SKU projection, shown once without client arithmetic. A product with one SKU is
@@ -24,6 +25,8 @@ export function ProductCard({ product, imageSizes, previewRoute }: { product: Ca
   const addLine = useAddToCart();
   const miniCart = useMiniCart();
   const [quickView, setQuickView] = useState(false);
+  const [added, confirmAdded] = useAddedFeedback();
+  const heart = useRef<SVGSVGElement>(null);
   const price = productPriceView(product);
   const variants = activeVariants(product);
   const stock = productStock(product);
@@ -33,7 +36,12 @@ export function ProductCard({ product, imageSizes, previewRoute }: { product: Ca
 
   const addSingleVariant = () => {
     const outcome = addLine(product, variants[0], 1);
+    confirmAdded();
     miniCart?.open({ message: addedMessage(product.name, "", outcome) });
+  };
+  const toggleWished = () => {
+    toggleWish(product.id);
+    if (!wished) pop(heart.current);
   };
 
   let action: ReactNode;
@@ -57,8 +65,13 @@ export function ProductCard({ product, imageSizes, previewRoute }: { product: Ca
     );
   } else {
     action = (
-      <button type="button" onClick={addSingleVariant} className={`${cardAction} bg-navy-900 text-white hover:bg-gold-500 hover:text-navy-900`}>
-        Add to cart
+      <button
+        type="button"
+        onClick={addSingleVariant}
+        data-added={added ? "true" : undefined}
+        className={`${cardAction} relative motion-safe:active:scale-[0.97] ${added ? "bg-success text-white" : "bg-navy-900 text-white hover:bg-gold-500 hover:text-navy-900"}`}
+      >
+        <AddedLabel added={added}>Add to cart</AddedLabel>
       </button>
     );
   }
@@ -68,7 +81,7 @@ export function ProductCard({ product, imageSizes, previewRoute }: { product: Ca
       {/* Duplicate of the title link for pointer users; hidden from keyboard and screen readers. */}
       <Link to={productRoute} tabIndex={-1} aria-hidden="true" className="relative block">
         <div className="relative aspect-square overflow-hidden bg-warm-beige">
-          <ProductImage product={product} sizes={imageSizes} className="transition-transform duration-700 group-hover:scale-110" />
+          <ProductImage product={product} sizes={imageSizes} fade className="transition-transform duration-700 group-hover:scale-110" />
           {product.isDemo && <DemoBadge className="absolute left-3 top-3 shadow-sm" />}
           {price && price.discountPercent > 0 ? (
             <span className="absolute right-3 top-3 rounded-sm bg-coral px-2 py-0.5 text-[0.625rem] font-bold uppercase tracking-wider text-white shadow-sm">
@@ -85,14 +98,14 @@ export function ProductCard({ product, imageSizes, previewRoute }: { product: Ca
       {!previewRoute && (
         <button
           type="button"
-          onClick={() => toggleWish(product.id)}
+          onClick={toggleWished}
           aria-label={wished ? `Remove ${product.name} from wishlist` : `Save ${product.name} to wishlist`}
           aria-pressed={wished}
           className={`absolute right-2 top-12 z-10 flex size-[44px] items-center justify-center rounded-full bg-white shadow-md transition-all duration-200 hover:scale-110 ${
             wished ? "text-error" : "text-gray-500 hover:text-error"
           }`}
         >
-          <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={wished ? "currentColor" : "none"} stroke="currentColor" strokeWidth={2} className="h-4 w-4">
+          <svg ref={heart} aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={wished ? "currentColor" : "none"} stroke="currentColor" strokeWidth={2} className="h-4 w-4">
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
           </svg>
         </button>

@@ -2,7 +2,7 @@ import { useId, useState } from "react";
 import { catalogAdminAPI, type Campaign, type MediaAsset, type StorefrontSettings } from "../../api/catalog";
 import { describeApiError } from "../../api/errors";
 import { sectionClaimProblem } from "../../store/storefrontClaims";
-import { BEST_SELLERS_RULES, BEST_SELLERS_TITLE, RAIL_PRODUCT_LIMIT, sectionLayout, takesLayout, type SectionLayout } from "../../store/storefrontModel";
+import { BEST_SELLERS_RULES, BEST_SELLERS_TITLE, CAROUSEL_SLIDES, RAIL_PRODUCT_LIMIT, sectionLayout, takesLayout, type SectionLayout } from "../../store/storefrontModel";
 import { Feedback, Field, WrappingSelect, dangerButtonClass, inputClass, isAcceptedImageUrl, smallButtonClass } from "./shared";
 
 /** Limits enforced by the storefront API, mirrored so the editor stays within them. */
@@ -17,18 +17,20 @@ export type PickerItem = { id: string; label: string; note?: string; name?: stri
 /** What staff call each section kind. */
 export const SECTION_KIND_LABELS: Record<Section["type"], string> = {
   departments: "Departments", featured: "Featured products", products: "Selected products", campaign: "Campaign",
-  category: "Department row", promises: "Shopping facts", bestSellers: BEST_SELLERS_TITLE,
+  category: "Department row", promises: "Shopping facts", bestSellers: BEST_SELLERS_TITLE, carousel: "Hero carousel",
 };
 /** A new section's heading. A department row's follows the department chosen, until staff write their own. */
 export const NEW_SECTION_TITLES: Record<Section["type"], string> = {
   departments: "Shop by department", featured: "Featured products", products: "Selected products", campaign: "Campaign",
-  category: "Department row", promises: "How shopping works", bestSellers: BEST_SELLERS_TITLE,
+  category: "Department row", promises: "How shopping works", bestSellers: BEST_SELLERS_TITLE, carousel: "Highlights",
 };
 export const SECTION_LAYOUT_LABELS: Record<SectionLayout, string> = { rail: "Row you scroll", grid: "Grid" };
 /** How the measured best sellers are chosen and when shoppers see them (the API's rules). */
 export const BEST_SELLERS_RULE = `up to ${RAIL_PRODUCT_LIMIT} products, ranked by paid orders in the last ${BEST_SELLERS_RULES.windowDays} days, each bought by at least ${BEST_SELLERS_RULES.minBuyers} different accounts`;
 export const BEST_SELLERS_SHOWN = `Shoppers don't see the row until at least ${BEST_SELLERS_RULES.minProducts} products qualify.`;
 export const SHOPPING_FACTS_NOTE = "Shows four facts from the store's settings, each linking to its page: prices and VAT, delivery, payment and returns.";
+/** How the hero carousel behaves for shoppers, for staff choosing its campaigns. */
+export const CAROUSEL_NOTE = `Shows up to ${CAROUSEL_SLIDES.max} campaigns as full-width slides in this order, changing every 6 seconds. Shoppers can pause it, and it stays still for anyone who asks their device for less motion. The heading names the carousel for screen readers; it isn't shown.`;
 
 /** Ordered selection of canonical IDs; unknown IDs stay visible so they can be removed. */
 export function IdPicker({
@@ -203,6 +205,14 @@ export function SectionEditor({
           )}
         </Field>
       )}
+      {section.type === "carousel" && (
+        <>
+          <p className="text-[0.6875rem] text-gray-600">{CAROUSEL_NOTE}</p>
+          <IdPicker label="Campaigns" items={campaigns.map((campaign) => ({ id: campaign.id, label: campaign.title }))}
+            selected={section.campaignIds ?? []} max={CAROUSEL_SLIDES.max}
+            onChange={(campaignIds) => onChange({ ...section, campaignIds })} emptyHint="Choose the campaigns to show, first slide first." />
+        </>
+      )}
     </article>
   );
 }
@@ -341,7 +351,7 @@ export function CampaignEditor({
           Remove
         </button>
       </div>
-      {usedBy.length > 0 && <p className="text-[0.6875rem] text-gray-600">Shown by: {usedBy.join(", ")}. Remove those sections before deleting it.</p>}
+      {usedBy.length > 0 && <p className="text-[0.6875rem] text-gray-600">Used by: {usedBy.join(", ")}. Take it out of those sections before deleting it.</p>}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <Field label="Headline">{(id) => <input id={id} value={campaign.title} onChange={(event) => onChange({ ...campaign, title: event.target.value })} className={inputClass} />}</Field>
         <Field label="Layout">

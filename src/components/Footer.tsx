@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 import { Link } from "../router";
 import { Container } from "./ui";
 import { BrandLogo } from "./Brand";
@@ -6,9 +6,7 @@ import { useCatalog } from "../store/CatalogContext";
 import { useStorefront } from "../store/StorefrontContext";
 import { SHOPPING_FACTS, deliveryFact, paymentFact, returnRestrictions, returnsFact } from "../store/shoppingFacts";
 import { STORE_FACTS } from "../store/storeFacts";
-import { subscriptionsAPI } from "../api/subscriptions";
-import { describeApiError } from "../api/errors";
-import { useAuth } from "../contexts/AuthContext";
+import { NewsletterForm } from "./NewsletterForm";
 
 const FOOTER_DEPARTMENT_LIMIT = 6;
 const columnHeading = "mb-3 text-xs font-bold uppercase tracking-[0.15em] text-gold-400";
@@ -35,39 +33,6 @@ export function Footer() {
   const { categories, returnPolicy, delivery, demonstrationOrders } = useCatalog();
   const restrictions = useMemo(() => returnRestrictions([...categories.byId.values()]), [categories]);
   const { brandName } = useStorefront();
-  const { user, refreshUser } = useAuth();
-  const emailId = useId();
-  const errorId = useId();
-  const [email, setEmail] = useState("");
-  const [done, setDone] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const thanks = useRef<HTMLParagraphElement>(null);
-
-  // The confirmation replaces the form, so the focused field or button disappears: put focus on the confirmation instead
-  // (which also reads it out), unless focus has already moved somewhere else on the page.
-  useEffect(() => {
-    if (done && (document.activeElement === null || document.activeElement === document.body)) thanks.current?.focus();
-  }, [done]);
-  const handleSubscribe = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email) return;
-
-    setLoading(true);
-    setError(null);
-    try {
-      await subscriptionsAPI.subscribe({ email });
-      setDone(true);
-      setEmail("");
-      // The address may be this account's: reload it, so its email preference shows what is now sent.
-      if (user) void refreshUser();
-    } catch (reason) {
-      setError(describeApiError(reason, "Could not subscribe."));
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <footer className="on-navy mt-20 bg-navy-900 text-sm text-on-navy-muted">
       {/* Newsletter */}
@@ -77,44 +42,7 @@ export function Footer() {
             <h2 className="font-display text-xl text-white">Stay updated</h2>
             <p className="mt-1">Subscribe for offers and new arrivals.</p>
           </div>
-          {done ? (
-            <p ref={thanks} tabIndex={-1} role="status" className="max-w-md text-center font-semibold text-gold-400 md:text-left">
-              Thank you for subscribing. Every email has a link to unsubscribe.
-            </p>
-          ) : (
-            /* Side by side only while the form is at least 20rem wide: rem grows with the text size, so at large text or
-               on very narrow screens the field and button stack and the field keeps the full width. */
-            <div className="@container w-full max-w-md">
-              <form onSubmit={handleSubscribe} className="flex flex-col gap-2 @xs:flex-row @xs:gap-0">
-                <label htmlFor={emailId} className="sr-only">Email address</label>
-                <input
-                  id={emailId}
-                  type="email"
-                  autoComplete="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Your email address"
-                  disabled={loading}
-                  aria-invalid={error ? true : undefined}
-                  aria-describedby={error ? errorId : undefined}
-                  className="min-h-[44px] min-w-0 w-full rounded-sm bg-surface px-4 py-2.5 text-navy-900 placeholder:text-muted disabled:bg-surface-soft @xs:rounded-r-none"
-                />
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="min-h-[44px] shrink-0 rounded-sm bg-gold-500 px-5 text-xs font-bold uppercase tracking-[0.12em] text-navy-900 transition-colors duration-(--motion-feedback) hover:bg-gold-400 disabled:cursor-not-allowed disabled:bg-on-navy-muted @xs:rounded-l-none"
-                >
-                  {loading ? "Subscribing..." : "Subscribe"}
-                </button>
-              </form>
-              {error && (
-                <p id={errorId} role="alert" className="mt-2 rounded-sm bg-error-tint px-3 py-2 text-sm font-semibold text-error [overflow-wrap:break-word]">
-                  {error}
-                </p>
-              )}
-            </div>
-          )}
+          <NewsletterForm tone="navy" />
         </Container>
       </div>
 

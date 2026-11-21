@@ -15,6 +15,7 @@ import {
   linenShirt,
   poloShirt,
 } from "../test-support/catalogFixtures";
+import { usePageIsReady } from "../components/pageReady";
 import ProductDetail from "./ProductDetail";
 
 const mocks = vi.hoisted(() => ({
@@ -108,6 +109,25 @@ describe("ProductDetail", () => {
     expect(await screen.findByRole("heading", { name: "Product not found" })).toBeTruthy();
     expect(screen.queryByText("Linen Short-Sleeve Shirt")).toBeNull();
     expect(screen.getByRole("link", { name: "Back to shop" })).toBeTruthy();
+  });
+
+  it("reports its content ready only once its own product has arrived: not while it loads, nor when it isn't found", async () => {
+    const Ready = () => <p data-testid="page-ready">{String(usePageIsReady())}</p>;
+    const ready = () => screen.getByTestId("page-ready").textContent;
+    // The catalog's copy shows while the product's own record loads; the page isn't ready yet.
+    let finish!: (value: { data: CatalogProductDetail }) => void;
+    mocks.getProduct.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    const view = render(<><ProductDetail id={poloShirt.id} /><Ready /></>);
+    expect(screen.getByRole("heading", { name: "Cotton Polo Shirt" })).toBeTruthy();
+    expect(ready()).toBe("false");
+    await act(async () => finish({ data: poloShirt }));
+    expect(ready()).toBe("true");
+    view.unmount();
+    // Not found, although the catalog has loaded.
+    mocks.getProduct.mockRejectedValue(notFound());
+    render(<><ProductDetail id="mens-fashion-1" /><Ready /></>);
+    expect(await screen.findByRole("heading", { name: "Product not found" })).toBeTruthy();
+    expect(ready()).toBe("false");
   });
 
   it("offers retry when the product request fails and nothing canonical is loaded", async () => {
@@ -273,5 +293,25 @@ describe("ProductDetail", () => {
     render(<ProductDetail id={linenShirt.id} />);
     expect(screen.getByRole("heading", { name: "Products are unavailable" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+  });
+});
+
+describe("add feedback on the product page", () => {
+  it("confirms an add with a check for about a second and a half, keeping the button's name and label", () => {
+    vi.useFakeTimers();
+    try {
+      mocks.getProduct.mockImplementation(pending);
+      render(<ProductDetail id={poloShirt.id} />);
+      const add = addButton();
+      expect(add.className).toContain("motion-safe:active:scale-[0.97]");
+      fireEvent.click(add);
+      expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+      expect(add.getAttribute("data-added")).toBe("true");
+      expect(add.textContent).toBe("Add to cart");
+      act(() => { vi.advanceTimersByTime(1600); });
+      expect(add.hasAttribute("data-added")).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

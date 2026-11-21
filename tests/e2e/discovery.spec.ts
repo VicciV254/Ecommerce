@@ -1,7 +1,7 @@
 import type { BrowserContext, Locator, Page } from "@playwright/test";
 import { fixtureImage } from "../../src/test-support/catalogFixtures";
 import { DISCOVERY_DEPARTMENTS, SHIRT_COUNT, discoveryProducts, discoverySnapshot } from "../../src/test-support/discoveryFixtures";
-import { backdropContrast, expect, pageOverflow, publishedStorefront, test } from "./fixtures";
+import { backdropContrast, expect, pageOverflow, publishedStorefront, settledReveal, test } from "./fixtures";
 
 const slug = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
@@ -135,6 +135,8 @@ test("Back from a product returns to the same filters, page, scroll position and
   await product.scrollIntoViewIfNeeded();
   await page.evaluate(() => window.scrollBy({ top: 120, behavior: "instant" }));
   await scrollSettled(page);
+  // The card rises into view as it is reached; clicking it mid-rise makes Playwright scroll it again before clicking.
+  await settledReveal(product);
   const before = await page.evaluate(() => window.scrollY);
   expect(before).toBeGreaterThan(400);
   await product.click();

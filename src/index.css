@@ -75,6 +75,19 @@
   @media (width >= 80rem) { font-size: 3rem; line-height: 3.5rem; }
 }
 
+/*
+ * The hero carousel's slide headlines: the display face a step smaller on phones than `type-display`, so a long word
+ * still fits a 360px screen at 200% text; the same as the display role from 768px.
+ */
+@utility type-hero {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 1.75rem;
+  line-height: 2.25rem;
+  @media (width >= 48rem) { font-size: 2.5rem; line-height: 3rem; }
+  @media (width >= 80rem) { font-size: 3rem; line-height: 3.5rem; }
+}
+
 @utility type-h1 {
   font-family: var(--font-display);
   font-weight: 400;
@@ -170,6 +183,19 @@
 /* Focus ring colour for a subtree: gold on navy surfaces, info blue on light panels nested inside them. */
 @utility on-navy {
   --focus-ring: var(--color-gold-400);
+}
+
+/*
+ * The hero carousel's scrim from 768px: the copy column (40rem, or 72% where narrower) dimmed with navy at 85%, which
+ * keeps white text at 4.5:1 over any photo (plain white included), fading into the photo over the next 10rem.
+ */
+@utility carousel-scrim {
+  background-image: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--color-navy-950) 85%, transparent) 0,
+    color-mix(in srgb, var(--color-navy-950) 85%, transparent) min(40rem, 72%),
+    transparent calc(min(40rem, 72%) + 10rem)
+  );
 }
 
 @utility on-light {
@@ -325,6 +351,50 @@ html:has([data-purchase-bar][data-shown]) [data-back-to-top] {
   animation: fadeIn var(--motion-overlay) ease-out both;
 }
 
+/*
+ * A loading shape: the soft surface tint with a light band sweeping across it a few times (about 4 s), then resting, so
+ * it never moves for long beside usable content. Still throughout under reduced motion.
+ */
+@keyframes skeleton-sweep {
+  from { background-position: -100% 0; }
+  to { background-position: 200% 0; }
+}
+@utility skeleton {
+  background-color: var(--color-surface-soft);
+  background-image: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.65), transparent);
+  background-size: 50% 100%;
+  background-repeat: no-repeat;
+  background-position: -100% 0;
+  animation: skeleton-sweep 1.4s ease-in-out 3;
+}
+
+/*
+ * Scroll reveals (`reveal.ts`): something mounted wholly below the window waits hidden, then rises (or, inside a
+ * scrolling row, grows slightly, which adds no overflow) into place once its top comes into view. Never under reduced
+ * motion or in print.
+ */
+[data-reveal="hidden"] {
+  opacity: 0;
+  transform: translateY(1rem);
+}
+[data-reveal="hidden"][data-reveal-variant="scale"] {
+  transform: scale(0.96);
+}
+[data-reveal="shown"] {
+  transition: opacity 500ms ease-out, transform 500ms ease-out;
+  transition-delay: var(--reveal-delay, 0ms);
+}
+[data-reveal="shown"][data-reveal-instant] {
+  transition: none;
+}
+
+@media print {
+  [data-reveal] {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
@@ -334,14 +404,18 @@ html:has([data-purchase-bar][data-shown]) [data-back-to-top] {
     animation: none;
   }
 
-  /* Immediate state changes: no transitions, spinning or scroll-in reveals. */
+  /* Immediate state changes: no transitions, spinning, sweeping or scroll-in reveals. */
   *, ::before, ::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
 
-  [data-aos] {
+  .skeleton {
+    animation: none;
+  }
+
+  [data-reveal] {
     opacity: 1 !important;
     transform: none !important;
   }

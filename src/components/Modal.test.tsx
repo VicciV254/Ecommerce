@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ModalDialog } from "./Modal";
+import { useAnyModalOpen } from "./modalState";
 
 beforeEach(() => {
   // jsdom lays nothing out; give every element a box so the dialog treats its controls as rendered.
@@ -59,5 +60,34 @@ describe("ModalDialog keyboard focus", () => {
 
     pressTab({ shift: true });
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "Print Receipt" }));
+  });
+});
+
+describe("open dialogs are reported to the page", () => {
+  it("says whether any modal dialog is open, however many open and close", () => {
+    function Probe() {
+      return <p data-testid="probe">{String(useAnyModalOpen())}</p>;
+    }
+    const dialogs = (first: boolean, second: boolean) => (
+      <>
+        <Probe />
+        <ModalDialog open={first} label="First" onClose={() => {}}><button type="button">One</button></ModalDialog>
+        <ModalDialog open={second} label="Second" onClose={() => {}}><button type="button">Two</button></ModalDialog>
+      </>
+    );
+    const { rerender, unmount } = render(dialogs(false, false));
+    const probe = () => screen.getByTestId("probe").textContent;
+    expect(probe()).toBe("false");
+    rerender(dialogs(true, false));
+    expect(probe()).toBe("true");
+    rerender(dialogs(true, true));
+    rerender(dialogs(false, true));
+    expect(probe()).toBe("true");
+    rerender(dialogs(false, false));
+    expect(probe()).toBe("false");
+    rerender(dialogs(true, false));
+    unmount();
+    render(<Probe />);
+    expect(probe()).toBe("false");
   });
 });

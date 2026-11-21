@@ -4,6 +4,7 @@ import { InfoPage, infoList, infoParagraph, type InfoSection } from "../componen
 import { EmailLink, PhoneLink } from "../components/StoreContacts";
 import type { CatalogDelivery } from "../api/catalog";
 import { Link } from "../router";
+import { usePageReady } from "../components/pageReady";
 import { useCatalog } from "../store/CatalogContext";
 import { DELIVERY_LABELS } from "../store/checkoutModel";
 import { returnRestrictions, returnsWindow } from "../store/shoppingFacts";
@@ -56,6 +57,7 @@ function DeliveryAnswer({ delivery }: { delivery: readonly CatalogDelivery[] | n
 /** Answers to common questions about this demonstration store; catalog facts fill in delivery and returns. */
 export default function Faq() {
   const { status, categories, delivery, returnPolicy, demonstrationOrders } = useCatalog();
+  usePageReady(status !== "loading");
   const restrictions = useMemo(() => returnRestrictions([...categories.byId.values()]), [categories]);
   const { operator } = STORE_FACTS;
   // Where sample orders take demonstration payments the answers say so; otherwise (or until the catalog loads) today's.

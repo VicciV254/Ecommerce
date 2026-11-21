@@ -1,9 +1,14 @@
-import type { ReactNode } from "react";
+import { useLayoutEffect, useRef, type HTMLAttributes, type ReactNode } from "react";
 import type { CatalogProduct, MediaAsset } from "../api/catalog";
 import { Link } from "../router";
 import { useCatalog } from "../store/CatalogContext";
 import { primaryImage, type StockLevel } from "../store/catalogModel";
 import { imageRendition, type ImagePreset } from "../store/mediaModel";
+import { prefersReducedMotion } from "./motion";
+import { useReveal, type RevealOptions } from "./reveal";
+
+/** How long a lazily loaded image takes to fade in. */
+const IMAGE_FADE_MS = 300;
 
 /* ---------- Stars (only for real review data) ---------- */
 export function Stars({ rating, size = 14 }: { rating: number; size?: number }) {
@@ -45,9 +50,13 @@ export function MissingImage({ label = "Image not yet available", iconOnly = fal
   );
 }
 
-/** A stored image address delivered at a preset's renditions; lazy unless it is the page's priority image. */
+/**
+ * A stored image address delivered at a preset's renditions; lazy unless it is the page's priority image. With `fade`,
+ * an image that is off screen and not yet loaded when it mounts fades in once it loads; one already on screen or loaded
+ * (cached), the priority image and one that fails show at once, and nothing fades under reduced motion.
+ */
 export function ResponsiveImage({
-  url, preset, alt, className = "", sizes, width, height, priority = false, onLoad, onError,
+  url, preset, alt, className = "", sizes, width, height, priority = false, fade = false, onLoad, onError,
 }: {
   url: string;
   preset: ImagePreset;
@@ -60,12 +69,32 @@ export function ResponsiveImage({
   height?: number | null;
   /** Only for the product-detail cover: loads eagerly with high fetch priority. */
   priority?: boolean;
+  fade?: boolean;
   onLoad?: () => void;
   onError?: () => void;
 }) {
   const rendition = imageRendition(url, preset, sizes);
+  const image = useRef<HTMLImageElement>(null);
+  useLayoutEffect(() => {
+    const element = image.current;
+    if (!fade || priority || !element || element.complete || prefersReducedMotion()) return;
+    const box = element.getBoundingClientRect();
+    if (box.bottom > 0 && box.top < window.innerHeight && box.right > 0 && box.left < window.innerWidth) return;
+    element.style.opacity = "0";
+    const settle = (event: Event) => {
+      element.style.opacity = "";
+      if (event.type === "load") element.animate?.([{ opacity: 0 }, { opacity: 1 }], { duration: IMAGE_FADE_MS, easing: "ease-out" });
+    };
+    element.addEventListener("load", settle, { once: true });
+    element.addEventListener("error", settle, { once: true });
+    return () => {
+      element.removeEventListener("load", settle);
+      element.removeEventListener("error", settle);
+    };
+  }, [fade, priority]);
   return (
     <img
+      ref={image}
       src={rendition.src}
       srcSet={rendition.srcSet}
       sizes={rendition.sizes}
@@ -82,10 +111,10 @@ export function ResponsiveImage({
   );
 }
 
-/** A catalog image with its sample label, or an intentional placeholder when none exists. */
+/** A catalog image with its sample label, or an intentional placeholder when none exists; `fade` as for `ResponsiveImage`. */
 export function MediaImage({
-  asset, alt, className = "", preset = "card", sizes,
-}: { asset: MediaAsset | undefined; alt: string; className?: string; preset?: ImagePreset; sizes?: string }) {
+  asset, alt, className = "", preset = "card", sizes, fade = false,
+}: { asset: MediaAsset | undefined; alt: string; className?: string; preset?: ImagePreset; sizes?: string; fade?: boolean }) {
   if (!asset) return <MissingImage />;
   return (
     <>
@@ -96,6 +125,7 @@ export function MediaImage({
         alt={asset.alt || alt}
         width={asset.width}
         height={asset.height}
+        fade={fade}
         className={`h-full w-full object-cover ${className}`}
       />
       {asset.isPlaceholder && <SampleImageLabel />}
@@ -104,9 +134,9 @@ export function MediaImage({
 }
 
 export function ProductImage({
-  product, className = "", preset, sizes,
-}: { product: Pick<CatalogProduct, "name" | "images">; className?: string; preset?: ImagePreset; sizes?: string }) {
-  return <MediaImage asset={primaryImage(product)} alt={product.name} className={className} preset={preset} sizes={sizes} />;
+  product, className = "", preset, sizes, fade = false,
+}: { product: Pick<CatalogProduct, "name" | "images">; className?: string; preset?: ImagePreset; sizes?: string; fade?: boolean }) {
+  return <MediaImage asset={primaryImage(product)} alt={product.name} className={className} preset={preset} sizes={sizes} fade={fade} />;
 }
 
 /* ---------- Badges ---------- */
@@ -134,6 +164,45 @@ export function DemoBadge({ className = "" }: { className?: string }) {
 }
 
 /* ---------- Async status panels ---------- */
+/**
+ * An add button's label and its brief check (`useAddedFeedback`): while `added`, the label fades out under a check, its
+ * text staying in place for the button's name. The button must be `relative`.
+ */
+export function AddedLabel({ added, children }: { added: boolean; children: ReactNode }) {
+  return (
+    <>
+      <span className={`transition-opacity duration-(--motion-feedback) ${added ? "opacity-0" : ""}`}>{children}</span>
+      <svg
+        aria-hidden="true"
+        xmlns="http://www.w3.org/2000/svg"
+        fill="none"
+        viewBox="0 0 24 24"
+        strokeWidth={2.5}
+        stroke="currentColor"
+        className={`pointer-events-none absolute inset-0 m-auto size-5 transition-[opacity,transform] duration-(--motion-feedback) ${
+          added ? "opacity-100" : "opacity-0 motion-safe:scale-50"
+        }`}
+      >
+        <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+      </svg>
+    </>
+  );
+}
+
+/** A product card's shape while the catalog loads: picture, category, name and price, shimmering briefly. */
+export function CardSkeleton({ className = "" }: { className?: string }) {
+  return (
+    <div className={`overflow-hidden rounded-lg bg-surface shadow-card ${className}`}>
+      <div className="skeleton aspect-square" />
+      <div className="space-y-2 p-4">
+        <div className="skeleton h-3 w-1/2 rounded-sm" />
+        <div className="skeleton h-4 w-3/4 rounded-sm" />
+        <div className="skeleton h-5 w-1/3 rounded-sm" />
+      </div>
+    </div>
+  );
+}
+
 export function LoadingPanel({ label }: { label: string }) {
   return (
     <div role="status" className="flex flex-col items-center justify-center gap-3 rounded-lg bg-surface p-12 text-center shadow-card">
@@ -162,13 +231,13 @@ export function ErrorPanel({ title, message, onRetry, children }: { title: strin
 
 /** Notice shown wherever demo catalog records are visible to shoppers. */
 /**
- * `holdPlace` keeps the notice's space, unseen and unannounced, while the catalog loads, so a page whose sections show
- * before the catalog (the home page) doesn't move when the notice appears. This store runs a demo catalog; a live one
- * gives the space back once it has loaded.
+ * `holdPlace` keeps the notice's space, unseen and unannounced, until the catalog has loaded (also if it fails), so a
+ * page whose sections show before the catalog (the home page) doesn't move when the notice appears. This store runs a
+ * demo catalog; a live one gives the space back once it has loaded.
  */
 export function DemoCatalogNotice({ holdPlace = false }: { holdPlace?: boolean }) {
   const { mode, status } = useCatalog();
-  const holding = holdPlace && status === "loading";
+  const holding = holdPlace && status !== "ready";
   if (mode !== "demo" && !holding) return null;
   return (
     <p
@@ -233,17 +302,20 @@ export function SectionTitle({
 }
 
 /* ---------- Scroll reveal ---------- */
+/** A block that rises into view as it is scrolled to (`reveal.ts`); `stagger` and `variant` as for `useReveal`. */
 export function Reveal({
   children,
-  delay = 0,
   className = "",
+  stagger = false,
+  variant = "rise",
+  ...attributes
 }: {
   children: ReactNode;
-  delay?: number;
   className?: string;
-}) {
+} & RevealOptions & Omit<HTMLAttributes<HTMLDivElement>, "className" | "children">) {
+  const ref = useReveal<HTMLDivElement>({ stagger, variant });
   return (
-    <div className={className} data-aos="fade-up" data-aos-delay={delay}>
+    <div ref={ref} className={className} {...attributes}>
       {children}
     </div>
   );

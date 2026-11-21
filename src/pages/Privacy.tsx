@@ -84,8 +84,9 @@ export default function Privacy() {
             </Topic>
             <li>
               <strong className="font-semibold text-navy-900">Promotional emails</strong>, only if you ask for them in the
-              footer, at sign-up or in your account: your email address and whether you're subscribed. You can withdraw at
-              any time.
+              footer, in the welcome message shown on your first visit, at sign-up or in your account: your email address
+              and whether you're subscribed. Opening or closing the welcome message never subscribes you; only its
+              Subscribe button does. You can withdraw at any time.
             </li>
             <Topic name="Messages you send us">
               the contact form emails your name, email address, phone number if given and message to our mailbox. We don't
@@ -202,6 +203,10 @@ export default function Privacy() {
               you clear the site's storage;
             </li>
             <li>
+              a mark that the welcome message was shown, so it appears only once on this device, kept until you clear the
+              site's storage;
+            </li>
+            <li>
               for the current tab only: an address you're typing at checkout, your place in product lists, and, just after
               you sign in, which account a guest cart is joining.
             </li>
@@ -272,7 +277,7 @@ export default function Privacy() {
   ];
 
   return (
-    <InfoPage title="Privacy notice" updated={STORE_FACTS.policiesUpdated} sections={sections} ready={status !== "loading"}>
+    <InfoPage title="Privacy notice" updated={STORE_FACTS.privacyUpdated} sections={sections} ready={status !== "loading"}>
       <p>
         {operator} is a demonstration store built as a personal project: its products are samples and nothing is sold. This
         notice explains what personal information the site collects, why, who can see it, who else receives it, how long

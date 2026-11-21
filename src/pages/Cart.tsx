@@ -9,7 +9,7 @@ import {
   SubmissionNotice,
   primaryActionClass,
 } from "../components/checkout";
-import { Breadcrumb, Container, DemoCatalogNotice, ErrorPanel, LoadingPanel } from "../components/ui";
+import { Breadcrumb, Container, DemoCatalogNotice, ErrorPanel } from "../components/ui";
 import { useAuth, type User } from "../contexts/AuthContext";
 import { Link } from "../router";
 import { useCatalog } from "../store/CatalogContext";
@@ -23,6 +23,38 @@ import { useOrderSubmission } from "../store/useOrderSubmission";
 
 const CRUMBS = [{ label: "Cart" }];
 const summaryTitle = "text-[0.6875rem] font-bold uppercase tracking-[0.15em] text-brand-primary";
+/** Lines a loading cart shows. */
+const SKELETON_LINES = 3;
+
+/** The cart's shape while the account or the prices load: its lines beside the summary from 768px. */
+function CartSkeleton({ label }: { label: string }) {
+  const bar = "skeleton rounded-sm";
+  return (
+    <>
+      <p role="status" className="sr-only">{label}</p>
+      <div aria-hidden="true" className="grid items-start gap-6 md:grid-cols-[minmax(0,1fr)_300px] lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-8">
+        <div className="divide-y divide-divider rounded-lg bg-white px-4 shadow-sm sm:px-5">
+          {Array.from({ length: SKELETON_LINES }, (_, index) => (
+            <div key={index} className="flex gap-4 py-4">
+              <div className="skeleton size-16 shrink-0 rounded-md" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <div className={`h-4 w-3/4 ${bar}`} />
+                <div className={`h-3 w-1/3 ${bar}`} />
+                <div className={`h-9 w-28 ${bar}`} />
+              </div>
+              <div className={`h-5 w-16 ${bar}`} />
+            </div>
+          ))}
+        </div>
+        <div className="space-y-3 rounded-lg bg-white p-5 shadow-sm">
+          <div className={`h-4 w-1/2 ${bar}`} />
+          <div className={`h-4 w-full ${bar}`} />
+          <div className={`h-11 w-full ${bar}`} />
+        </div>
+      </div>
+    </>
+  );
+}
 
 export default function Cart() {
   const { user } = useAuth();
@@ -36,7 +68,7 @@ export default function Cart() {
         <div className="mt-8">
           {catalog.status === "error"
             ? <ErrorPanel title="Cart prices are unavailable" message={`${catalog.error ?? "The catalog could not be loaded."} Your cart is unchanged.`} onRetry={catalog.reload} />
-            : <LoadingPanel label="Loading your cart…" />}
+            : <CartSkeleton label="Loading your cart…" />}
         </div>
       </Container>
     );
@@ -88,7 +120,7 @@ function CatalogPending() {
       <Breadcrumb items={CRUMBS} />
       <div className="mt-8">
         {catalog.status === "loading"
-          ? <LoadingPanel label="Loading current prices for your cart…" />
+          ? <CartSkeleton label="Loading current prices for your cart…" />
           : <ErrorPanel title="Cart prices are unavailable" message={`${catalog.error ?? "The catalog could not be loaded."} Your cart is unchanged.`} onRetry={catalog.reload} />}
       </div>
     </Container>

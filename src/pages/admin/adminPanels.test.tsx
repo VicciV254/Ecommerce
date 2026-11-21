@@ -506,3 +506,84 @@ describe("P8.7 storefront section kinds in the editor", () => {
     expect(screen.queryByRole("button", { name: "Save draft" })).toBeNull();
   });
 });
+
+describe("the hero carousel in the editor", () => {
+  type Campaign = StorefrontDraft["settings"]["campaigns"][number];
+  type Section = StorefrontDraft["settings"]["sections"][number];
+  const campaign = (id: string, title: string): Campaign => ({
+    id, title, body: "", conditions: "", cta: { label: "Shop now", target: "shop", targetId: null },
+    desktopMediaId: null, mobileMediaId: null, desktopFocal: { x: 50, y: 50 }, mobileFocal: { x: 50, y: 50 }, layout: "overlay",
+  });
+  const campaigns = [
+    campaign("week", "Fashion week"), campaign("season", "New season"), campaign("home", "Home refresh"),
+    campaign("desk", "Desk set-up"), campaign("phones", "Phones month"), campaign("spare", "Spare offer"),
+  ];
+  const cards = () => screen.getAllByRole("article");
+  const kindOf = (card: HTMLElement) => card.querySelector("p")?.textContent;
+  const campaignCard = (id: string) => cards().find((card) => kindOf(card) === `Campaign “${id}”`)!;
+  const removeCampaign = (id: string) => within(campaignCard(id)).getByRole<HTMLButtonElement>("button", { name: "Remove" });
+  async function openEditor(settings = fixtureStorefrontSettings({ campaigns })) {
+    admin.api.getStorefrontDraft.mockResolvedValue({ data: { ...draft, settings } });
+    admin.api.saveStorefrontDraft.mockImplementation((version: number, saved: StorefrontDraft["settings"]) =>
+      Promise.resolve({ data: { ...draft, version: version + 1, settings: saved } }));
+    renderStorefront();
+    await screen.findByLabelText("Store name");
+  }
+  const choose = (card: HTMLElement, term: string, name: string) => {
+    fireEvent.change(within(card).getByPlaceholderText("Search to add…"), { target: { value: term } });
+    fireEvent.click(within(card).getByRole("button", { name }));
+  };
+
+  it("adds one hidden carousel titled Highlights, lists up to five campaigns in the order chosen and saves them", async () => {
+    await openEditor();
+    fireEvent.click(screen.getByRole("button", { name: "+ Hero carousel" }));
+    expect(screen.getByRole("button", { name: "+ Hero carousel" }).hasAttribute("disabled")).toBe(true);
+    const carousel = cards()[2];
+    expect(kindOf(carousel)).toBe("3. Hero carousel");
+    expect(within(carousel).getByRole<HTMLInputElement>("textbox", { name: "Heading" }).value).toBe("Highlights");
+    expect(within(carousel).queryByRole("combobox", { name: "Layout" })).toBeNull();
+    expect(within(carousel).getByText("Campaigns (0/5)")).toBeTruthy();
+    expect(screen.getByText('"Highlights" needs 1 to 5 campaigns.')).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Save draft" }).hasAttribute("disabled")).toBe(true);
+
+    choose(carousel, "week", "Fashion week");
+    choose(carousel, "season", "New season");
+    fireEvent.click(within(carousel).getByRole("button", { name: "Move New season up" }));
+    for (const [term, name] of [["home", "Home refresh"], ["desk", "Desk set-up"], ["phones", "Phones month"]]) choose(carousel, term, name);
+    expect(within(carousel).getByText("Campaigns (5/5)")).toBeTruthy();
+    expect(within(carousel).getByPlaceholderText<HTMLInputElement>("Search to add…").disabled).toBe(true);
+    expect(screen.queryByText(/needs 1 to 5 campaigns/)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(admin.api.saveStorefrontDraft).toHaveBeenCalledTimes(1));
+    const sent: Section[] = admin.api.saveStorefrontDraft.mock.calls[0][1].sections;
+    expect(sent[2]).toEqual({
+      id: "hero-carousel", type: "carousel", title: "Highlights", enabled: false, productIds: [], categoryIds: [], campaignId: null,
+      campaignIds: ["season", "week", "home", "desk", "phones"],
+    });
+    // Every other section still carries no campaign list.
+    expect(sent.slice(0, 2).map((section) => "campaignIds" in section)).toEqual([false, false]);
+  });
+
+  it("keeps a campaign while any section uses it, a carousel included, shown or not; once taken out it can be removed", async () => {
+    const carouselSection: Section = {
+      id: "hero-carousel", type: "carousel", title: "Highlights", enabled: false, productIds: [], categoryIds: [], campaignId: null,
+      campaignIds: ["week", "season"],
+    };
+    const band: Section = { id: "band", type: "campaign", title: "Band", enabled: true, productIds: [], categoryIds: [], campaignId: "season" };
+    await openEditor(fixtureStorefrontSettings({ sections: [carouselSection, band], campaigns: campaigns.slice(0, 3) }));
+    // Only in the (hidden) carousel; in the carousel and a campaign section; in neither.
+    expect(removeCampaign("week").disabled).toBe(true);
+    expect(within(campaignCard("week")).getByText("Used by: Highlights. Take it out of those sections before deleting it.")).toBeTruthy();
+    expect(removeCampaign("season").disabled).toBe(true);
+    expect(within(campaignCard("season")).getByText("Used by: Highlights, Band. Take it out of those sections before deleting it.")).toBeTruthy();
+    expect(removeCampaign("home").disabled).toBe(false);
+
+    fireEvent.click(within(cards()[0]).getByRole("button", { name: "Remove Fashion week" }));
+    expect(removeCampaign("week").disabled).toBe(false);
+    fireEvent.click(removeCampaign("week"));
+    expect(cards().some((card) => kindOf(card) === "Campaign “week”")).toBe(false);
+    // The carousel keeps its other campaign.
+    expect(within(cards()[0]).getByText("New season")).toBeTruthy();
+  });
+});

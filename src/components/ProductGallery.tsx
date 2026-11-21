@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type 
 import type { MediaAsset } from "../api/catalog";
 import { zoomSource } from "../store/mediaModel";
 import { Lightbox, imageAlt } from "./Lightbox";
+import { usePageZoomed } from "./pageZoom";
 import { MissingImage, ResponsiveImage, SampleImageLabel } from "./ui";
 
 /** A swipe or scroll counts as finished once the stage has been still this long. */
@@ -12,20 +13,6 @@ const HOVER_POINTER = "(hover: hover) and (pointer: fine)";
 
 const wrap = (index: number, count: number) => ((index % count) + count) % count;
 const share = (offset: number, length: number) => (length > 0 ? Math.round(Math.min(Math.max(offset / length, 0), 1) * 1000) / 10 : 50);
-
-/** True while the page itself is pinch-zoomed, so a finger panning it never swipes the stage. */
-function usePageZoomed() {
-  const [zoomed, setZoomed] = useState(false);
-  useEffect(() => {
-    const viewport = window.visualViewport;
-    if (!viewport) return;
-    const update = () => setZoomed(viewport.scale > 1.01);
-    update();
-    viewport.addEventListener("resize", update);
-    return () => viewport.removeEventListener("resize", update);
-  }, []);
-  return zoomed;
-}
 
 /** True where a mouse or trackpad can hover; touch screens never magnify on hover. */
 function useHoverPointer() {

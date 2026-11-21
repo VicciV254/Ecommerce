@@ -13,8 +13,10 @@ export const STORE_FACTS = {
   email: "vicmutua254@gmail.com",
   phone: { display: "+254 729 125 144", tel: "+254729125144" },
   hours: "Monday to Friday, 08:00–18:00 EAT",
-  /** When the Privacy notice and the Terms of use last changed (ISO date). */
+  /** When the Terms of use last changed (ISO date). */
   policiesUpdated: "2026-11-18",
+  /** When the Privacy notice last changed (ISO date): the welcome message's sign-up and its browser mark. */
+  privacyUpdated: "2026-11-21",
   demonstration: `${OPERATOR} is a demonstration store: its products are samples, and nothing is sold or delivered.`,
 } as const;
 

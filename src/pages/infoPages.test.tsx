@@ -265,7 +265,7 @@ describe("Privacy notice", () => {
     window.location.hash = "#/privacy";
     render(<Privacy />);
     expect(state.titles.at(-1)).toBe("Privacy notice · Apex Cart");
-    expect(screen.getByText(/^Last updated/).textContent).toBe("Last updated 18 November 2026");
+    expect(screen.getByText(/^Last updated/).textContent).toBe("Last updated 21 November 2026");
     const sections = links(screen.getByRole("navigation", { name: "On this page" }));
     expect(sections.map(([name]) => name)).toEqual([
       "Who is responsible", "What we collect and why", "Why we may use it", "Who can see it", "Who else receives information",
@@ -289,6 +289,14 @@ describe("Privacy notice", () => {
       "Administrators can also see the promotional email list.",
       "and, just after you sign in, which account a guest cart is joining.",
       "Promotional subscriptions stay until you ask us to remove them: unsubscribing stops the emails, and your address stays on the list marked as unsubscribed.",
+    ]) expect(text().replace(/\s+/g, " ")).toContain(statement);
+  });
+
+  it("says where promotional emails can be asked for, the welcome message included, and what the browser keeps for it", () => {
+    render(<Privacy />);
+    for (const statement of [
+      "Promotional emails, only if you ask for them in the footer, in the welcome message shown on your first visit, at sign-up or in your account: your email address and whether you're subscribed. Opening or closing the welcome message never subscribes you; only its Subscribe button does. You can withdraw at any time.",
+      "a mark that the welcome message was shown, so it appears only once on this device, kept until you clear the site's storage;",
     ]) expect(text().replace(/\s+/g, " ")).toContain(statement);
   });
 

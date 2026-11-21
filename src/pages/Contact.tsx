@@ -6,6 +6,8 @@ import { contactAPI } from "../api/contact";
 import { describeApiError } from "../api/errors";
 import { usePageTitle, useStorefront } from "../store/StorefrontContext";
 import { STORE_FACTS } from "../store/storeFacts";
+import { useCatalog } from "../store/CatalogContext";
+import { usePageReady } from "../components/pageReady";
 
 /** The API's minimum lengths, checked here first so the form explains them. */
 const NAME_MIN = 2;
@@ -23,6 +25,7 @@ export default function Contact() {
   usePageTitle(`Contact us · ${brandName}`);
   const heading = useRef<HTMLHeadingElement>(null);
   useEntryFocus(heading);
+  usePageReady(useCatalog().status !== "loading");
   const [sent, setSent] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");

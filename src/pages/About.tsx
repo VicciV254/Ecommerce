@@ -2,6 +2,7 @@ import { useMemo, useRef } from "react";
 import { textLinkClass } from "../components/checkout";
 import { Breadcrumb, Container } from "../components/ui";
 import { Link, useEntryFocus } from "../router";
+import { usePageReady } from "../components/pageReady";
 import { useCatalog } from "../store/CatalogContext";
 import { usePageTitle, useStorefront } from "../store/StorefrontContext";
 import { SHOPPING_FACTS, deliveryFact, paymentFact, returnRestrictions, returnsFact } from "../store/shoppingFacts";
@@ -16,7 +17,8 @@ export default function About() {
   usePageTitle(`About · ${brandName}`);
   const heading = useRef<HTMLHeadingElement>(null);
   useEntryFocus(heading);
-  const { categories, returnPolicy, delivery, demonstrationOrders } = useCatalog();
+  const { status, categories, returnPolicy, delivery, demonstrationOrders } = useCatalog();
+  usePageReady(status !== "loading");
   const restrictions = useMemo(() => returnRestrictions([...categories.byId.values()]), [categories]);
   // Delivery and returns are summarised here; their own pages have the details.
   const facts = [

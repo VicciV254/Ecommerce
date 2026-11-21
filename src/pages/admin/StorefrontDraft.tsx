@@ -3,7 +3,7 @@ import { catalogAdminAPI, type MediaAsset, type StorefrontDraft, type Storefront
 import { apiErrorCode, apiStatus, describeApiError } from "../../api/errors";
 import { sectionClaimProblem } from "../../store/storefrontClaims";
 import { useStorefront } from "../../store/StorefrontContext";
-import { BEST_SELLERS_TITLE, isMedia, isStorefrontSettings, takesLayout } from "../../store/storefrontModel";
+import { BEST_SELLERS_TITLE, CAROUSEL_SLIDES, isMedia, isStorefrontSettings, takesLayout } from "../../store/storefrontModel";
 import { withMediaDefaults } from "../../store/catalogModel";
 import { isRecord } from "../../utils/storage";
 import { useAdminCatalog } from "./AdminCatalogContext";
@@ -66,10 +66,22 @@ export function draftProblems(settings: StorefrontSettings): string[] {
       problems.push(`"${name}" takes no products or categories.`);
     }
     if (section.type === "bestSellers" && section.title.trim() !== BEST_SELLERS_TITLE) problems.push(`The best sellers heading is always "${BEST_SELLERS_TITLE}".`);
+    if (section.type !== "campaign" && section.campaignId !== null) problems.push(`"${name}" can't use a single campaign; only a campaign section does.`);
+    if (section.type !== "carousel" && section.campaignIds !== undefined) problems.push(`"${name}" can't list campaigns; only a hero carousel does.`);
+    if (section.type === "carousel") {
+      const listed = section.campaignIds ?? [];
+      if (listed.length < CAROUSEL_SLIDES.min || listed.length > CAROUSEL_SLIDES.max) {
+        problems.push(`"${name}" needs ${CAROUSEL_SLIDES.min} to ${CAROUSEL_SLIDES.max} campaigns.`);
+      }
+      if (new Set(listed).size !== listed.length) problems.push(`"${name}" lists a campaign more than once.`);
+      for (const id of listed) if (!campaignIds.has(id)) problems.push(`"${name}" lists a campaign that doesn't exist: ${id}.`);
+      if (section.productIds.length || section.categoryIds.length) problems.push(`"${name}" takes no products or categories.`);
+    }
   }
   const count = (type: StorefrontSettings["sections"][number]["type"]) => settings.sections.filter((section) => section.type === type).length;
   if (count("promises") > 1) problems.push("Only one shopping facts section is allowed.");
   if (count("bestSellers") > 1) problems.push("Only one best sellers section is allowed.");
+  if (count("carousel") > 1) problems.push("Only one hero carousel is allowed.");
   for (const campaign of settings.campaigns) {
     if (!SLUG.test(campaign.id)) problems.push(`Campaign ID "${campaign.id}" must use lowercase letters, numbers and hyphens.`);
     if (!campaign.title.trim()) problems.push("Every campaign needs a headline.");

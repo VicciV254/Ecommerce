@@ -1,6 +1,3 @@
-import { useEffect } from "react";
-import AOS from "aos";
-import "aos/dist/aos.css";
 import { StoreProvider } from "./store/StoreContext";
 import { CatalogProvider } from "./store/CatalogContext";
 import { StorefrontProvider } from "./store/StorefrontContext";
@@ -12,6 +9,7 @@ import { GuestCartMerge } from "./components/GuestCartMerge";
 import { MiniCartProvider } from "./components/MiniCart";
 import { Footer } from "./components/Footer";
 import { BackToTop } from "./components/BackToTop";
+import { WelcomeDialog } from "./components/WelcomeDialog";
 import Home from "./pages/Home";
 import Shop from "./pages/Shop";
 import Departments from "./pages/Departments";
@@ -147,21 +145,12 @@ function Router() {
       </main>
       {!isAdmin && <Footer />}
       <BackToTop />
+      <WelcomeDialog />
     </div>
   );
 }
 
 export default function App() {
-  useEffect(() => {
-    AOS.init({
-      duration: 800,
-      easing: "ease-out",
-      once: true,
-      offset: 50,
-      disable: "mobile"
-    });
-  }, []);
-
   return (
     <StorefrontProvider>
       <CatalogProvider>

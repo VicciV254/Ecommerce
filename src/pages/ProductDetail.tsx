@@ -14,7 +14,9 @@ import {
 } from "../components/ProductPurchase";
 import { PurchaseBar } from "../components/PurchaseBar";
 import { ProductCard } from "../components/ProductCard";
-import { Breadcrumb, Container, DemoBadge, ErrorPanel, LoadingPanel, Stars } from "../components/ui";
+import { pop, useAddedFeedback } from "../components/motion";
+import { usePageReady } from "../components/pageReady";
+import { AddedLabel, Breadcrumb, Container, DemoBadge, ErrorPanel, Reveal, Stars } from "../components/ui";
 import { Link, useEntryFocus } from "../router";
 import { useCatalog } from "../store/CatalogContext";
 import { CatalogFormatError, describeVariant, inCategory, isCatalogProduct, withProductMediaDefaults } from "../store/catalogModel";
@@ -89,13 +91,42 @@ export default function ProductDetail({ id }: { id: string }) {
   return <ProductContent key={id} id={id} />;
 }
 
+/** The product page's shape while the product loads: breadcrumb, gallery square, name, price and buttons. */
+function ProductSkeleton() {
+  const bar = "skeleton rounded-sm";
+  return (
+    <Container className="py-6 md:py-8">
+      <p role="status" className="sr-only">Loading product…</p>
+      <div aria-hidden="true">
+        <div className={`h-4 w-48 max-w-full ${bar}`} />
+        <div className="mt-4 grid items-start gap-6 md:grid-cols-2 md:grid-rows-[auto_1fr] md:gap-x-8 lg:gap-x-10">
+          <div className="space-y-3 md:col-start-2 md:row-start-1">
+            <div className={`h-8 w-3/4 ${bar}`} />
+            <div className={`h-8 w-1/3 ${bar}`} />
+            <div className={`h-4 w-1/2 ${bar}`} />
+          </div>
+          <div className="skeleton aspect-square rounded-lg md:col-start-1 md:row-span-2 md:row-start-1" />
+          <div className="space-y-5 md:col-start-2 md:row-start-2">
+            <div className={`h-11 w-2/3 ${bar}`} />
+            <div className={`h-11 w-32 ${bar}`} />
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <div className={`h-12 flex-1 ${bar}`} />
+              <div className={`h-12 flex-1 ${bar}`} />
+            </div>
+          </div>
+        </div>
+      </div>
+    </Container>
+  );
+}
+
 function ProductContent({ id }: { id: string }) {
   const catalog = useCatalog();
   const { state: detail, retry } = useProductDetail(id);
+  // Ready once its own record has arrived: never while loading, for a product not found, or after an error.
+  usePageReady(catalog.status === "ready" && detail.status === "ready");
 
-  if (catalog.status === "loading") {
-    return <Container className="py-16"><LoadingPanel label="Loading product…" /></Container>;
-  }
+  if (catalog.status === "loading") return <ProductSkeleton />;
   if (catalog.status === "error") {
     return (
       <Container className="py-16">
@@ -118,14 +149,14 @@ function ProductContent({ id }: { id: string }) {
   if (!product) {
     return detail.status === "error"
       ? <Container className="py-16"><ErrorPanel title="This product could not be loaded" message={detail.message} onRetry={retry} /></Container>
-      : <Container className="py-16"><LoadingPanel label="Loading product…" /></Container>;
+      : <ProductSkeleton />;
   }
   return <ProductView product={product} detail={detail} retry={retry} />;
 }
 
 /** Side by side from 640px while both fit; with enlarged text the 10rem basis wraps them onto their own rows. */
 const actionButton =
-  "inline-flex min-h-[48px] flex-1 items-center justify-center rounded-sm px-5 text-sm font-bold uppercase tracking-[0.12em] transition-colors duration-(--motion-feedback) sm:basis-[10rem]";
+  "inline-flex min-h-[48px] flex-1 items-center justify-center rounded-sm px-5 text-sm font-bold uppercase tracking-[0.12em] transition-[color,background-color,border-color,transform] duration-(--motion-feedback) sm:basis-[10rem]";
 
 export function ProductView({ product, detail, retry, preview }: {
   product: CatalogProduct | CatalogProductDetail;
@@ -140,6 +171,8 @@ export function ProductView({ product, detail, retry, preview }: {
   const heading = useRef<HTMLHeadingElement>(null);
   const purchase = useRef<HTMLDivElement>(null);
   const action = useRef<HTMLButtonElement>(null);
+  const heart = useRef<HTMLSpanElement>(null);
+  const [added, confirmAdded] = useAddedFeedback();
   const statusId = useId();
   const factsId = useId();
   /** The last add's report, kept only while the choice and quantity it was made with are unchanged. */
@@ -165,7 +198,12 @@ export function ProductView({ product, detail, retry, preview }: {
     if (!outcome) return;
     const text = addedMessage(product.name, selection.variant ? describeVariant(selection.variant) : "", outcome);
     setReport({ key: reportKey, text });
+    confirmAdded();
     miniCart?.open({ message: text });
+  };
+  const toggleWished = () => {
+    toggleWish(product.id);
+    if (!wished) pop(heart.current);
   };
   const status = report?.key === reportKey ? report.text : selection.message;
 
@@ -225,21 +263,24 @@ export function ProductView({ product, detail, retry, preview }: {
                   disabled={!incomplete && !selection.canAdd}
                   aria-describedby={statusId}
                   onClick={incomplete ? chooseOptions : doAdd}
-                  className={`${actionButton} ${
-                    incomplete || selection.canAdd
-                      ? "bg-navy-900 text-white hover:bg-gold-500 hover:text-navy-900"
-                      : "cursor-not-allowed bg-surface-soft text-muted"
+                  data-added={added && !incomplete ? "true" : undefined}
+                  className={`${actionButton} relative motion-safe:active:scale-[0.97] ${
+                    added && !incomplete ? "bg-success text-white"
+                      : incomplete || selection.canAdd
+                        ? "bg-navy-900 text-white hover:bg-gold-500 hover:text-navy-900"
+                        : "cursor-not-allowed bg-surface-soft text-muted"
                   }`}
                 >
-                  {incomplete ? "Choose options" : "Add to cart"}
+                  <AddedLabel added={added && !incomplete}>{incomplete ? "Choose options" : "Add to cart"}</AddedLabel>
                 </button>
                 <button
                   type="button"
                   aria-pressed={wished}
-                  onClick={() => toggleWish(product.id)}
+                  onClick={toggleWished}
                   className={`${actionButton} border ${wished ? "border-error/40 bg-error-tint text-error" : "border-control text-navy-900 hover:border-navy-900"}`}
                 >
-                  {wished ? "♥ In wishlist" : "♡ Save to wishlist"}
+                  <span ref={heart} className="inline-block">{wished ? "♥" : "♡"}</span>
+                  {wished ? " In wishlist" : " Save to wishlist"}
                 </button>
               </div>
             )}
@@ -303,7 +344,9 @@ export function ProductView({ product, detail, retry, preview }: {
         <section aria-labelledby="related-title" className="mt-12">
           <h2 id="related-title" className="type-h2 mb-5 text-navy-900">More in {product.categoryName}</h2>
           <div className="product-grid">
-            {related.map((item) => <ProductCard key={item.id} product={item} previewRoute={preview?.productRoute(item.id)} />)}
+            {related.map((item) => (
+              <Reveal key={item.id} stagger className="grid"><ProductCard product={item} previewRoute={preview?.productRoute(item.id)} /></Reveal>
+            ))}
           </div>
         </section>
       )}

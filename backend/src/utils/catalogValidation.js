@@ -193,11 +193,15 @@ const campaignSchema = z.object({
   }
 });
 /** Section kinds; a department row (`category`) shows one category's products, `promises` the shopping facts strip. */
-const SECTION_TYPES = ['departments', 'featured', 'products', 'campaign', 'category', 'promises', 'bestSellers'];
+const SECTION_TYPES = ['departments', 'featured', 'products', 'campaign', 'category', 'promises', 'bestSellers', 'carousel'];
 /** The kinds that may set `layout`; without one, each shows in its established default (decided when rendering). */
 const LAYOUT_TYPES = new Set(['departments', 'featured', 'products', 'category']);
 /** The measured best sellers' heading, fixed by the app: the ranking is measured, so its heading is not a staff claim. */
 const BEST_SELLERS_TITLE = 'Best sellers';
+/** Campaigns a storefront may hold; a hero carousel's list can never be longer. */
+const MAX_CAMPAIGNS = 8;
+/** Slides a hero carousel shows, in the order listed. */
+const CAROUSEL_SLIDES = { min: 1, max: 5 };
 const sectionSchema = z.object({
   id: slugSchema,
   type: z.enum(SECTION_TYPES),
@@ -207,6 +211,8 @@ const sectionSchema = z.object({
   categoryIds: z.array(idSchema).max(30).refine(unique),
   campaignId: reference,
   layout: z.enum(['grid', 'rail']).optional(),
+  /** A hero carousel's campaigns, in slide order; absent on every other kind (never an empty list there). */
+  campaignIds: z.array(idSchema).max(MAX_CAMPAIGNS).optional(),
 }).strict();
 
 export const storefrontSchema = z.object({
@@ -219,7 +225,7 @@ export const storefrontSchema = z.object({
     colors,
   }).strict(),
   sections: z.array(sectionSchema).max(12),
-  campaigns: z.array(campaignSchema).max(8),
+  campaigns: z.array(campaignSchema).max(MAX_CAMPAIGNS),
 }).strict().superRefine((value, ctx) => {
   if (!unique(value.sections.map((item) => item.id)) || !unique(value.campaigns.map((item) => item.id))) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Section and campaign IDs must be unique' });
@@ -247,10 +253,29 @@ export const storefrontSchema = z.object({
     if (section.type === 'bestSellers' && section.title !== BEST_SELLERS_TITLE) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: `The best sellers section is titled "${BEST_SELLERS_TITLE}"` });
     }
+    if (section.type !== 'carousel' && section.campaignIds !== undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Only a hero carousel lists campaigns' });
+    }
+    if (section.type === 'carousel') {
+      const listed = section.campaignIds ?? [];
+      if (listed.length < CAROUSEL_SLIDES.min || listed.length > CAROUSEL_SLIDES.max) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `A hero carousel shows ${CAROUSEL_SLIDES.min} to ${CAROUSEL_SLIDES.max} campaigns` });
+      }
+      if (!unique(listed)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'A hero carousel lists each campaign once' });
+      if (listed.some((id) => !campaigns.has(id))) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'A hero carousel requires valid campaign references' });
+      }
+      if (section.productIds.length || section.categoryIds.length) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'A hero carousel takes no products or categories' });
+      }
+    }
   }
   const count = (type) => value.sections.filter((section) => section.type === type).length;
   if (count('promises') > 1 || count('bestSellers') > 1) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'A storefront has at most one shopping facts section and one best sellers section' });
+  }
+  if (count('carousel') > 1) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'A storefront has at most one hero carousel' });
   }
 });
 

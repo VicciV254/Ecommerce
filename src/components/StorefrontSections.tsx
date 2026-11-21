@@ -1,14 +1,14 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { catalogAPI, type BestSellers, type CatalogProduct, type MediaAsset, type StorefrontSettings } from "../api/catalog";
 import { Link } from "../router";
 import { useCatalog, type CatalogValue } from "../store/CatalogContext";
-import { imageRendition, srcSetOf } from "../store/mediaModel";
 import { listingRoute } from "../store/listingQuery";
 import {
   BEST_SELLERS_RULES,
   RAIL_PRODUCT_LIMIT,
   SECTION_PRODUCT_LIMIT,
   bestSellerProducts,
+  carouselCampaigns,
   departmentRow,
   parseBestSellers,
   resolveCampaign,
@@ -19,19 +19,20 @@ import {
   type LayoutKind,
   type ResolvedCampaign,
 } from "../store/storefrontModel";
+import { CampaignArtwork, CampaignCopy } from "./CampaignParts";
 import { DepartmentGrid, DepartmentGridSkeleton, DepartmentRail, DepartmentRailSkeleton } from "./DepartmentRail";
+import { HeroCarousel } from "./HeroCarousel";
+import { useReveal } from "./reveal";
 import { ProductCard } from "./ProductCard";
 import { ProductRail, ProductRailSkeleton, sectionLinkClass, type SectionLink } from "./ProductRail";
 import { ShoppingFacts } from "./ShoppingFacts";
-import { Container, ErrorPanel, SampleImageLabel, SectionTitle } from "./ui";
+import { CardSkeleton, Container, ErrorPanel, Reveal, SampleImageLabel, SectionTitle } from "./ui";
 
 type Section = StorefrontSettings["sections"][number];
 /** A section with a grid or row layout: departments, featured, selected products or a department row. */
 type LaidOutSection = Section & { type: LayoutKind };
 const isLaidOut = (section: Section): section is LaidOutSection => takesLayout(section.type);
 
-/** Viewport where campaign artwork switches to its mobile composition (Tailwind `md`). */
-const MOBILE_ARTWORK_QUERY = "(width < 48rem)";
 /** Split heroes show their artwork in one of two columns from 768px. */
 const SPLIT_HERO_SIZES = "(min-width: 48em) 50vw, 100vw";
 /** Promotion bands give their artwork a third of the band from 768px (the page Container is 1440px at most). */
@@ -48,6 +49,8 @@ type SectionsProps = {
   showProblems?: boolean;
   /** Staff preview: where each product card leads instead of its product page; cards then offer no buying or wishlist. */
   productPreviewRoute?: (productId: string) => string;
+  /** Shown before the sections, or after a hero carousel that leads the page (the home page's sample-catalog notice). */
+  notice?: ReactNode;
 };
 
 /** The measured best sellers, while loading, once read, or after a failed or malformed answer. */
@@ -82,6 +85,7 @@ function rankedProducts(ranking: Ranking, catalog: CatalogValue): CatalogProduct
 /** Whether a section shows shoppers anything in the current catalog state; staff-only problem notes do not count. */
 function showsShoppersContent(section: Section, settings: StorefrontSettings, catalog: CatalogValue, ranking: Ranking) {
   if (section.type === "campaign") return settings.campaigns.some((campaign) => campaign.id === section.campaignId);
+  if (section.type === "carousel") return carouselCampaigns(section, settings.campaigns).items.length > 0;
   if (section.type === "promises") return true;
   if (section.type === "bestSellers") return rankedProducts(ranking, catalog).length > 0;
   if (catalog.status !== "ready") return catalog.status === "loading";
@@ -90,71 +94,157 @@ function showsShoppersContent(section: Section, settings: StorefrontSettings, ca
   return items.length > 0;
 }
 
+/** Kinds that show catalog products or departments. Campaigns, carousels and the shopping facts don't wait for it. */
+const needsCatalog = (section: Section) => section.type !== "campaign" && section.type !== "carousel" && section.type !== "promises";
+
+/**
+ * Whether a section's content is still unknown and may come to nothing: Featured without chosen products and department
+ * rows until the catalog is in, the best sellers until the ranking is too. Sections after one wait for it, so nothing
+ * shoppers already see moves when it settles (a section that turns out empty, or a row arriving late).
+ */
+function unsettled(section: Section, catalog: CatalogValue, ranking: Ranking) {
+  if (section.type === "bestSellers") return catalog.status === "loading" || (catalog.status === "ready" && ranking.status === "loading");
+  return catalog.status === "loading" && (section.type === "category" || (section.type === "featured" && !section.productIds.length));
+}
+
 /**
  * The published sections, enabled ones only, in published order; nothing is added or restored around them. The first
- * campaign shoppers can see is the page's hero (it never rotates); later campaigns render as compact promotion bands.
+ * campaign or hero carousel shoppers can see is the page's hero; later campaigns render as compact promotion bands. A
+ * carousel always spans the window. `notice` (the home page's sample-catalog notice) comes first, or straight after a
+ * hero carousel that leads the page. Sections after the first reveal themselves as they scroll into view.
  */
-export function StorefrontSections({ settings, mediaById, showProblems = false, productPreviewRoute }: SectionsProps) {
+export function StorefrontSections({ settings, mediaById, showProblems = false, productPreviewRoute, notice }: SectionsProps) {
   const catalog = useCatalog();
   const sections = settings.sections.filter((section) => section.enabled);
   const ranking = useBestSellers(sections.some((section) => section.type === "bestSellers"));
-  const usesCatalog = sections.some((section) => section.type !== "campaign" && section.type !== "promises");
   const shows = (section: Section) => showsShoppersContent(section, settings, catalog, ranking);
-  // The first section shoppers see is the likely largest paint, so only a campaign there loads its artwork eagerly.
+  // The first section shoppers see is the likely largest paint, so only a campaign or carousel there loads its artwork eagerly.
   const lead = sections.find(shows);
-  const hero = sections.find((section) => section.type === "campaign" && shows(section));
+  const hero = sections.find((section) => (section.type === "campaign" || section.type === "carousel") && shows(section));
+  // Decided from the storefront alone: a carousel listing campaigns that exist leads the page, above the notice.
+  const carouselLeads = sections[0]?.type === "carousel" && shows(sections[0]);
+  // The catalog's error stands where the first section that needed it would have been, so nothing above it moves.
+  const firstCatalogSection = sections.find(needsCatalog);
+  const waitingAt = sections.findIndex((section) => unsettled(section, catalog, ranking));
+  const shown = waitingAt < 0 ? sections : sections.slice(0, waitingAt + 1);
 
   if (!sections.length) {
     return (
-      <Container className="py-16">
-        <div className="rounded-lg border border-divider bg-surface p-10 text-center shadow-card">
-          <h2 className="type-h3 text-navy-900">No storefront sections are published yet</h2>
-          <p className="mt-2 text-muted">Products remain available in the shop.</p>
-          <Link to="/shop" className="mt-5 inline-flex min-h-[44px] items-center rounded-sm bg-navy-900 px-6 text-sm font-semibold text-white hover:bg-gold-500 hover:text-navy-900">
-            Browse products
-          </Link>
-        </div>
-      </Container>
+      <>
+        {notice}
+        <Container className="py-16">
+          <div className="rounded-lg border border-divider bg-surface p-10 text-center shadow-card">
+            <h2 className="type-h3 text-navy-900">No storefront sections are published yet</h2>
+            <p className="mt-2 text-muted">Products remain available in the shop.</p>
+            <Link to="/shop" className="mt-5 inline-flex min-h-[44px] items-center rounded-sm bg-navy-900 px-6 text-sm font-semibold text-white hover:bg-gold-500 hover:text-navy-900">
+              Browse products
+            </Link>
+          </div>
+        </Container>
+      </>
     );
   }
 
-  return (
-    <>
-      {usesCatalog && catalog.status === "error" && (
+  const render = (section: Section, index: number): ReactNode => {
+    if (section.type === "campaign") {
+      const campaign = settings.campaigns.find((item) => item.id === section.campaignId);
+      if (!campaign) {
+        return showProblems ? <ProblemList title={section.title} problems={[`Campaign ${section.campaignId ?? "(none)"} does not exist`]} /> : null;
+      }
+      return (
+        <CampaignSection
+          resolved={resolveCampaign(campaign, mediaById, catalog)}
+          catalogReady={catalog.status === "ready"}
+          showProblems={showProblems}
+          priority={section === lead}
+          variant={section === hero ? "hero" : "band"}
+        />
+      );
+    }
+    if (section.type === "carousel") {
+      return (
+        <CarouselSection
+          section={section}
+          settings={settings}
+          mediaById={mediaById}
+          showProblems={showProblems}
+          priority={section === lead}
+          spaced={index > 0}
+        />
+      );
+    }
+    if (section.type === "promises") return <ShoppingFacts title={section.title} />;
+    if (catalog.status === "error") {
+      return section === firstCatalogSection ? (
         <Container className="pt-10">
           <ErrorPanel title="Products are unavailable" message={catalog.error ?? "The catalog could not be loaded."} onRetry={catalog.reload} />
         </Container>
+      ) : null;
+    }
+    if (section.type === "bestSellers") {
+      return <BestSellersSection title={section.title} ranking={ranking} showProblems={showProblems} productPreviewRoute={productPreviewRoute} />;
+    }
+    // Every kind left has a layout; a kind this version can't show renders nothing.
+    if (!isLaidOut(section)) return null;
+    if (catalog.status === "loading") return <SectionSkeleton section={section} />;
+    if (section.type === "departments") return <DepartmentsSection section={section} showProblems={showProblems} />;
+    if (section.type === "category") return <DepartmentRowSection section={section} showProblems={showProblems} productPreviewRoute={productPreviewRoute} />;
+    return <ProductsSection section={section} showProblems={showProblems} productPreviewRoute={productPreviewRoute} />;
+  };
+  // Shoppers see nothing at all for a section with nothing to show; the staff preview shows its problem notes instead.
+  const visible = (section: Section) =>
+    showProblems || shows(section) || (catalog.status === "error" && section === firstCatalogSection);
+  const rendered = shown.map((section, index) => {
+    const content = visible(section) ? render(section, index) : null;
+    if (content === null) return null;
+    // The first section is on the first screen; later ones rise into view as they are reached.
+    return index === 0 ? <Fragment key={section.id}>{content}</Fragment> : <Reveal key={section.id}>{content}</Reveal>;
+  });
+
+  return (
+    <>
+      {!carouselLeads && notice}
+      {rendered[0]}
+      {carouselLeads && notice}
+      {rendered.slice(1)}
+      {/* While a section's content is unknown, the page keeps a screen below it, so the footer stays out of view. */}
+      {waitingAt >= 0 && <div aria-hidden="true" className="min-h-svh" />}
+    </>
+  );
+}
+
+/** A hero carousel: its campaigns that exist as slides; the staff preview lists the ones that don't. */
+function CarouselSection({ section, settings, mediaById, showProblems, priority, spaced }: {
+  section: Section;
+  settings: StorefrontSettings;
+  mediaById: ReadonlyMap<string, MediaAsset>;
+  showProblems: boolean;
+  priority: boolean;
+  /** Below another section: some room above it. */
+  spaced: boolean;
+}) {
+  const catalog = useCatalog();
+  const catalogReady = catalog.status === "ready";
+  const { items, missing } = carouselCampaigns(section, settings.campaigns);
+  const slides = items.map((campaign) => resolveCampaign(campaign, mediaById, catalog));
+  const problems = [
+    ...missing.map((id) => `Campaign ${id} does not exist`),
+    ...slides.flatMap((slide) => slide.mediaProblems),
+    ...(catalogReady ? slides.flatMap((slide) => (slide.ctaProblem ? [slide.ctaProblem] : [])) : []),
+    ...(items.length ? [] : ["No campaigns to show; shoppers will not see this section"]),
+  ];
+  return (
+    <>
+      {showProblems && <ProblemList title={section.title} problems={problems} />}
+      {slides.length > 0 && (
+        <HeroCarousel
+          title={section.title}
+          slides={slides}
+          catalogReady={catalogReady}
+          priority={priority}
+          className={spaced ? "mt-6 md:mt-8" : ""}
+        />
       )}
-      {sections.map((section) => {
-        if (section.type === "campaign") {
-          const campaign = settings.campaigns.find((item) => item.id === section.campaignId);
-          if (!campaign) {
-            return showProblems ? <ProblemList key={section.id} title={section.title} problems={[`Campaign ${section.campaignId ?? "(none)"} does not exist`]} /> : null;
-          }
-          return (
-            <CampaignSection
-              key={section.id}
-              resolved={resolveCampaign(campaign, mediaById, catalog)}
-              catalogReady={catalog.status === "ready"}
-              catalogLoading={catalog.status === "loading"}
-              showProblems={showProblems}
-              priority={section === lead}
-              variant={section === hero ? "hero" : "band"}
-            />
-          );
-        }
-        if (section.type === "promises") return <ShoppingFacts key={section.id} title={section.title} />;
-        if (catalog.status === "error") return null;
-        if (section.type === "bestSellers") {
-          return <BestSellersSection key={section.id} title={section.title} ranking={ranking} showProblems={showProblems} productPreviewRoute={productPreviewRoute} />;
-        }
-        // Every kind left has a layout; a kind this version can't show renders nothing.
-        if (!isLaidOut(section)) return null;
-        if (catalog.status === "loading") return <SectionSkeleton key={section.id} section={section} />;
-        if (section.type === "departments") return <DepartmentsSection key={section.id} section={section} showProblems={showProblems} />;
-        if (section.type === "category") return <DepartmentRowSection key={section.id} section={section} showProblems={showProblems} productPreviewRoute={productPreviewRoute} />;
-        return <ProductsSection key={section.id} section={section} showProblems={showProblems} productPreviewRoute={productPreviewRoute} />;
-      })}
     </>
   );
 }
@@ -173,7 +263,7 @@ function ProblemList({ title, problems }: { title: string; problems: string[] })
   );
 }
 
-/** A section's place while the catalog loads: its kind's and layout's shape, without motion. */
+/** A section's place while the catalog loads: its kind's and layout's shape. */
 function SectionSkeleton({ section }: { section: LaidOutSection }) {
   const rail = sectionLayout(section) === "rail";
   let shape: ReactNode;
@@ -214,6 +304,7 @@ function ProductList({ section, products, link, productPreviewRoute }: {
   link: SectionLink;
   productPreviewRoute: SectionsProps["productPreviewRoute"];
 }) {
+  const reveal = useReveal<HTMLLIElement>({ stagger: true });
   if (sectionLayout(section) === "rail") {
     return (
       <Container className={RAIL_SECTION}>
@@ -234,7 +325,7 @@ function ProductList({ section, products, link, productPreviewRoute }: {
       </SectionTitle>
       <ul aria-label={section.title} className="product-grid">
         {products.slice(0, SECTION_PRODUCT_LIMIT).map((product, index) => (
-          <li key={product.id} className={`min-w-0 ${VISIBLE_FROM[index] ?? "hidden"}`}>
+          <li key={product.id} ref={reveal} className={`min-w-0 ${VISIBLE_FROM[index] ?? "hidden"}`}>
             <ProductCard product={product} previewRoute={productPreviewRoute?.(product.id)} />
           </li>
         ))}
@@ -323,102 +414,35 @@ function BestSellersSection({ title, ranking, showProblems, productPreviewRoute 
   );
 }
 
-/** A product section's shape while the catalog loads: the same grid and card count per breakpoint, without motion. */
+/** A product section's shape while the catalog loads: the same grid and card count per breakpoint, shimmering briefly. */
 function ProductsSkeleton() {
-  const bar = "rounded-sm bg-surface-soft";
+  const bar = "skeleton rounded-sm";
   return (
     <div aria-hidden="true">
       <div className={`mb-5 h-8 w-56 max-w-full ${bar}`} />
       <div className="product-grid">
-        {VISIBLE_FROM.map((visibility, index) => (
-          <div key={index} className={`overflow-hidden rounded-lg bg-surface shadow-card ${visibility}`}>
-            <div className="aspect-square bg-surface-soft" />
-            <div className="space-y-2 p-4">
-              <div className={`h-3 w-1/2 ${bar}`} />
-              <div className={`h-4 w-3/4 ${bar}`} />
-              <div className={`h-5 w-1/3 ${bar}`} />
-            </div>
-          </div>
-        ))}
+        {VISIBLE_FROM.map((visibility, index) => <CardSkeleton key={index} className={visibility} />)}
       </div>
     </div>
   );
 }
 
-type FocalStyle = CSSProperties & Record<"--focal-desktop" | "--focal-mobile", string>;
-
-/** Artwork for a campaign: the mobile file below 768px when there is one, cropped at the configured focal points. */
-function CampaignArtwork({ resolved, priority, sizes }: { resolved: ResolvedCampaign; priority: boolean; sizes?: string }) {
-  const { campaign, desktop, mobile } = resolved;
-  if (!desktop) return null;
-  const focal: FocalStyle = {
-    "--focal-desktop": `${campaign.desktopFocal.x}% ${campaign.desktopFocal.y}%`,
-    // Phones always use the mobile crop, applied to the desktop image when no mobile file exists.
-    "--focal-mobile": `${campaign.mobileFocal.x}% ${campaign.mobileFocal.y}%`,
-  };
-  const desktopArt = imageRendition(desktop.url, "hero", sizes);
-  const mobileArt = mobile ? imageRendition(mobile.url, "hero", sizes) : null;
-  return (
-    <picture>
-      {mobile && mobileArt && (
-        <source
-          media={MOBILE_ARTWORK_QUERY}
-          srcSet={srcSetOf(mobileArt)}
-          sizes={mobileArt.sizes}
-          width={mobile.width ?? undefined}
-          height={mobile.height ?? undefined}
-        />
-      )}
-      <img
-        src={desktopArt.src}
-        srcSet={desktopArt.srcSet}
-        sizes={desktopArt.sizes}
-        width={desktop.width ?? undefined}
-        height={desktop.height ?? undefined}
-        alt={desktop.alt ?? ""}
-        loading={priority ? "eager" : "lazy"}
-        fetchPriority={priority ? "high" : undefined}
-        decoding="async"
-        style={focal}
-        className="absolute inset-0 h-full w-full object-cover [object-position:var(--focal-desktop)] max-md:[object-position:var(--focal-mobile)]"
-      />
-    </picture>
-  );
-}
-
-function CampaignSection({ resolved, catalogReady, catalogLoading, showProblems, priority, variant }: {
+function CampaignSection({ resolved, catalogReady, showProblems, priority, variant }: {
   resolved: ResolvedCampaign;
   catalogReady: boolean;
-  catalogLoading: boolean;
   showProblems: boolean;
   /** The page's leading section: its artwork (whichever source is chosen) loads eagerly with high priority. */
   priority: boolean;
   variant: "hero" | "band";
 }) {
   const { campaign, desktop, mobile } = resolved;
-  // Catalog targets are only linked, or reported missing, once the catalog has loaded.
-  const route = campaign.cta.target === "shop" || catalogReady ? resolved.ctaRoute : null;
-  // Until then the button keeps its place, unseen and out of the Tab order, so nothing under the copy moves.
-  const holdButton = !route && catalogLoading;
   const problems = catalogReady && resolved.ctaProblem ? [...resolved.mediaProblems, resolved.ctaProblem] : resolved.mediaProblems;
   const placeholder = Boolean(desktop?.isPlaceholder || mobile?.isPlaceholder);
   const split = campaign.layout === "split";
   const sample = placeholder ? <SampleImageLabel /> : null;
-
-  const copy = (hero: boolean, onDark: boolean): ReactNode => {
-    const button = `mt-5 inline-flex min-h-[44px] items-center rounded-sm px-6 text-sm font-semibold uppercase tracking-[0.12em] transition-colors duration-(--motion-feedback) ${
-      onDark ? "bg-gold-500 text-navy-900 hover:bg-gold-400" : "bg-navy-900 text-white hover:bg-gold-500 hover:text-navy-900"
-    }`;
-    return (
-      <div className={onDark ? "text-white" : "text-navy-900"}>
-        <h2 className={`${hero ? "type-display" : "type-h3"} break-words`}>{campaign.title}</h2>
-        {campaign.body && <p className={`mt-3 max-w-xl break-words ${onDark ? "text-white/90" : "text-navy-800"}`}>{campaign.body}</p>}
-        {campaign.conditions && <p className={`mt-3 max-w-xl break-words text-sm ${onDark ? "text-on-navy-muted" : "text-muted"}`}>{campaign.conditions}</p>}
-        {route && <Link to={route} className={button}>{campaign.cta.label}</Link>}
-        {holdButton && <span aria-hidden="true" className={`${button} invisible`}>{campaign.cta.label}</span>}
-      </div>
-    );
-  };
+  const copy = (hero: boolean, onDark: boolean): ReactNode => (
+    <CampaignCopy resolved={resolved} catalogReady={catalogReady} variant={hero ? "hero" : "band"} onDark={onDark} />
+  );
 
   let body: ReactNode;
   if (variant === "band") {

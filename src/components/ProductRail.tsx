@@ -2,7 +2,7 @@ import type { CatalogProduct } from "../api/catalog";
 import { Link } from "../router";
 import { ProductCard } from "./ProductCard";
 import { RailControls, useRail } from "./Rail";
-import { SectionTitle } from "./ui";
+import { CardSkeleton, SectionTitle } from "./ui";
 
 /**
  * Card width: 42% of the row on phones (part of a third card shows), 30% from 768px, 23% from 1024px and 17.5% from
@@ -51,7 +51,7 @@ export function ProductRail({ title, products, link, note, productPreviewRoute }
       }>
         {title}
       </SectionTitle>
-      <ul ref={rail.rail} aria-label={title} className={RAIL_CLASS}>
+      <ul ref={rail.list} aria-label={title} className={RAIL_CLASS}>
         {products.map((product) => (
           // A grid cell, so the card fills its slot's width and every card in the row matches the tallest.
           <li key={product.id} className={`grid shrink-0 snap-start ${CARD_WIDTH}`}>
@@ -63,23 +63,13 @@ export function ProductRail({ title, products, link, note, productPreviewRoute }
   );
 }
 
-/** A product row's shape while the catalog loads, without motion. */
+/** A product row's shape while the catalog loads. */
 export function ProductRailSkeleton() {
-  const bar = "rounded-sm bg-surface-soft";
   return (
     <div aria-hidden="true">
-      <div className={`mb-5 h-8 w-56 max-w-full ${bar}`} />
+      <div className="skeleton mb-5 h-8 w-56 max-w-full rounded-sm" />
       <div className="flex gap-3 overflow-hidden pb-8 pt-2">
-        {Array.from({ length: 6 }, (_, index) => (
-          <div key={index} className={`shrink-0 overflow-hidden rounded-lg bg-surface shadow-card ${CARD_WIDTH}`}>
-            <div className="aspect-square bg-surface-soft" />
-            <div className="space-y-2 p-4">
-              <div className={`h-3 w-1/2 ${bar}`} />
-              <div className={`h-4 w-3/4 ${bar}`} />
-              <div className={`h-5 w-1/3 ${bar}`} />
-            </div>
-          </div>
-        ))}
+        {Array.from({ length: 6 }, (_, index) => <CardSkeleton key={index} className={`shrink-0 ${CARD_WIDTH}`} />)}
       </div>
     </div>
   );

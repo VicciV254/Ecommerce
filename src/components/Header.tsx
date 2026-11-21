@@ -9,6 +9,7 @@ import { loginRoute } from "../store/returnTo";
 import { Container } from "./ui";
 import { ModalDialog } from "./Modal";
 import { useMiniCart } from "./MiniCart";
+import { pop } from "./motion";
 import { ProductSearch } from "./ProductSearch";
 import { BrandLogo } from "./Brand";
 import { DepartmentShortcuts, DepartmentsMenu, DrawerMenu } from "./HeaderMenus";
@@ -49,6 +50,8 @@ export function Header() {
   const brandRow = useRef<HTMLElement>(null);
   const searchRow = useRef<HTMLDivElement>(null);
   const phoneSearch = useRef<HTMLInputElement>(null);
+  const cartBadge = useRef<HTMLSpanElement>(null);
+  const shownCount = useRef(cartCount);
   // Over the sticky budget (short or zoomed phone viewports) the search row scrolls away; a button brings it back.
   const compact = useStickyHeaderOffset(brandRow, searchRow);
 
@@ -61,6 +64,12 @@ export function Header() {
     if (to === "/") return path === "/";
     return path === to || path.startsWith(to);
   };
+
+  // The cart count pops when it rises (an add), not when it falls.
+  useEffect(() => {
+    if (cartCount > shownCount.current) pop(cartBadge.current);
+    shownCount.current = cartCount;
+  }, [cartCount]);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -146,7 +155,7 @@ export function Header() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 1 0-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 0 1-1.12-1.243l1.264-12A1.125 1.125 0 0 1 5.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0zm7.5 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0z" />
               </svg>
               {cartCount > 0 && (
-                <span id="header-cart-count" className={countBadge}>
+                <span ref={cartBadge} id="header-cart-count" className={countBadge}>
                   {cartCount}<span className="sr-only"> {cartCount === 1 ? "item" : "items"} in your cart</span>
                 </span>
               )}

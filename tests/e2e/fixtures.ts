@@ -186,8 +186,22 @@ function serveBrandFonts(route: Route, url: URL) {
   return route.fulfill({ headers, contentType: "font/woff2", body: readFileSync(file) });
 }
 
-export const test = base.extend({
-  page: async ({ page, context }, provide) => {
+/**
+ * The welcome dialog appears once per browser on a shopper's first visit. Every test starts as a returning visitor
+ * ("seen": an init script marks it shown in each new document) unless it asks for a first visit with
+ * `test.use({ welcome: "fresh" })`, which adds nothing, so a welcome test sees what is stored across reloads and tabs.
+ */
+type Fixtures = { welcome: "seen" | "fresh" };
+
+export const test = base.extend<Fixtures>({
+  welcome: ["seen", { option: true }],
+  page: async ({ page, context, welcome }, provide) => {
+    if (welcome === "seen") {
+      await context.addInitScript(({ key, origin }) => {
+        // Init scripts also run in blank new tabs, whose opaque origin has no storage.
+        if (location.origin === origin) localStorage.setItem(key, "true");
+      }, { key: STORAGE_KEYS.welcomeShown, origin: ORIGIN });
+    }
     const errors: string[] = [];
     const watch = (current: Page) => current.on("pageerror", (error) => errors.push(error.message));
     watch(page);
@@ -419,11 +433,33 @@ export function shopperState(page: Page, owner: string | null = customer.id): Pr
 }
 
 /**
+ * Waits until `target` is past any scroll reveal: neither it nor an ancestor is still hidden, and nothing that contains
+ * it is still animating in, so pixels sampled there are the settled ones (motion stays as shoppers have it).
+ */
+export async function settledReveal(target: Locator) {
+  await target.evaluate((node) => new Promise<void>((resolve, reject) => {
+    const deadline = performance.now() + 5000;
+    const settled = () => !node.closest("[data-reveal='hidden']") && !document.getAnimations().some((animation) => {
+      const effect = animation.effect as KeyframeEffect | null;
+      const element = effect?.target;
+      return animation.playState === "running" && element instanceof Element && element.contains(node) && element.closest("[data-reveal]") === element;
+    });
+    const check = () => {
+      if (settled()) resolve();
+      else if (performance.now() > deadline) reject(new Error("The element is still being revealed"));
+      else requestAnimationFrame(check);
+    };
+    check();
+  }));
+}
+
+/**
  * The lowest WCAG contrast between `text` and the pixels behind its words. The words are hidden while each line's box
  * is captured; the text colour, with its alpha, is then blended over every captured pixel.
  */
 export async function backdropContrast(page: Page, text: Locator) {
   await text.scrollIntoViewIfNeeded();
+  await settledReveal(text);
   const { color, lines } = await text.evaluate((node) => {
     const range = document.createRange();
     range.selectNodeContents(node);

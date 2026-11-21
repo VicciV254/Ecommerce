@@ -2,6 +2,7 @@ import type { CatalogCategory } from "../api/catalog";
 import { Link } from "../router";
 import { listingRoute } from "../store/listingQuery";
 import { RailControls, useRail } from "./Rail";
+import { useReveal } from "./reveal";
 import { MissingImage, ResponsiveImage, SectionTitle } from "./ui";
 
 /** Tile width: at least 9rem, else 42% of the rail on phones (a third tile peeks in), 22% from 768px, 15% from 1280px. */
@@ -35,7 +36,7 @@ export function DepartmentRail({ title, items }: { title: string; items: readonl
         {title}
       </SectionTitle>
       {/* An intentional horizontal scroller: the partly shown last tile signals that more follow. */}
-      <ul ref={rail.rail} aria-label={title} className="no-scrollbar flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain pb-1">
+      <ul ref={rail.list} aria-label={title} className="no-scrollbar flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain pb-1">
         {items.map((category) => (
           <li key={category.id} className={`shrink-0 snap-start ${TILE_WIDTH}`}>
             <DepartmentTile category={category} />
@@ -48,6 +49,7 @@ export function DepartmentRail({ title, items }: { title: string; items: readonl
 
 /** The same tiles as a grid that shows the first 8, 12 or all of them by width; "All departments" lists the rest. */
 export function DepartmentGrid({ title, items }: { title: string; items: readonly CatalogCategory[] }) {
+  const reveal = useReveal<HTMLLIElement>({ stagger: true });
   return (
     <>
       <SectionTitle action={<Link to="/departments" className={allDepartmentsClass}>All departments</Link>}>
@@ -55,7 +57,7 @@ export function DepartmentGrid({ title, items }: { title: string; items: readonl
       </SectionTitle>
       <ul aria-label={title} className="department-grid">
         {items.map((category, index) => (
-          <li key={category.id} className={`min-w-0 ${gridVisibility(index)}`}>
+          <li key={category.id} ref={reveal} className={`min-w-0 ${gridVisibility(index)}`}>
             <DepartmentTile category={category} sizes={DEPARTMENT_GRID_SIZES} />
           </li>
         ))}
@@ -73,6 +75,7 @@ function DepartmentTile({ category, sizes = DEPARTMENT_TILE_SIZES }: { category:
           preset="card"
           sizes={sizes}
           alt=""
+          fade
           className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
         />
       ) : (
@@ -96,10 +99,10 @@ function DepartmentTile({ category, sizes = DEPARTMENT_TILE_SIZES }: { category:
 export function DepartmentRailSkeleton() {
   return (
     <div aria-hidden="true">
-      <div className="mb-5 h-8 w-64 max-w-full rounded-sm bg-surface-soft" />
+      <div className="skeleton mb-5 h-8 w-64 max-w-full rounded-sm" />
       <div className="flex gap-3 overflow-hidden">
         {Array.from({ length: 8 }, (_, index) => (
-          <div key={index} className={`aspect-[4/5] shrink-0 rounded-lg bg-surface-soft ${TILE_WIDTH}`} />
+          <div key={index} className={`skeleton aspect-[4/5] shrink-0 rounded-lg ${TILE_WIDTH}`} />
         ))}
       </div>
     </div>
@@ -110,10 +113,10 @@ export function DepartmentRailSkeleton() {
 export function DepartmentGridSkeleton() {
   return (
     <div aria-hidden="true">
-      <div className="mb-5 h-8 w-64 max-w-full rounded-sm bg-surface-soft" />
+      <div className="skeleton mb-5 h-8 w-64 max-w-full rounded-sm" />
       <div className="department-grid">
         {Array.from({ length: 14 }, (_, index) => (
-          <div key={index} className={`aspect-[4/5] rounded-lg bg-surface-soft ${gridVisibility(index)}`} />
+          <div key={index} className={`skeleton aspect-[4/5] rounded-lg ${gridVisibility(index)}`} />
         ))}
       </div>
     </div>

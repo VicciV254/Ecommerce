@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
+import { reportModalOpen } from "./modalState";
 
 const PLACEMENTS = {
   center: "items-center justify-center p-4",
@@ -15,8 +16,11 @@ const PLACEMENTS = {
 /** Elements that can be Tab stops, including native disclosure summaries. */
 const TAB_STOP_SELECTOR = "a[href], button, input, select, textarea, summary, [tabindex]";
 
+/** Dialogs return focus to where it was when they close. */
+const ALWAYS = () => true;
+
 export function ModalDialog({
-  open, onClose, label, placement = "center", dismissAt, initialFocus, children,
+  open, onClose, label, placement = "center", dismissAt, initialFocus, returnFocus = ALWAYS, children,
 }: {
   open: boolean;
   onClose: () => void;
@@ -25,6 +29,11 @@ export function ModalDialog({
   dismissAt?: string;
   /** Receives focus once the dialog opens, instead of its first control (for example a heading with `tabIndex={-1}`). */
   initialFocus?: RefObject<HTMLElement | null>;
+  /**
+   * Asked as the dialog closes whether focus goes back to where it was (a stable function). Answering false removes the
+   * dialog without closing it first, which would move focus, so the page that replaced the one behind it keeps its own.
+   */
+  returnFocus?: () => boolean;
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -35,14 +44,18 @@ export function ModalDialog({
     if (!open || !dialog) return;
     const previousFocus = document.activeElement;
     dialog.showModal();
+    const reportClosed = reportModalOpen();
     initialFocus?.current?.focus();
     return () => {
+      reportClosed();
+      // Closing a modal dialog returns focus by itself; one closed because the shopper moved on leaves focus to the new page.
+      if (!returnFocus()) return;
       if (dialog.open) dialog.close();
       if (previousFocus instanceof HTMLElement && previousFocus.isConnected) {
         previousFocus.focus({ preventScroll: true });
       }
     };
-  }, [open, initialFocus]);
+  }, [open, initialFocus, returnFocus]);
 
   useEffect(() => {
     if (!open || !dismissAt) return;

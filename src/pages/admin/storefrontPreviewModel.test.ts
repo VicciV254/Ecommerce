@@ -31,6 +31,17 @@ describe("the frame reads its parent's draft", () => {
     expect(readDraftMessage({ source: null, origin: ORIGIN, data: draftData }, null, ORIGIN)).toBeNull();
   });
 
+  it("accepts a hero carousel still being built (no campaigns yet, or one that doesn't exist): the frame lists its problems", () => {
+    const carousel = (campaignIds: string[]) => ({
+      id: "hero-carousel", type: "carousel" as const, title: "Highlights", enabled: true, productIds: [], categoryIds: [], campaignId: null, campaignIds,
+    });
+    for (const campaignIds of [[], ["retired"]]) {
+      const building = fixtureStorefrontSettings({ sections: [carousel(campaignIds), ...settings.sections] });
+      const read = readDraftMessage({ source: parentWindow, origin: ORIGIN, data: { ...draftData, settings: building } }, parentWindow, ORIGIN);
+      expect(read?.settings.sections[0]).toEqual(carousel(campaignIds));
+    }
+  });
+
   it.each([
     ["another message type", { ...draftData, type: PREVIEW_MESSAGES.ready }],
     ["settings with a section in the wrong shape", { ...draftData, settings: { ...settings, sections: [{ id: "x", type: "carousel" }] } }],

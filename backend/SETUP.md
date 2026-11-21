@@ -352,11 +352,19 @@ plus a department row (`category`: exactly one category), the shopping facts
 strip (`promises`) and the best sellers (`bestSellers`), each of the last two
 at most once. `departments`, `featured`, `products` and `category` may set
 `layout` to `grid` or `rail`; without it, departments and department rows show
-as rails and product sections as grids. Before rolling a deployment back to a
+as rails and product sections as grids. A hero carousel (`carousel`, at most
+one) lists 1 to 5 of the storefront's campaigns in `campaignIds`, in slide
+order; no other kind carries `campaignIds` (the field is absent there, never an
+empty list), and the public storefront includes the campaigns an enabled
+carousel lists. Before rolling a deployment back to a
 version without these kinds or `layout`, publish a storefront without them and
 save it as the draft as well: older versions refuse such documents when they
 read them (the public storefront answers 503 and the editor cannot open the
-draft).
+draft). Restoring an older publication changes only the draft, so publish and
+save in that order, then check both stored values (`publishedValue` and `value`
+of the `storefront-v2` setting) against the rollback version's rules: no
+`carousel` sections and no `campaignIds` anywhere before rolling back past the
+hero carousel.
 
 ## Pricing and reservation contract
 

@@ -101,6 +101,11 @@ export function StorefrontSummary({ settings, media, products, categories }: {
                     Campaign: {settings.campaigns.find((campaign) => campaign.id === section.campaignId)?.title ?? "not chosen"}
                   </p>
                 )}
+                {section.type === "carousel" && (
+                  <p className="mt-1 text-sm text-navy-800 [overflow-wrap:anywhere]">
+                    Campaigns: {names(section.campaignIds ?? [], settings.campaigns.map((campaign) => ({ id: campaign.id, label: campaign.title })), "none chosen")}
+                  </p>
+                )}
                 {takesLayout(section.type) && (
                   <p className="mt-1 text-sm text-navy-800">Layout: {SECTION_LAYOUT_LABELS[sectionLayout({ ...section, type: section.type })]}</p>
                 )}

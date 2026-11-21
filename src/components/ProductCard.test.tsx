@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CatalogProduct } from "../api/catalog";
 import { buildCategoryTree } from "../store/catalogModel";
@@ -80,5 +80,55 @@ describe("Quick View from a product card", () => {
     expect(store.state.cart).toEqual([{ productId: poloShirt.id, variantId: "var-polo", quantity: 1 }]);
     const drawer = screen.getByRole("dialog", { name: "Your cart" });
     expect(within(drawer).getByRole("list", { name: "Items in your cart" })).toBeTruthy();
+  });
+});
+
+describe("card feedback", () => {
+  const reducedMotion = (reduce: boolean) => {
+    window.matchMedia = vi.fn((query: string) => ({ matches: query.includes("reduce") ? reduce : false, media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() })) as unknown as typeof window.matchMedia;
+  };
+
+  it("confirms an add with a check for about a second and a half, keeping its name and label, and adds again meanwhile", () => {
+    vi.useFakeTimers();
+    try {
+      reducedMotion(false);
+      renderCards([poloShirt]);
+      const add = screen.getByRole("button", { name: "Add to cart" });
+      expect(add.className).toContain("motion-safe:active:scale-[0.97]");
+      fireEvent.click(add);
+      expect(add.getAttribute("data-added")).toBe("true");
+      expect(add.textContent).toBe("Add to cart");
+      expect(add.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
+      fireEvent.click(screen.getByRole("button", { name: "Add to cart", hidden: true }));
+      expect(store.state.cart).toEqual([{ productId: poloShirt.id, variantId: "var-polo", quantity: 2 }]);
+      act(() => { vi.advanceTimersByTime(1400); });
+      expect(add.getAttribute("data-added")).toBe("true");
+      act(() => { vi.advanceTimersByTime(1600); });
+      expect(add.hasAttribute("data-added")).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("pops the wishlist heart when a product is saved, not when it is removed, and never under reduced motion", () => {
+    const animate = vi.fn();
+    Object.defineProperty(Element.prototype, "animate", { configurable: true, value: animate });
+    try {
+      reducedMotion(false);
+      const { unmount } = renderCards([poloShirt]);
+      fireEvent.click(screen.getByRole("button", { name: "Save Cotton Polo Shirt to wishlist" }));
+      expect(animate).toHaveBeenCalledTimes(1);
+      expect(animate.mock.contexts[0]).toBe(screen.getByRole("button", { name: "Remove Cotton Polo Shirt from wishlist" }).querySelector("svg"));
+      fireEvent.click(screen.getByRole("button", { name: "Remove Cotton Polo Shirt from wishlist" }));
+      expect(animate).toHaveBeenCalledTimes(1);
+      unmount();
+      localStorage.clear();
+      reducedMotion(true);
+      renderCards([poloShirt]);
+      fireEvent.click(screen.getByRole("button", { name: "Save Cotton Polo Shirt to wishlist" }));
+      expect(animate).toHaveBeenCalledTimes(1);
+    } finally {
+      Reflect.deleteProperty(Element.prototype, "animate");
+    }
   });
 });

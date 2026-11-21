@@ -26,6 +26,8 @@ export const BEST_SELLERS_TITLE = "Best sellers";
  * shopper's page shows the section only when at least `minProducts` ranked products are in its catalog.
  */
 export const BEST_SELLERS_RULES = { windowDays: 30, minBuyers: 2, minProducts: 4 } as const;
+/** How many campaigns a hero carousel lists, as slides in that order (the API's rule). */
+export const CAROUSEL_SLIDES = { min: 1, max: 5 } as const;
 
 export class StorefrontFormatError extends Error {
   constructor(detail: string) {
@@ -36,7 +38,7 @@ export class StorefrontFormatError extends Error {
 
 type Section = StorefrontSettings["sections"][number];
 export type SectionLayout = NonNullable<Section["layout"]>;
-const SECTION_TYPES: readonly Section["type"][] = ["departments", "featured", "products", "campaign", "category", "promises", "bestSellers"];
+const SECTION_TYPES: readonly Section["type"][] = ["departments", "featured", "products", "campaign", "category", "promises", "bestSellers", "carousel"];
 /** The kinds with a grid or row layout, and the layout each shows when none is set (as before layouts existed). */
 const DEFAULT_LAYOUTS = { departments: "rail", featured: "grid", products: "grid", category: "rail" } as const satisfies Partial<Record<Section["type"], SectionLayout>>;
 export type LayoutKind = keyof typeof DEFAULT_LAYOUTS;
@@ -60,12 +62,13 @@ export function sectionLayout(section: Pick<Section, "layout"> & { type: LayoutK
   return section.layout ?? DEFAULT_LAYOUTS[section.type];
 }
 
+/** Structure only: whether a section has the API's shape. Its business rules are `draftProblems`' and the API's. */
 function isSection(value: unknown): value is Section {
   if (!isRecord(value) || !oneOf(SECTION_TYPES, value.type)) return false;
   const layout = value.layout === undefined || (takesLayout(value.type) && oneOf(SECTION_LAYOUTS, value.layout));
   return isString(value.id) && isString(value.title) && layout &&
     typeof value.enabled === "boolean" && isStringArray(value.productIds) && isStringArray(value.categoryIds) &&
-    isNullableString(value.campaignId);
+    isNullableString(value.campaignId) && (value.campaignIds === undefined || isStringArray(value.campaignIds));
 }
 
 function isCampaign(value: unknown): value is Campaign {
@@ -180,6 +183,18 @@ export function departmentRow(section: Section, catalog: CatalogLookup): { categ
 /** The ranked products the catalog shows, in the API's order, at most a row's worth. */
 export function bestSellerProducts(productIds: readonly string[], catalog: CatalogLookup): CatalogProduct[] {
   return productIds.flatMap((id) => catalog.productsById.get(id) ?? []).slice(0, RAIL_PRODUCT_LIMIT);
+}
+
+/** A hero carousel's campaigns in its order; listed IDs no campaign has are reported, never substituted. */
+export function carouselCampaigns(section: Pick<Section, "campaignIds">, campaigns: readonly Campaign[]): Resolved<Campaign> {
+  const items: Campaign[] = [];
+  const missing: string[] = [];
+  for (const id of section.campaignIds ?? []) {
+    const campaign = campaigns.find((item) => item.id === id);
+    if (campaign) items.push(campaign);
+    else missing.push(id);
+  }
+  return { items, missing };
 }
 
 export type ResolvedCampaign = {

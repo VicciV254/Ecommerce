@@ -15,9 +15,15 @@ type Section = StorefrontSettings["sections"][number];
 
 const CENTRED_FOCAL = { x: 50, y: 50 };
 /** Section IDs are slugs: kinds whose names are not one get a slug of their own. */
-const SECTION_ID_BASES: Partial<Record<Section["type"], string>> = { category: "department-row", promises: "shopping-facts", bestSellers: "best-sellers" };
+const SECTION_ID_BASES: Partial<Record<Section["type"], string>> = {
+  category: "department-row", promises: "shopping-facts", bestSellers: "best-sellers", carousel: "hero-carousel",
+};
 /** Kinds a storefront holds at most once. */
-const ONCE_ONLY: ReadonlySet<Section["type"]> = new Set(["promises", "bestSellers"]);
+const ONCE_ONLY: ReadonlySet<Section["type"]> = new Set(["promises", "bestSellers", "carousel"]);
+
+/** Headings of the sections that show `campaignId`: a campaign section, or a carousel listing it, shown or not. */
+const campaignUsers = (sections: readonly Section[], campaignId: string) =>
+  sections.filter((section) => section.campaignId === campaignId || section.campaignIds?.includes(campaignId)).map((section) => section.title);
 
 /** "Last published 17 Nov 2026, 14:05 by alice (version 6).", in Nairobi time, or that nothing is published. */
 function publicationLine(draft: StorefrontDraft) {
@@ -81,7 +87,12 @@ export function StorefrontManager({ canWrite }: { canWrite: boolean }) {
   };
   const addSection = (type: Section["type"]) => {
     const id = uniqueId(SECTION_ID_BASES[type] ?? type, settings.sections.map((section) => section.id));
-    update({ ...settings, sections: [...settings.sections, { id, type, title: NEW_SECTION_TITLES[type], enabled: false, productIds: [], categoryIds: [], campaignId: null }] });
+    // Only a carousel carries a campaign list; every other kind leaves the field out.
+    const section: Section = {
+      id, type, title: NEW_SECTION_TITLES[type], enabled: false, productIds: [], categoryIds: [], campaignId: null,
+      ...(type === "carousel" && { campaignIds: [] }),
+    };
+    update({ ...settings, sections: [...settings.sections, section] });
   };
   const addCampaign = () => {
     const id = uniqueId("campaign", settings.campaigns.map((campaign) => campaign.id));
@@ -205,7 +216,7 @@ export function StorefrontManager({ canWrite }: { canWrite: boolean }) {
                     + {type}
                   </button>
                 ))}
-                {(["category", "promises", "bestSellers"] as const).map((type) => (
+                {(["category", "promises", "bestSellers", "carousel"] as const).map((type) => (
                   <button
                     key={type}
                     type="button"
@@ -249,12 +260,16 @@ export function StorefrontManager({ canWrite }: { canWrite: boolean }) {
                 <CampaignEditor
                   key={`${index}-${campaign.id}`}
                   campaign={campaign}
-                  usedBy={settings.sections.filter((section) => section.campaignId === campaign.id).map((section) => section.title)}
+                  usedBy={campaignUsers(settings.sections, campaign.id)}
                   media={media}
                   products={productItems}
                   categories={categoryItems}
                   onChange={(next) => update({ ...settings, campaigns: settings.campaigns.map((item, position) => (position === index ? next : item)) })}
-                  onRemove={() => update({ ...settings, campaigns: settings.campaigns.filter((_, position) => position !== index) })}
+                  onRemove={() => {
+                    // The button is disabled while a section uses the campaign; this keeps any other caller from orphaning one.
+                    if (campaignUsers(settings.sections, campaign.id).length) return;
+                    update({ ...settings, campaigns: settings.campaigns.filter((_, position) => position !== index) });
+                  }}
                   onRegistered={register}
                 />
               ))}

@@ -408,3 +408,125 @@ test("a split hero sits beside its artwork from 768px, and stacks while enlarged
     expect(await pageOverflow(page)).toBeLessThanOrEqual(0);
   }
 });
+
+/*
+ * More ways the page can arrive (the hero carousel's contract): a carousel leading the page, a leading product section
+ * that turns out empty, a best-sellers ranking that comes in last, and a catalog that fails. In each, whatever is
+ * already on the screen stays where it is, and the layout shift score stays under 0.01.
+ */
+test.describe("nothing on screen moves while the page arrives", () => {
+  const campaigns: StorefrontSettings["campaigns"] = [
+    { id: "week", title: "Fashion week", body: "New arrivals across the department.", conditions: "", cta: { label: "Shop fashion", target: "category", targetId: "dept-fashion" },
+      desktopMediaId: "media-campaign-desktop", mobileMediaId: null, desktopFocal: { x: 50, y: 50 }, mobileFocal: { x: 50, y: 50 }, layout: "overlay" },
+    { id: "season", title: "New season", body: "Desks, lamps and laptops.", conditions: "", cta: { label: "Browse products", target: "shop", targetId: null },
+      desktopMediaId: "media-campaign-mobile", mobileMediaId: null, desktopFocal: { x: 50, y: 50 }, mobileFocal: { x: 50, y: 50 }, layout: "overlay" },
+  ];
+  const carousel = section("hero-carousel", "carousel", "Highlights", { campaignIds: ["week", "season"] });
+  const featured = section("featured", "featured", "Featured products");
+
+  /** Holds the storefront, the catalog and the ranking until each is released; the catalog may fail instead. */
+  async function stagedLoad(page: Page, context: BrowserContext, sections: Section[], { catalog = discoverySnapshot(), fail = false } = {}) {
+    const gates = { storefront: () => {}, catalog: () => {}, ranking: () => {} };
+    const held = (name: keyof typeof gates) => new Promise<void>((resolve) => { gates[name] = resolve; });
+    const [storefront, catalogGate, ranking] = [held("storefront"), held("catalog"), held("ranking")];
+    await context.route("**/api/settings/storefront", async (route) => {
+      await storefront;
+      await route.fulfill({ json: { ...publishedStorefront, settings: { ...publishedStorefront.settings, sections, campaigns } } });
+    });
+    await context.route("**/api/catalog", async (route) => {
+      await catalogGate;
+      await (fail ? route.fulfill({ status: 503, json: { error: "Unavailable" } }) : route.fulfill({ json: catalog }));
+    });
+    await context.route(`**${BEST_SELLERS_PATH}`, async (route) => {
+      await ranking;
+      await route.fulfill({ json: { windowDays: 30, productIds: discoveryShirts.slice(0, 6).map((product) => product.id) } });
+    });
+    await page.addInitScript(() => {
+      const shifts = window as unknown as { layoutShift: number };
+      shifts.layoutShift = 0;
+      new PerformanceObserver((list) => {
+        for (const entry of list.getEntries() as unknown as { value: number; hadRecentInput: boolean }[]) {
+          if (!entry.hadRecentInput) shifts.layoutShift += entry.value;
+        }
+      }).observe({ type: "layout-shift", buffered: true });
+    });
+    await page.goto("/");
+    await expect(page.getByRole("status").filter({ hasText: "Loading the storefront" })).toBeAttached();
+    await page.evaluate(() => document.fonts.ready.then(() => undefined));
+    return gates;
+  }
+  /** Document-relative tops of the visible elements on the first screen inside `main`, by a stable key. */
+  const onScreen = (page: Page) => page.evaluate(() => {
+    const tops: Record<string, number> = {};
+    for (const element of document.querySelectorAll<HTMLElement>("main section, main [role='note'], main h2, main ul[aria-label]")) {
+      const box = element.getBoundingClientRect();
+      if (box.height === 0 || box.top >= window.innerHeight || getComputedStyle(element).visibility === "hidden") continue;
+      const key = `${element.tagName}:${element.getAttribute("aria-label") ?? element.textContent?.slice(0, 30)}`;
+      tops[key] = Math.round(box.top + window.scrollY);
+    }
+    return tops;
+  });
+  /** Everything that was on screen before is still there, at the same place. */
+  async function expectStill(page: Page, before: Record<string, number>) {
+    await frames(page);
+    const after = await onScreen(page);
+    for (const [key, top] of Object.entries(before)) expect(after[key], key).toBe(top);
+  }
+  const shiftScore = (page: Page) => page.evaluate(() => (window as unknown as { layoutShift: number }).layoutShift);
+
+  test("a hero carousel leading the page", async ({ page, context }) => {
+    const gates = await stagedLoad(page, context, [carousel, facts, departmentsGrid, picks()]);
+    gates.storefront();
+    await expect(page.getByRole("region", { name: "Highlights" })).toBeVisible();
+    await expect(page.getByRole("list", { name: "How shopping works" })).toBeVisible();
+    await frames(page);
+    const before = await onScreen(page);
+    expect(Object.keys(before).some((key) => key.includes("Highlights"))).toBe(true);
+    gates.catalog();
+    await expect(page.getByRole("list", { name: "Shop by department" }).getByRole("link").first()).toBeVisible();
+    await expect(page.getByRole("region", { name: "Highlights" }).getByRole("link", { name: "Shop fashion" })).toBeVisible();
+    await expectStill(page, before);
+    expect(await shiftScore(page)).toBeLessThan(0.01);
+  });
+
+  test("a leading product section that turns out empty", async ({ page, context }) => {
+    const nothingFeatured = { ...discoverySnapshot(), products: discoverySnapshot().products.map((product) => ({ ...product, isFeatured: false })) };
+    const gates = await stagedLoad(page, context, [featured, facts, departmentsGrid], { catalog: nothingFeatured });
+    gates.storefront();
+    await expect(page.getByRole("status").filter({ hasText: "Loading featured products" })).toBeAttached();
+    await frames(page);
+    const before = await onScreen(page);
+    gates.catalog();
+    await expect(page.getByRole("list", { name: "Shop by department" }).getByRole("link").first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Featured products" })).toHaveCount(0);
+    await expectStill(page, before);
+    expect(await shiftScore(page)).toBeLessThan(0.01);
+  });
+
+  test("a best-sellers ranking that arrives after the catalog", async ({ page, context }) => {
+    const gates = await stagedLoad(page, context, [carousel, section("best", "bestSellers", "Best sellers"), facts, departmentsGrid]);
+    gates.storefront();
+    await expect(page.getByRole("region", { name: "Highlights" })).toBeVisible();
+    gates.catalog();
+    await expect(page.getByRole("region", { name: "Highlights" }).getByRole("link", { name: "Shop fashion" })).toBeVisible();
+    await page.waitForTimeout(300);
+    await frames(page);
+    const before = await onScreen(page);
+    gates.ranking();
+    await expect(page.getByRole("list", { name: "Best sellers" }).getByRole("listitem")).toHaveCount(6);
+    await expectStill(page, before);
+    expect(await shiftScore(page)).toBeLessThan(0.01);
+  });
+
+  test("a catalog that fails", async ({ page, context }) => {
+    const gates = await stagedLoad(page, context, [carousel, facts, departmentsGrid, picks()], { fail: true });
+    gates.storefront();
+    await expect(page.getByRole("list", { name: "How shopping works" })).toBeVisible();
+    await frames(page);
+    const before = await onScreen(page);
+    gates.catalog();
+    await expect(page.getByRole("heading", { name: "Products are unavailable" })).toBeVisible();
+    await expectStill(page, before);
+    expect(await shiftScore(page)).toBeLessThan(0.01);
+  });
+});

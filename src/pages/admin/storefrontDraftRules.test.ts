@@ -56,4 +56,46 @@ describe("the editor's mirror of the API's section rules", () => {
       'Section "Best sellers": headings can\'t claim a ranking or popularity the store doesn\'t measure, such as "best sellers", "top rated" or "trending". Use a heading such as "Featured" or "Staff picks".',
     ]);
   });
+
+  describe("the hero carousel", () => {
+    const campaign = (id: string) => ({
+      id, title: `Campaign ${id}`, body: "", conditions: "", cta: { label: "Shop now", target: "shop" as const, targetId: null },
+      desktopMediaId: null, mobileMediaId: null, desktopFocal: { x: 50, y: 50 }, mobileFocal: { x: 50, y: 50 }, layout: "split" as const,
+    });
+    const SIX = ["one", "two", "three", "four", "five", "six"];
+    const carouselProblems = (...sections: Section[]) => draftProblems(fixtureStorefrontSettings({ sections, campaigns: SIX.map(campaign) }));
+    const carousel = (campaignIds: unknown, extra: Record<string, unknown> = {}) =>
+      section("hero-carousel", "carousel", "Highlights", { campaignIds, ...extra });
+
+    it("lists 1 to 5 different campaigns that exist", () => {
+      for (let count = 1; count <= 5; count += 1) expect(carouselProblems(carousel(SIX.slice(0, count))), `${count}`).toEqual([]);
+      expect(carouselProblems(carousel([]))).toEqual(['"Highlights" needs 1 to 5 campaigns.']);
+      expect(carouselProblems(section("hero-carousel", "carousel", "Highlights"))).toEqual(['"Highlights" needs 1 to 5 campaigns.']);
+      expect(carouselProblems(carousel(SIX))).toEqual(['"Highlights" needs 1 to 5 campaigns.']);
+      expect(carouselProblems(carousel(["one", "one"]))).toEqual(['"Highlights" lists a campaign more than once.']);
+      expect(carouselProblems(carousel(["one", "retired"]))).toEqual(['"Highlights" lists a campaign that doesn\'t exist: retired.']);
+    });
+
+    it("takes no products, categories, single campaign or layout, and appears once at most", () => {
+      expect(carouselProblems(carousel(["one"], { productIds: ["prod-1"] }))).toEqual(['"Highlights" takes no products or categories.']);
+      expect(carouselProblems(carousel(["one"], { categoryIds: ["cat-a"] }))).toEqual(['"Highlights" takes no products or categories.']);
+      expect(carouselProblems(carousel(["one"], { campaignId: "one" }))).toEqual(['"Highlights" can\'t use a single campaign; only a campaign section does.']);
+      expect(carouselProblems(carousel(["one"], { layout: "rail" }))).toEqual(['"Highlights" has no layout to choose.']);
+      expect(carouselProblems(carousel(["one"]), section("hero-carousel-2", "carousel", "More", { campaignIds: ["two"], enabled: false })))
+        .toEqual(["Only one hero carousel is allowed."]);
+    });
+
+    it("lets only a carousel list campaigns", () => {
+      expect(carouselProblems(section("hero", "campaign", "Hero", { campaignId: "one", campaignIds: ["one"] })))
+        .toEqual(['"Hero" can\'t list campaigns; only a hero carousel does.']);
+      expect(carouselProblems(section("featured", "featured", "Featured products", { campaignIds: [] })))
+        .toEqual(['"Featured products" can\'t list campaigns; only a hero carousel does.']);
+    });
+
+    it("checks the carousel's heading for ranking claims", () => {
+      expect(carouselProblems(carousel(["one"], { title: "Trending now" }))).toEqual([
+        'Section "Trending now": headings can\'t claim a ranking or popularity the store doesn\'t measure, such as "best sellers", "top rated" or "trending". Use a heading such as "Featured" or "Staff picks".',
+      ]);
+    });
+  });
 });

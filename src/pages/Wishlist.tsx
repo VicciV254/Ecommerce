@@ -1,8 +1,11 @@
 import { ProductCard } from "../components/ProductCard";
-import { Breadcrumb, Container, ErrorPanel, LoadingPanel } from "../components/ui";
+import { Breadcrumb, CardSkeleton, Container, ErrorPanel, Reveal } from "../components/ui";
 import { Link } from "../router";
 import { useCatalog } from "../store/CatalogContext";
 import { useStore } from "../store/StoreContext";
+
+/** Saved items a loading wishlist shows as card shapes: two rows at the widest. */
+const SKELETON_CARDS = 8;
 
 export default function Wishlist() {
   const { state, toggleWish } = useStore();
@@ -28,7 +31,13 @@ export default function Wishlist() {
           </Link>
         </div>
       ) : catalog.status === "loading" ? (
-        <div className="mt-6"><LoadingPanel label="Loading your saved items…" /></div>
+        <>
+          <p role="status" className="sr-only">Loading your saved items…</p>
+          {/* One card shape for each saved item, up to two rows. */}
+          <div aria-hidden="true" className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+            {saved.slice(0, SKELETON_CARDS).map((id) => <CardSkeleton key={id} />)}
+          </div>
+        </>
       ) : catalog.status === "error" ? (
         <div className="mt-6">
           <ErrorPanel title="Saved items are unavailable" message={`${catalog.error ?? "The catalog could not be loaded."} Your wishlist is unchanged.`} onRetry={catalog.reload} />
@@ -45,7 +54,7 @@ export default function Wishlist() {
             </div>
           )}
           <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
-            {items.map((product) => <ProductCard key={product.id} product={product} />)}
+            {items.map((product) => <Reveal key={product.id} stagger className="grid"><ProductCard product={product} /></Reveal>)}
           </div>
         </>
       )}

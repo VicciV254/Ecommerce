@@ -3,7 +3,9 @@ import type { CatalogCategory, CatalogDesigner } from "../api/catalog";
 import { ActiveFilterChips, FilterPanel, applyListingChange } from "../components/ListingFilters";
 import { ModalDialog } from "../components/Modal";
 import { ProductCard } from "../components/ProductCard";
-import { Breadcrumb, Container, DemoCatalogNotice, ErrorPanel } from "../components/ui";
+import { usePageReady } from "../components/pageReady";
+import { useReveal } from "../components/reveal";
+import { Breadcrumb, CardSkeleton, Container, DemoCatalogNotice, ErrorPanel } from "../components/ui";
 import { WrappingSelect } from "../components/WrappingSelect";
 import { Link, parseRoute, useRouteState, type RouteState } from "../router";
 import { useCatalog } from "../store/CatalogContext";
@@ -76,6 +78,9 @@ function ShopListing({ query, category, designer }: { query: ListingQuery; categ
     [catalog.products, query, category, designer, specKeys],
   );
   useListingEntry(navigation, heading, results);
+  const reveal = useReveal<HTMLLIElement>({ stagger: true });
+  // The listing shows only once the catalog is in and its department or designer exists.
+  usePageReady(true);
 
   const applied = listing.applied;
   const filters = activeFilters(applied, designer?.name);
@@ -147,7 +152,9 @@ function ShopListing({ query, category, designer }: { query: ListingQuery; categ
           {listing.page.length ? (
             <>
               <ul aria-label="Products" className="product-grid">
-                {listing.page.map((product) => <li key={product.id} className="min-w-0"><ProductCard product={product} imageSizes={LISTING_CARD_SIZES} /></li>)}
+                {listing.page.map((product) => (
+                  <li key={product.id} ref={reveal} className="min-w-0"><ProductCard product={product} imageSizes={LISTING_CARD_SIZES} /></li>
+                ))}
               </ul>
               <Pagination listing={listing} query={applied} />
             </>
@@ -259,9 +266,9 @@ function Pagination({ listing, query }: { listing: Listing; query: ListingQuery 
   );
 }
 
-/** Keeps the listing's layout while the catalog loads, without animation. */
+/** Keeps the listing's layout while the catalog loads. */
 function ListingSkeleton() {
-  const bar = "rounded-sm bg-surface-soft";
+  const bar = "skeleton rounded-sm";
   return (
     <Container className="py-6 md:py-8">
       <p role="status" className="sr-only">Loading products…</p>
@@ -274,16 +281,7 @@ function ListingSkeleton() {
             {Array.from({ length: 6 }, (_, index) => <div key={index} className={`h-6 ${bar}`} />)}
           </div>
           <div className="product-grid">
-            {Array.from({ length: SKELETON_CARDS }, (_, index) => (
-              <div key={index} className="overflow-hidden rounded-lg bg-surface shadow-card">
-                <div className="aspect-square bg-surface-soft" />
-                <div className="space-y-2 p-4">
-                  <div className={`h-3 w-1/2 ${bar}`} />
-                  <div className={`h-4 w-3/4 ${bar}`} />
-                  <div className={`h-5 w-1/3 ${bar}`} />
-                </div>
-              </div>
-            ))}
+            {Array.from({ length: SKELETON_CARDS }, (_, index) => <CardSkeleton key={index} />)}
           </div>
         </div>
       </div>

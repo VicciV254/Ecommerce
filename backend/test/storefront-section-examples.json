@@ -1,5 +1,5 @@
 {
-  "about": "Section lists for the storefront rules (P8.7), checked against the API's schema (backend/test/unit/storefrontSections.test.js) and the editor's mirror (src/pages/admin/storefrontDraftRules.test.ts). Each list replaces the sections of the default storefront; `campaigns` is added when given.",
+  "about": "Section lists for the storefront rules (P8.7 kinds and the hero carousel), checked against the API's schema (backend/test/unit/storefrontSections.test.js) and the editor's mirror (src/pages/admin/storefrontDraftRules.test.ts). Each list replaces the sections of the default storefront; `campaigns` is added when given.",
   "allowed": [
     {
       "name": "the four kinds stored before P8.7, with no layout",
@@ -38,6 +38,35 @@
       "name": "the best sellers heading with spaces around it, which the API trims",
       "sections": [
         { "id": "best-sellers", "type": "bestSellers", "title": "  Best sellers ", "enabled": true, "productIds": [], "categoryIds": [], "campaignId": null }
+      ]
+    },
+    {
+      "name": "a hero carousel of two campaigns before a campaign section, which lists none",
+      "sections": [
+        { "id": "hero-carousel", "type": "carousel", "title": "Highlights", "enabled": true, "productIds": [], "categoryIds": [], "campaignId": null, "campaignIds": ["launch", "later"] },
+        { "id": "band", "type": "campaign", "title": "Band", "enabled": true, "productIds": [], "categoryIds": [], "campaignId": "later" }
+      ],
+      "campaigns": [
+        {
+          "id": "launch", "title": "Launch week", "body": "", "conditions": "", "cta": { "label": "Shop now", "target": "shop", "targetId": null },
+          "desktopMediaId": null, "mobileMediaId": null, "desktopFocal": { "x": 50, "y": 50 }, "mobileFocal": { "x": 50, "y": 50 }, "layout": "split"
+        },
+        {
+          "id": "later", "title": "Later offer", "body": "", "conditions": "", "cta": { "label": "Shop now", "target": "shop", "targetId": null },
+          "desktopMediaId": null, "mobileMediaId": null, "desktopFocal": { "x": 50, "y": 50 }, "mobileFocal": { "x": 50, "y": 50 }, "layout": "overlay"
+        }
+      ]
+    },
+    {
+      "name": "a hidden hero carousel of one campaign",
+      "sections": [
+        { "id": "hero-carousel", "type": "carousel", "title": "Highlights", "enabled": false, "productIds": [], "categoryIds": [], "campaignId": null, "campaignIds": ["launch"] }
+      ],
+      "campaigns": [
+        {
+          "id": "launch", "title": "Launch week", "body": "", "conditions": "", "cta": { "label": "Shop now", "target": "shop", "targetId": null },
+          "desktopMediaId": null, "mobileMediaId": null, "desktopFocal": { "x": 50, "y": 50 }, "mobileFocal": { "x": 50, "y": 50 }, "layout": "split"
+        }
       ]
     }
   ],
@@ -132,6 +161,120 @@
       "name": "best sellers with the heading's case changed",
       "sections": [
         { "id": "best-sellers", "type": "bestSellers", "title": "Best Sellers", "enabled": true, "productIds": [], "categoryIds": [], "campaignId": null }
+      ]
+    },
+    {
+      "name": "a hero carousel without its campaign list",
+      "sections": [
+        { "id": "hero-carousel", "type": "carousel", "title": "Highlights", "enabled": false, "productIds": [], "categoryIds": [], "campaignId": null }
+      ]
+    },
+    {
+      "name": "a hero carousel with an empty campaign list",
+      "sections": [
+        { "id": "hero-carousel", "type": "carousel", "title": "Highlights", "enabled": false, "productIds": [], "categoryIds": [], "campaignId": null, "campaignIds": [] }
+      ]
+    },
+    {
+      "name": "a hero carousel of six campaigns",
+      "sections": [
+        { "id": "hero-carousel", "type": "carousel", "title": "Highlights", "enabled": true, "productIds": [], "categoryIds": [], "campaignId": null, "campaignIds": ["one", "two", "three", "four", "five", "six"] }
+      ],
+      "campaigns": [
+        { "id": "one", "title": "One", "body": "", "conditions": "", "cta": { "label": "Shop now", "target": "shop", "targetId": null }, "desktopMediaId": null, "mobileMediaId": null, "desktopFocal": { "x": 50, "y": 50 }, "mobileFocal": { "x": 50, "y": 50 }, "layout": "split" },
+        { "id": "two", "title": "Two", "body": "", "conditions": "", "cta": { "label": "Shop now", "target": "shop", "targetId": null }, "desktopMediaId": null, "mobileMediaId": null, "desktopFocal": { "x": 50, "y": 50 }, "mobileFocal": { "x": 50, "y": 50 }, "layout": "split" },
+        { "id": "three", "title": "Three", "body": "", "conditions": "", "cta": { "label": "Shop now", "target": "shop", "targetId": null }, "desktopMediaId": null, "mobileMediaId": null, "desktopFocal": { "x": 50, "y": 50 }, "mobileFocal": { "x": 50, "y": 50 }, "layout": "split" },
+        { "id": "four", "title": "Four", "body": "", "conditions": "", "cta": { "label": "Shop now", "target": "shop", "targetId": null }, "desktopMediaId": null, "mobileMediaId": null, "desktopFocal": { "x": 50, "y": 50 }, "mobileFocal": { "x": 50, "y": 50 }, "layout": "split" },
+        { "id": "five", "title": "Five", "body": "", "conditions": "", "cta": { "label": "Shop now", "target": "shop", "targetId": null }, "desktopMediaId": null, "mobileMediaId": null, "desktopFocal": { "x": 50, "y": 50 }, "mobileFocal": { "x": 50, "y": 50 }, "layout": "split" },
+        { "id": "six", "title": "Six", "body": "", "conditions": "", "cta": { "label": "Shop now", "target": "shop", "targetId": null }, "desktopMediaId": null, "mobileMediaId": null, "desktopFocal": { "x": 50, "y": 50 }, "mobileFocal": { "x": 50, "y": 50 }, "layout": "split" }
+      ]
+    },
+    {
+      "name": "a hero carousel listing a campaign twice",
+      "sections": [
+        { "id": "hero-carousel", "type": "carousel", "title": "Highlights", "enabled": true, "productIds": [], "categoryIds": [], "campaignId": null, "campaignIds": ["launch", "launch"] }
+      ],
+      "campaigns": [
+        { "id": "launch", "title": "Launch week", "body": "", "conditions": "", "cta": { "label": "Shop now", "target": "shop", "targetId": null }, "desktopMediaId": null, "mobileMediaId": null, "desktopFocal": { "x": 50, "y": 50 }, "mobileFocal": { "x": 50, "y": 50 }, "layout": "split" }
+      ]
+    },
+    {
+      "name": "a hero carousel listing a campaign that doesn't exist",
+      "sections": [
+        { "id": "hero-carousel", "type": "carousel", "title": "Highlights", "enabled": false, "productIds": [], "categoryIds": [], "campaignId": null, "campaignIds": ["launch", "retired"] }
+      ],
+      "campaigns": [
+        { "id": "launch", "title": "Launch week", "body": "", "conditions": "", "cta": { "label": "Shop now", "target": "shop", "targetId": null }, "desktopMediaId": null, "mobileMediaId": null, "desktopFocal": { "x": 50, "y": 50 }, "mobileFocal": { "x": 50, "y": 50 }, "layout": "split" }
+      ]
+    },
+    {
+      "name": "a hero carousel with products",
+      "sections": [
+        { "id": "hero-carousel", "type": "carousel", "title": "Highlights", "enabled": true, "productIds": ["prod-1"], "categoryIds": [], "campaignId": null, "campaignIds": ["launch"] }
+      ],
+      "campaigns": [
+        { "id": "launch", "title": "Launch week", "body": "", "conditions": "", "cta": { "label": "Shop now", "target": "shop", "targetId": null }, "desktopMediaId": null, "mobileMediaId": null, "desktopFocal": { "x": 50, "y": 50 }, "mobileFocal": { "x": 50, "y": 50 }, "layout": "split" }
+      ]
+    },
+    {
+      "name": "a hero carousel with a category",
+      "sections": [
+        { "id": "hero-carousel", "type": "carousel", "title": "Highlights", "enabled": true, "productIds": [], "categoryIds": ["cat-fashion"], "campaignId": null, "campaignIds": ["launch"] }
+      ],
+      "campaigns": [
+        { "id": "launch", "title": "Launch week", "body": "", "conditions": "", "cta": { "label": "Shop now", "target": "shop", "targetId": null }, "desktopMediaId": null, "mobileMediaId": null, "desktopFocal": { "x": 50, "y": 50 }, "mobileFocal": { "x": 50, "y": 50 }, "layout": "split" }
+      ]
+    },
+    {
+      "name": "a hero carousel with a single campaign reference",
+      "sections": [
+        { "id": "hero-carousel", "type": "carousel", "title": "Highlights", "enabled": true, "productIds": [], "categoryIds": [], "campaignId": "launch", "campaignIds": ["launch"] }
+      ],
+      "campaigns": [
+        { "id": "launch", "title": "Launch week", "body": "", "conditions": "", "cta": { "label": "Shop now", "target": "shop", "targetId": null }, "desktopMediaId": null, "mobileMediaId": null, "desktopFocal": { "x": 50, "y": 50 }, "mobileFocal": { "x": 50, "y": 50 }, "layout": "split" }
+      ]
+    },
+    {
+      "name": "a hero carousel with a layout",
+      "sections": [
+        { "id": "hero-carousel", "type": "carousel", "title": "Highlights", "enabled": true, "productIds": [], "categoryIds": [], "campaignId": null, "campaignIds": ["launch"], "layout": "rail" }
+      ],
+      "campaigns": [
+        { "id": "launch", "title": "Launch week", "body": "", "conditions": "", "cta": { "label": "Shop now", "target": "shop", "targetId": null }, "desktopMediaId": null, "mobileMediaId": null, "desktopFocal": { "x": 50, "y": 50 }, "mobileFocal": { "x": 50, "y": 50 }, "layout": "split" }
+      ]
+    },
+    {
+      "name": "a campaign list on a campaign section",
+      "sections": [
+        { "id": "hero", "type": "campaign", "title": "Hero", "enabled": true, "productIds": [], "categoryIds": [], "campaignId": "launch", "campaignIds": ["launch"] }
+      ],
+      "campaigns": [
+        { "id": "launch", "title": "Launch week", "body": "", "conditions": "", "cta": { "label": "Shop now", "target": "shop", "targetId": null }, "desktopMediaId": null, "mobileMediaId": null, "desktopFocal": { "x": 50, "y": 50 }, "mobileFocal": { "x": 50, "y": 50 }, "layout": "split" }
+      ]
+    },
+    {
+      "name": "an empty campaign list on a featured section, where the field must be absent",
+      "sections": [
+        { "id": "featured", "type": "featured", "title": "Featured products", "enabled": true, "productIds": [], "categoryIds": [], "campaignId": null, "campaignIds": [] }
+      ]
+    },
+    {
+      "name": "a campaign list that is not a list of IDs",
+      "sections": [
+        { "id": "hero-carousel", "type": "carousel", "title": "Highlights", "enabled": true, "productIds": [], "categoryIds": [], "campaignId": null, "campaignIds": "launch" }
+      ],
+      "campaigns": [
+        { "id": "launch", "title": "Launch week", "body": "", "conditions": "", "cta": { "label": "Shop now", "target": "shop", "targetId": null }, "desktopMediaId": null, "mobileMediaId": null, "desktopFocal": { "x": 50, "y": 50 }, "mobileFocal": { "x": 50, "y": 50 }, "layout": "split" }
+      ]
+    },
+    {
+      "name": "two hero carousels",
+      "sections": [
+        { "id": "hero-carousel", "type": "carousel", "title": "Highlights", "enabled": true, "productIds": [], "categoryIds": [], "campaignId": null, "campaignIds": ["launch"] },
+        { "id": "hero-carousel-2", "type": "carousel", "title": "More highlights", "enabled": false, "productIds": [], "categoryIds": [], "campaignId": null, "campaignIds": ["launch"] }
+      ],
+      "campaigns": [
+        { "id": "launch", "title": "Launch week", "body": "", "conditions": "", "cta": { "label": "Shop now", "target": "shop", "targetId": null }, "desktopMediaId": null, "mobileMediaId": null, "desktopFocal": { "x": 50, "y": 50 }, "mobileFocal": { "x": 50, "y": 50 }, "layout": "split" }
       ]
     }
   ]

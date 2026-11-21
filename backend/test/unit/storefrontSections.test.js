@@ -95,3 +95,62 @@ test('the ranking-claim guard skips only the measured best sellers section', () 
     ['sections', 1, 'title'], ['sections', 2, 'title'], ['sections', 3, 'title'],
   ]);
 });
+
+/* The hero carousel: one section listing 1 to 5 of the storefront's campaigns, in order. */
+const CAROUSEL_ONLY = 'Only a hero carousel lists campaigns';
+const CAROUSEL_SIZE = 'A hero carousel shows 1 to 5 campaigns';
+const CAROUSEL_ONCE = 'A hero carousel lists each campaign once';
+const CAROUSEL_REFERENCES = 'A hero carousel requires valid campaign references';
+const CAROUSEL_CONTENT = 'A hero carousel takes no products or categories';
+const ONE_CAROUSEL = 'A storefront has at most one hero carousel';
+const SINGLE_CAMPAIGN = 'Only campaign sections may reference a campaign';
+const campaign = (id) => ({
+  id, title: `Campaign ${id}`, body: '', conditions: '', cta: { label: 'Shop now', target: 'shop', targetId: null },
+  desktopMediaId: null, mobileMediaId: null, desktopFocal: { x: 50, y: 50 }, mobileFocal: { x: 50, y: 50 }, layout: 'split',
+});
+const SIX = ['one', 'two', 'three', 'four', 'five', 'six'];
+const carouselIssues = (sections, campaignIds = SIX) => {
+  const parsed = storefrontSchema.safeParse(settingsWith({ sections, campaigns: campaignIds.map(campaign) }));
+  return parsed.success ? [] : parsed.error.issues.map((issue) => issue.message);
+};
+const carousel = (campaignIds, extra = {}) => section('hero-carousel', 'carousel', { title: 'Highlights', campaignIds, ...extra });
+
+test('a hero carousel lists 1 to 5 different campaigns that exist, in the order given', () => {
+  for (let count = 1; count <= 5; count += 1) {
+    assert.deepEqual(carouselIssues([carousel(SIX.slice(0, count))]), [], `${count} campaigns`);
+  }
+  const parsed = storefrontSchema.parse(settingsWith({ sections: [carousel(['three', 'one'])], campaigns: SIX.map(campaign) }));
+  assert.deepEqual(parsed.sections[0].campaignIds, ['three', 'one']);
+  assert.deepEqual(carouselIssues([carousel(SIX)]), [CAROUSEL_SIZE]);
+  assert.deepEqual(carouselIssues([carousel([])]), [CAROUSEL_SIZE]);
+  assert.deepEqual(carouselIssues([section('hero-carousel', 'carousel', { title: 'Highlights' })]), [CAROUSEL_SIZE]);
+  assert.deepEqual(carouselIssues([carousel(['one', 'two', 'one'])]), [CAROUSEL_ONCE]);
+  assert.deepEqual(carouselIssues([carousel(['one', 'retired'])]), [CAROUSEL_REFERENCES]);
+  // A carousel's campaigns must exist whether it is shown or not, as a campaign section's must.
+  assert.deepEqual(carouselIssues([carousel(['retired'], { enabled: false })]), [CAROUSEL_REFERENCES]);
+});
+
+test('a hero carousel takes no products, categories, single campaign or layout', () => {
+  assert.deepEqual(carouselIssues([carousel(['one'], { productIds: ['prod-1'] })]), [CAROUSEL_CONTENT]);
+  assert.deepEqual(carouselIssues([carousel(['one'], { categoryIds: ['cat-1'] })]), [CAROUSEL_CONTENT]);
+  assert.deepEqual(carouselIssues([carousel(['one'], { campaignId: 'one' })]), [SINGLE_CAMPAIGN]);
+  assert.deepEqual(carouselIssues([carousel(['one'], { layout: 'rail' })]), [LAYOUT_KINDS_ONLY]);
+  assert.match(carouselIssues([carousel('one')]).join(), /Expected array/);
+});
+
+test('only a hero carousel lists campaigns: the field is absent everywhere else, never an empty list', () => {
+  assert.deepEqual(carouselIssues([section('hero', 'campaign', { campaignId: 'one', campaignIds: ['one'] })]), [CAROUSEL_ONLY]);
+  assert.deepEqual(carouselIssues([section('featured', 'featured', { campaignIds: [] })]), [CAROUSEL_ONLY]);
+  assert.deepEqual(carouselIssues([section('hero', 'campaign', { campaignId: 'one' })]), []);
+});
+
+test('a storefront has at most one hero carousel, shown or not', () => {
+  assert.deepEqual(carouselIssues([carousel(['one']), { ...carousel(['two']), id: 'hero-carousel-2', enabled: false }]), [ONE_CAROUSEL]);
+  assert.deepEqual(carouselIssues([carousel(['one']), section('hero', 'campaign', { campaignId: 'two' })]), []);
+});
+
+test("the ranking-claim guard checks a hero carousel's heading like any other", () => {
+  assert.deepEqual(storefrontClaimIssues({ sections: [carousel(['one'], { title: 'Trending now' }), carousel(['one'])] }).map(({ path }) => path), [
+    ['sections', 0, 'title'],
+  ]);
+});

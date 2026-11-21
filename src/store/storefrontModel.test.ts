@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { CatalogProduct, StorefrontSettings } from "../api/catalog";
+import type { Campaign, CatalogProduct, StorefrontSettings } from "../api/catalog";
 import {
   campaignMedia,
   demoPhone,
@@ -14,6 +14,7 @@ import { buildCategoryTree } from "./catalogModel";
 import {
   StorefrontFormatError,
   bestSellerProducts,
+  carouselCampaigns,
   departmentRow,
   isStorefrontSettings,
   parseBestSellers,
@@ -76,6 +77,43 @@ describe("section kinds and layouts", () => {
     });
     expect(departmentRow(section("category", { categoryIds: ["cat-smartphones"] }), catalog).products).toEqual([demoPhone]);
     expect(departmentRow(section("category", { categoryIds: ["retired-category"] }), catalog)).toEqual({ category: null, products: [] });
+  });
+});
+
+describe("the hero carousel's structure", () => {
+  const campaign = (id: string, title: string): Campaign => ({
+    id, title, body: "", conditions: "", cta: { label: "Shop now", target: "shop", targetId: null },
+    desktopMediaId: null, mobileMediaId: null, desktopFocal: { x: 50, y: 50 }, mobileFocal: { x: 50, y: 50 }, layout: "overlay",
+  });
+  const accepts = (...sections: Section[]) => isStorefrontSettings(fixtureStorefrontSettings({ sections }));
+
+  it("checks structure only: a list of campaign IDs where given, whatever the business rules say about it", () => {
+    expect(accepts(section("carousel", { campaignIds: ["launch", "later"] }))).toBe(true);
+    // Incomplete or rule-breaking lists are the editor's and the API's to report (draftProblems), not a format error.
+    expect(accepts(section("carousel", { campaignIds: [] }))).toBe(true);
+    expect(accepts(section("carousel"))).toBe(true);
+    expect(accepts(section("carousel", { campaignIds: ["retired", "retired"] }))).toBe(true);
+    expect(accepts(section("featured", { campaignIds: [] }))).toBe(true);
+    expect(accepts(section("carousel", { campaignIds: "launch" }))).toBe(false);
+    expect(accepts(section("carousel", { campaignIds: ["launch", 7] }))).toBe(false);
+    expect(accepts(section("carousel", { campaignIds: null }))).toBe(false);
+  });
+
+  it("shoppers' storefront keeps a carousel as published", () => {
+    const settings = fixtureStorefrontSettings({
+      sections: [section("carousel", { id: "hero-carousel", campaignIds: ["week"] }), ...fixtureStorefrontSettings().sections],
+      campaigns: [campaign("week", "Fashion week")],
+    });
+    expect(parsePublishedStorefront({ ...fixtureStorefront(), settings }).settings.sections.map((item) => item.type))
+      .toEqual(["carousel", "departments", "featured"]);
+  });
+
+  it("resolves a carousel's campaigns in its order and reports the ones that don't exist", () => {
+    const campaigns = [campaign("week", "Fashion week"), campaign("season", "New season")];
+    expect(carouselCampaigns(section("carousel", { campaignIds: ["season", "retired", "week"] }), campaigns)).toEqual({
+      items: [campaigns[1], campaigns[0]], missing: ["retired"],
+    });
+    expect(carouselCampaigns(section("carousel"), campaigns)).toEqual({ items: [], missing: [] });
   });
 });
 
