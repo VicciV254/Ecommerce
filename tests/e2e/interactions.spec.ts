@@ -427,6 +427,31 @@ test("back to top appears only while scrolling up a long page, and returns the p
   await expect(back).toBeHidden();
 });
 
+test("back to top steps aside at once for focus it covers, so the focused control takes a tap straight away", async ({ page }) => {
+  await page.goto("/#/privacy");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  const back = page.getByRole("button", { name: "Back to top" });
+  await scrollDownThenUp(page, 3);
+  await expect(back).toBeVisible();
+  // A control under the button (a form's last button in the screen's corner) takes focus; a moment later, while the
+  // button is still fading out, a tap there must reach the control.
+  const reached = await page.locator("[data-back-to-top]").evaluate((button) => {
+    const box = button.getBoundingClientRect();
+    const control = document.createElement("button");
+    control.textContent = "Covered";
+    control.style.cssText = `position: fixed; left: ${box.left}px; top: ${box.top}px; width: ${box.width}px; height: ${box.height}px; z-index: 1;`;
+    document.body.append(control);
+    control.focus();
+    return new Promise<string>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => {
+      const target = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+      control.remove();
+      resolve(target === control ? "the control" : target?.closest("[data-back-to-top]") ? "Back to top" : String(target?.tagName));
+    })));
+  });
+  expect(reached, "what a tap on the covered control reaches while Back to top fades out").toBe("the control");
+  await expect(back).toBeHidden();
+});
+
 test("back to top glides to the top, or jumps there for shoppers who prefer reduced motion", async ({ page }) => {
   await page.goto("/#/privacy");
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
