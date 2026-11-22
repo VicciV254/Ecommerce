@@ -31,6 +31,17 @@ test("opens about 2 seconds after the home page is ready, with focus on its head
   expect(await pageOverflow(page)).toBeLessThanOrEqual(0);
 });
 
+test("its heading takes focus without a ring, as nobody has used the page yet; its controls still show the ring", async ({ page }) => {
+  await page.goto("/");
+  const heading = welcome(page).getByRole("heading", { level: 2, name: /^Welcome to / });
+  await expect(heading).toBeFocused({ timeout: 6000 });
+  // Focus moved by script before any input counts as keyboard focus, so the ring would box the heading for everyone.
+  expect(await heading.evaluate((element) => [element.matches(":focus-visible"), getComputedStyle(element).outlineStyle])).toEqual([true, "none"]);
+  await page.keyboard.press("Tab");
+  expect(await page.evaluate(() => [document.activeElement?.tagName, getComputedStyle(document.activeElement!).outlineStyle])).toEqual(["BUTTON", "solid"]);
+  await expectWholeFocusRing(page);
+});
+
 test("is shown once per browser: not again after a reload or in a new tab", async ({ page, context }) => {
   await page.goto("/");
   await expect(welcome(page)).toBeVisible({ timeout: 6000 });

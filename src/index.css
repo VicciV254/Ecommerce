@@ -306,6 +306,15 @@ html:has([data-purchase-bar][data-shown]) [data-back-to-top] {
 }
 
 /*
+ * Except a heading focused as a dialog opens by itself (the welcome dialog): nobody has used the page yet, which browsers
+ * treat like keyboard use, so the ring would box the heading for everyone. The heading can't be acted on and the open
+ * dialog shows where focus is; Tab moves on to its controls, which show the ring.
+ */
+:is(h1, h2, h3)[data-focus-ring="none"]:focus-visible {
+  outline: none;
+}
+
+/*
  * Forced colours replace every colour, so a selected, pressed or current control would look like its neighbours.
  * Unlayered, like the focus ring, so it outranks the utilities. Its parts take its colours, so no author colour is left
  * on Highlight. A current checkout step marks the step, not the connector line before it; the breadcrumb's current

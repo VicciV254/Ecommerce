@@ -108,9 +108,9 @@ export function WelcomeDialog() {
         )}
         {/* Side padding in px: with enlarged text, rem padding would leave a phone too little width for the heading's words. */}
         <div className="p-[20px] sm:p-8">
-          {/* The close button sits beside the heading, never over it or its focus ring, whatever the text size. */}
+          {/* The close button sits beside the heading, never over it, whatever the text size. */}
           <div className="flex items-start gap-[12px]">
-            <h2 ref={heading} tabIndex={-1} className="type-h2 min-w-0 flex-1 text-navy-900">Welcome to {brandName}</h2>
+            <h2 ref={heading} tabIndex={-1} data-focus-ring="none" className="type-h2 min-w-0 flex-1 text-navy-900">Welcome to {brandName}</h2>
             <button
               type="button"
               aria-label="Close"
