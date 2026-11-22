@@ -12,7 +12,7 @@ import { prefersReducedMotion, watchReducedMotion } from "./motion";
  *
  * A row that scrolls sideways is watched as one: cards beyond its visible part never come into the window themselves
  * (the row clips them), so the row's cards hide and show together, staggered by their order, growing slightly rather
- * than rising, which would add overflow to the row.
+ * than rising, which would add overflow to the row. The cards inside the row's items change, never the items.
  */
 export type RevealOptions = {
   /** Staggered with the others that show at the same time (cards in a grid). */
@@ -47,9 +47,16 @@ function forget(element: HTMLElement) {
   if (!watched.size) teardown();
 }
 
-/** The elements that carry the hidden or shown state: a row's cards, or the element itself. */
+/**
+ * The elements that carry the hidden or shown state: the element itself, or a row's cards. A row's items are its
+ * scroll-snap points, so they never change: shrinking one moves its point and the row re-snaps off its start, which
+ * shows Previous (and gives a long heading another line, moving the page when the row shows). Each item holds one card,
+ * which hides and grows instead.
+ */
 const targetsOf = (element: HTMLElement, state: Watched) =>
-  state.row ? [...element.children].filter((child): child is HTMLElement => child instanceof HTMLElement) : [element];
+  state.row
+    ? [...element.children].map((item) => item.firstElementChild).filter((card): card is HTMLElement => card instanceof HTMLElement)
+    : [element];
 
 function hide(element: HTMLElement, variant: Watched["variant"]) {
   if (variant === "scale") element.dataset.revealVariant = "scale";

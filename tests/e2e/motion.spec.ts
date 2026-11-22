@@ -96,6 +96,34 @@ test.describe("scroll reveals", () => {
     expect(state.overflow).toBe(0);
   });
 
+  test("keep a row that waits to be revealed at its start, so showing it moves nothing on the page", async ({ page, context }) => {
+    // A long heading: when the row looked scrolled, Previous joined Next and the heading took another line on phones.
+    const title = "Fashion, shoes and accessories for every day";
+    await serveLanding(context, landing.map((item) => (item.id === "fashion" ? { ...item, title } : item)));
+    await page.addInitScript(() => {
+      const shifts = { total: 0 };
+      (window as unknown as { shifts: typeof shifts }).shifts = shifts;
+      new PerformanceObserver((list) => {
+        for (const entry of list.getEntries() as unknown as { value: number; hadRecentInput: boolean }[]) if (!entry.hadRecentInput) shifts.total += entry.value;
+      }).observe({ type: "layout-shift", buffered: true });
+    });
+    const shifted = () => page.evaluate(() => (window as unknown as { shifts: { total: number } }).shifts.total);
+    await page.goto("/");
+    const rail = page.getByRole("list", { name: title });
+    await expect(rail.getByRole("listitem")).toHaveCount(12);
+    await page.waitForTimeout(500);
+    const waiting = await rail.evaluate((list) => ({ hidden: list.querySelectorAll("[data-reveal='hidden']").length, scrollLeft: list.scrollLeft }));
+    expect(waiting.hidden, "the row's cards are still hidden").toBeGreaterThan(0);
+    expect(waiting.scrollLeft, "the waiting row stays at its start").toBe(0);
+    await expect(page.getByRole("button", { name: `Previous products in ${title}` })).toHaveCount(0);
+    const before = await shifted();
+    await rail.evaluate((list) => list.scrollIntoView({ block: "center", behavior: "instant" as ScrollBehavior }));
+    await page.waitForTimeout(1000);
+    expect(await rail.evaluate((list) => list.querySelectorAll("[data-reveal='hidden']").length)).toBe(0);
+    expect(await rail.evaluate((list) => list.scrollLeft)).toBe(0);
+    expect(await shifted() - before, "layout shift while the row shows").toBeLessThan(0.001);
+  });
+
   test("never hide anything under reduced motion", async ({ page, context }) => {
     await serveLanding(context);
     await page.emulateMedia({ reducedMotion: "reduce" });

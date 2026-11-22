@@ -134,16 +134,17 @@ describe("Reveal", () => {
 });
 
 describe("rows that scroll sideways", () => {
-  /** A scrolling row: the row is watched, so cards beyond its visible part show with the rest. */
+  /** A scrolling row as the rails build it: each item is a scroll-snap point holding one card. */
   function Row({ count = 8 }: { count?: number }) {
     const ref = useRevealRow<HTMLUListElement>();
     return (
       <ul ref={ref} aria-label="Row">
-        {Array.from({ length: count }, (_, index) => <li key={index} data-testid={`card-${index}`}>Card {index}</li>)}
+        {Array.from({ length: count }, (_, index) => <li key={index}><div data-testid={`card-${index}`}>Card {index}</div></li>)}
       </ul>
     );
   }
-  const cards = () => screen.getAllByRole("listitem");
+  const items = () => screen.getAllByRole("listitem");
+  const cards = () => items().map((item) => item.firstElementChild as HTMLElement);
 
   it("hides every card of a row below the window, with a slight grow, and shows them all, staggered, when the row arrives", () => {
     render(<Row />);
@@ -153,9 +154,13 @@ describe("rows that scroll sideways", () => {
     expect(cards().map((card) => [card.getAttribute("data-reveal"), card.getAttribute("data-reveal-variant")])).toEqual(
       Array.from({ length: 8 }, () => ["hidden", "scale"]),
     );
+    // The items are the row's snap points: shrinking one moves its point and the row re-snaps off its start (Previous
+    // appears; a long heading takes another line), so only the cards inside them hide and grow.
+    expect(items().map((item) => item.hasAttribute("data-reveal"))).toEqual(Array.from({ length: 8 }, () => false));
     report([[row, IN_VIEW]]);
     expect(cards().map((card) => card.getAttribute("data-reveal"))).toEqual(Array.from({ length: 8 }, () => "shown"));
     expect(cards().map((card) => card.style.getPropertyValue("--reveal-delay"))).toEqual(["0ms", "60ms", "120ms", "180ms", "240ms", "300ms", "300ms", "300ms"]);
+    expect(items().map((item) => item.hasAttribute("data-reveal"))).toEqual(Array.from({ length: 8 }, () => false));
     expect(observer().targets.size).toBe(0);
   });
 
